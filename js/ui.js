@@ -18,26 +18,31 @@ window.UpShip = window.UpShip || {};
   let selection = null;
 
   function init(handlers) {
-    document.querySelectorAll("[data-speed]").forEach(b => b.addEventListener("click", () => handlers.setSpeed(+b.dataset.speed)));
+    document.querySelectorAll("[data-auto]").forEach(b => b.addEventListener("click", () => handlers.setAuto(+b.dataset.auto)));
+    $("#next-turn").addEventListener("click", handlers.nextTurn);
     $("#zoom-in").addEventListener("click", () => U.map.zoomBy(1.4));
     $("#zoom-out").addEventListener("click", () => U.map.zoomBy(1 / 1.4));
     $("#panel-close").addEventListener("click", () => select(null));
     $("#new-game").addEventListener("click", handlers.newGame);
     document.addEventListener("keydown", e => {
       if (e.target.closest("input, textarea")) return;
-      if (e.key === " " && !e.target.closest("button, [role=button]")) { e.preventDefault(); handlers.togglePause(); }
-      else if (e.key === "1" || e.key === "2" || e.key === "3") handlers.setSpeed(+e.key);
+      if (e.key === " " && !e.target.closest("button, [role=button]")) { e.preventDefault(); handlers.toggleAuto(); }
+      else if ((e.key === "n" || e.key === "N" || e.key === "Enter") && !e.target.closest("button, [role=button]")) handlers.nextTurn();
+      else if (e.key === "0" || e.key === "1" || e.key === "2" || e.key === "3") handlers.setAuto(+e.key);
       else if (e.key === "Escape") select(null);
     });
   }
 
-  function updateBar(state, speed, progress) {
+  function updateBar(state, auto, progress) {
     const d = U.sim.dateOf(state.tick, progress);
     $("#date").textContent = dateLine(d);
     $("#time").textContent = clock(d);
     $("#money").textContent = money(state.money);
     $("#money").classList.toggle("is-negative", state.money < 0);
-    document.querySelectorAll("[data-speed]").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.speed === speed)));
+    document.querySelectorAll("[data-auto]").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.auto === auto)));
+    const next = $("#next-turn");
+    next.disabled = U.turnActive || auto > 0;
+    next.classList.toggle("is-playing", U.turnActive);
   }
 
   function select(sel) {
@@ -68,12 +73,16 @@ window.UpShip = window.UpShip || {};
     const cls = U.SHIP_CLASSES[ship.classId];
     const route = U.sim.routeOf(state, ship);
     const pos = U.map.shipPosition(ship, progress);
-    let status;
-    if (ship.leg && pos.flying) {
+    let status, paxLabel = "Passengers aboard";
+    if (ship.leg && U.turnActive && pos.flying) {
       const arrive = U.sim.dateOf(state.tick, ship.leg.hours / U.TIME.tickHours);
       status = `Flying to ${U.cityById[ship.leg.to].name}, arriving about ${clock(arrive)}`;
-    } else if (ship.leg) {
+    } else if (ship.leg && U.turnActive) {
       status = `Moored at ${U.cityById[ship.leg.to].name}, next departure ${clock(U.sim.dateOf(state.tick + 1))}`;
+      paxLabel = "Passengers carried";
+    } else if (ship.leg) {
+      status = `Moored at ${U.cityById[ship.leg.from].name}, departs ${clock(U.sim.dateOf(state.tick))} for ${U.cityById[ship.leg.to].name}`;
+      paxLabel = "Passengers booked";
     } else {
       status = `Moored at ${U.cityById[route.stops[ship.at]].name}`;
     }
@@ -83,7 +92,7 @@ window.UpShip = window.UpShip || {};
       <p class="sub">${cls.name}. ${cls.builder}.</p>
       <p class="status">${status}</p>
       <dl>
-        ${ship.leg ? row(pos.flying ? "Passengers aboard" : "Passengers carried", `${ship.leg.passengers} of ${cls.passengers}`) : ""}
+        ${ship.leg ? row(paxLabel, `${ship.leg.passengers} of ${cls.passengers}`) : ""}
         ${row("Route", `<button class="link" data-route="${route.id}">${route.stops.map(s => U.cityById[s].name).join(" and ")}</button>`)}
         ${row("Cruising speed", cls.speedKmh + " km/h")}
         ${row("Range", cls.rangeKm.toLocaleString("en-GB") + " km")}

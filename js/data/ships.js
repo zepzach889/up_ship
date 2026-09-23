@@ -25,10 +25,11 @@ UpShip.ECONOMY = {
   demandSwing: 0.15     // random variation per departure
 };
 
-// Time. One tick is half a day; departures at 7 am and 7 pm.
+// Time. One turn is half a day; departures at 7 am and 7 pm.
+// msPerTurn: how long a turn takes to play out on screen, by auto-play speed.
 UpShip.TIME = {
   startDate: Date.UTC(1919, 0, 1),
   tickHours: 12,
   firstDepartureHour: 7,
-  msPerTick: { 1: 600, 2: 300, 3: 120 }
+  msPerTurn: { 1: 3200, 2: 1600, 3: 700 }
 };

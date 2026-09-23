@@ -68,6 +68,17 @@ button { font: inherit; color: inherit; }
 .date { font-size: 15px; letter-spacing: 0.04em; }
 .time { font-size: 13px; color: var(--ivory-dim); font-variant-numeric: tabular-nums; }
 
+.turns { display: flex; align-items: center; gap: 14px; }
+.next-turn {
+  height: 36px; padding: 3px 18px 0; cursor: pointer;
+  background: var(--brass); color: var(--ink); border: 0;
+  font-weight: 700; font-size: 14px; letter-spacing: 0.08em;
+  clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 8px 100%, 0 50%);
+}
+.next-turn:hover:not(:disabled) { background: var(--brass-hi); }
+.next-turn:disabled { background: var(--brass-dim); color: var(--ink-2); cursor: default; }
+.next-turn.is-playing { background: var(--brass-dim); }
+.auto-label { font-size: 12px; color: var(--ivory-dim); letter-spacing: 0.05em; padding: 3px 10px 0; align-self: center; border-right: 1px solid var(--brass-dim); height: 34px; display: flex; align-items: center; }
 .speeds { display: flex; gap: 0; border: 1px solid var(--brass-dim); }
 .speeds button {
   width: 42px; height: 34px; display: grid; place-items: center;
@@ -105,7 +116,8 @@ button { font: inherit; color: inherit; }
 .land { fill: var(--land); }
 .coast { fill: none; stroke: var(--coast); stroke-width: 1.1; vector-effect: non-scaling-stroke; }
 
-.country { stroke: var(--border); stroke-width: 0.9; stroke-dasharray: 4 2.5; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.country { stroke: none; }
+.borders { fill: none; stroke: var(--border); stroke-width: 0.9; stroke-dasharray: 4 2.5; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .tint-0 { fill: #e6cdbd; }
 .tint-1 { fill: #d5dab5; }
 .tint-2 { fill: #e9d7a6; }
@@ -214,7 +226,9 @@ button { font: inherit; color: inherit; }
   .step { display: none; }
   .clock { min-width: 0; order: 3; }
   .funds { margin-left: auto; }
-  .speeds { order: 4; margin-left: auto; }
+  .turns { order: 4; margin-left: auto; gap: 8px; }
+  .auto-label { display: none; }
+  .next-turn { padding: 3px 12px 0; }
   #new-game { order: 2; }
   .panel { left: 8px; right: 8px; top: auto; bottom: 8px; width: auto; max-height: 55%; }
   .hint { display: none; }

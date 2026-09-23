@@ -12,7 +12,7 @@ Your game saves automatically in the browser.
 ## Current state: milestone 1
 
 - Map of Europe in about 1924 borders, with the 33 cities of the first region
-- Half-day game clock from January 1919, with pause and three speeds
+- Half-day turns from January 1919: press Next turn, or use auto-play at three speeds
 - One ship, the *Konstanz* (Seeschwalbe class), flying Friedrichshafen to Berlin
 - Basic passenger income and running costs
 - Detail panels for cities, the ship, and the route

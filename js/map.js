@@ -26,7 +26,7 @@ window.UpShip = window.UpShip || {};
   const LABELS = {
     "Irish Free State": { lon: -8.1, lat: 52.2, size: 9.5 },
     "United Kingdom": { lon: -1.6, lat: 54.75, size: 13 },
-    "Poland": { lon: 18.6, lat: 51.2 },
+    "Poland": { lon: 20.6, lat: 50.95 },
     "Hungary": { lon: 19.6, lat: 46.75, size: 13 },
     "Spain": { lon: -3.6, lat: 39.3 },
     "Portugal": { lon: -7.85, lat: 40.7, size: 11, rotate: -80 },
@@ -34,9 +34,12 @@ window.UpShip = window.UpShip || {};
     "Czechoslovakia": { lon: 17.2, lat: 49.2, size: 13 },
     "Switzerland": null, "Denmark": null, "Netherlands": null, "Belgium": null, "Albania": null,
     "Norway": { lon: 8.4, lat: 60.9 },
-    "Soviet Union": { lon: 31, lat: 54.5 },
+    "Soviet Union": { lon: 33, lat: 52.6 },
     "Greece": { lon: 21.9, lat: 39.4, size: 13 },
-    "Lithuania": null, "Latvia": null, "Estonia": null, "Finland": null
+    "Lithuania": { lon: 23.9, lat: 55.35, size: 10 },
+    "Latvia": { lon: 25.6, lat: 56.9, size: 10 },
+    "Estonia": { lon: 25.9, lat: 58.75, size: 10 },
+    "Finland": { lon: 26.5, lat: 62.2, size: 12 }
   };
 
   let svg, world, layers = {}, view = { x: 0, y: 0, w: M.width, h: M.height }, zoom = 1;
@@ -80,7 +83,10 @@ window.UpShip = window.UpShip || {};
       t.dataset.size = (o && o.size) || 15;
       t.textContent = c.name;
     }
-    el("use", { href: "#land-shape", class: "coast" }, layers.land.parentNode.insertBefore(el("g", {}), layers.countryLabels));
+    const lines = el("g", {}, null);
+    world.insertBefore(lines, layers.countryLabels);
+    el("path", { d: M.borders, class: "borders" }, lines);
+    el("use", { href: "#land-shape", class: "coast" }, lines);
 
     for (const city of U.CITIES) drawCity(city);
     setupZoomPan();
@@ -161,8 +167,9 @@ window.UpShip = window.UpShip || {};
   }
 
   function shipPosition(ship, progress) {
-    // progress: 0..1 through the current half-day tick
-    if (!ship.leg) {
+    // progress: 0..1 through the current turn. Between turns the ship waits at its departure city.
+    if (!ship.leg || !U.turnActive) {
+      if (ship.leg) { const c = U.cityById[ship.leg.from]; return { x: c.x, y: c.y, angle: 0, flying: false }; }
       const c = U.cityById[U.sim.routeOf(U.state, ship).stops[ship.at]];
       return { x: c.x, y: c.y, angle: 0, flying: false };
     }
