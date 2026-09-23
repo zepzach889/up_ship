@@ -1,113 +1,60 @@
+# Builds js/data/map-europe.js: Europe about 1924, from Natural Earth provinces (public domain).
+# Steps: assign1924.py (provinces -> 1924 countries), then mapshaper (dissolve, project, simplify,
+# shared borders), then this script (fit to the city area, clip, write SVG paths).
 import json, math
-from shapely.geometry import shape, box, Polygon, MultiPolygon, mapping
-from shapely.ops import unary_union, transform
-from shapely.validation import make_valid
-
+from shapely.geometry import shape, box, Polygon, LineString
+from shapely.ops import unary_union
 LON0, LAT0 = 10.0, 50.0
 def proj(lon, lat):
-    l, p = math.radians(lon - LON0), math.radians(lat)
-    p1 = math.radians(LAT0)
+    l, p, p1 = math.radians(lon - LON0), math.radians(lat), math.radians(LAT0)
     k = math.sqrt(2 / (1 + math.sin(p1)*math.sin(p) + math.cos(p1)*math.cos(p)*math.cos(l)))
     return k*math.cos(p)*math.sin(l), k*(math.cos(p1)*math.sin(p) - math.sin(p1)*math.cos(p)*math.cos(l))
-
 cities = json.load(open('cities_ll.json'))
-# fit: extent covering cities with margins
 pts = [proj(c['lon'], c['lat']) for c in cities]
 xs, ys = [p[0] for p in pts], [p[1] for p in pts]
 minx, maxx, miny, maxy = min(xs), max(xs), min(ys), max(ys)
 W = 1600.0
-padL, padR, padT, padB = 0.09, 0.08, 0.10, 0.10
-spanx = (maxx-minx); spany = (maxy-miny)
-x0 = minx - spanx*padL; x1 = maxx + spanx*padR
-y0 = miny - spany*padB; y1 = maxy + spany*padT
+sx, sy = maxx-minx, maxy-miny
+x0 = minx - sx*0.09; x1 = maxx + sx*0.08; y0 = miny - sy*0.10; y1 = maxy + sy*0.10
 S = W/(x1-x0); H = round((y1-y0)*S)
-def to_px(lon, lat, z=None):
-    x, y = proj(lon, lat)
-    return ((x-x0)*S, (y1-y)*S)
 view = box(-W*0.6, -H*0.2, W*1.6, H*1.2)
-pre = box(-40, 24, 62, 74)
-
-def fix(g): 
-    g = make_valid(g)
-    return g.buffer(0)
-def P(g):
-    return transform(lambda x, y, z=None: tuple(zip(*[to_px(a, b) for a, b in zip(x, y)])) if False else _tp(x, y), g)
-def _tp(x, y):
-    out = [to_px(a, b) for a, b in zip(x, y)]
-    return [o[0] for o in out], [o[1] for o in out]
-
-land = fix(shape(json.load(open('land50.json'))['features'][0]['geometry']) if 'features' in json.load(open('land50.json')) else shape(json.load(open('land50.json'))['geometry']))
-land = land.intersection(pre)
-
-hist = json.load(open('w1930.json'))['features']
-NAME = {'Libya (IT)':'Libya','United Kingdom of Great Britain and Ireland':'United Kingdom','White Russia':'Soviet Union','Armenia':'Soviet Union',
-        'Georgia':'Soviet Union','East Prussia':'Germany','Republic of Turkey':'Turkey','Mesopotamia (GB)':'Iraq','Syria (France)':'Syria'}
-groups = {}
-for f in hist:
-    n = f['properties'].get('NAME')
-    if not n: continue
-    g = fix(shape(f['geometry']))
-    if not g.intersects(pre): continue
-    n = NAME.get(n, n)
-    groups.setdefault(n, []).append(g.intersection(pre))
-countries = {n: unary_union(gs) for n, gs in groups.items()}
-
-ne = {f['properties']['name']: f for f in json.load(open('countries50.json'))['features']}
-ireland = fix(shape(ne['Ireland']['geometry']))
-countries['Irish Free State'] = ireland
-countries['United Kingdom'] = countries['United Kingdom'].difference(ireland.buffer(0.02))
-saar = Polygon([(6.36,49.46),(6.55,49.17),(6.85,49.15),(7.05,49.12),(7.30,49.12),(7.40,49.20),(7.35,49.45),(7.25,49.62),(6.95,49.64),(6.60,49.62),(6.40,49.55)])
-countries['Saar'] = saar
-countries['Germany'] = countries['Germany'].difference(saar)
-
-def ring_path(coords):
-    pts = list(coords)
-    return 'M' + 'L'.join(f'{x:.1f},{y:.1f}' for x, y in pts[:-1]) + 'Z'
-def geom_path(g):
+def px(g):
+    from shapely.affinity import affine_transform
+    return affine_transform(g, [S, 0, 0, -S, -x0*S, y1*S])
+def fmt(coords): return 'L'.join(f'{x:.1f},{y:.1f}' for x, y in coords)
+def poly_path(g):
     polys = [g] if isinstance(g, Polygon) else [p for p in getattr(g, 'geoms', []) if isinstance(p, Polygon)]
-    out = []
+    out = ''
     for p in polys:
-        if p.area < 1.5: continue
-        out.append(ring_path(p.exterior.coords))
+        if p.area < 1.0: continue
+        out += 'M' + fmt(list(p.exterior.coords)[:-1]) + 'Z'
         for r in p.interiors:
-            if Polygon(r).area > 1.5: out.append(ring_path(r.coords))
-    return ''.join(out)
-def prep(g, tol=0.45):
-    g = fix(P(g))
-    g = g.intersection(view)
-    return g.simplify(tol, preserve_topology=True)
-
-landp = prep(land)
-out_c = []
-for n, g in countries.items():
-    g = fix(g).intersection(land)
-    gp = prep(g)
-    if gp.is_empty or gp.area < 3: continue
-    big = max(gp.geoms, key=lambda p: p.area) if hasattr(gp, 'geoms') else gp
-    rp = big.representative_point()
-    out_c.append({'name': n, 'path': geom_path(gp), 'area': round(gp.area), 'label': [round(rp.x), round(rp.y)], '_g': gp})
-
-# Borders: only where land meets land, so they never double the coastline.
-from shapely.geometry import LineString, MultiLineString
-interior = landp.buffer(-1.2)
-all_b = unary_union([c['_g'].boundary for c in out_c]).intersection(interior).simplify(0.45)
+            if Polygon(r).area >= 1.0: out += 'M' + fmt(list(r.coords)[:-1]) + 'Z'
+    return out
 def line_path(g):
     lines = [g] if isinstance(g, LineString) else [l for l in getattr(g, 'geoms', []) if isinstance(l, LineString)]
-    return ''.join('M' + 'L'.join(f'{x:.1f},{y:.1f}' for x, y in l.coords) for l in lines if l.length > 0.8)
-borders_path = line_path(all_b)
-
-# greedy coloring
-out_c.sort(key=lambda c: -c['area'])
-for c in out_c:
-    used = {o.get('tint') for o in out_c if 'tint' in o and o['_g'].buffer(3).intersects(c['_g'])}
+    return ''.join('M' + fmt(l.coords) for l in lines if l.length > 0.5)
+countries, allg = [], []
+for f in json.load(open('countries_p.json'))['features']:
+    g = px(shape(f['geometry'])).buffer(0).intersection(view)
+    if g.is_empty or g.area < 2: continue
+    allg.append(g)
+    big = max(g.geoms, key=lambda p: p.area) if hasattr(g, 'geoms') else g
+    rp = big.representative_point()
+    countries.append({'name': f['properties']['c'], 'path': poly_path(g), 'area': round(g.area), 'label': [round(rp.x), round(rp.y)], '_g': g})
+land = unary_union(allg)
+bj = json.load(open('borders_p.json'))
+bfeats = bj.get('features') or bj.get('geometries') or [bj]
+borders = unary_union([px(shape(f.get('geometry', f))) for f in bfeats]).intersection(view)
+countries.sort(key=lambda c: -c['area'])
+for c in countries:
+    used = {o['tint'] for o in countries if 'tint' in o and o['_g'].buffer(2).intersects(c['_g'])}
     c['tint'] = next(i for i in range(6) if i not in used)
-for c in out_c: del c['_g']
-
-city_px = {c['id']: [round(v, 1) for v in to_px(c['lon'], c['lat'])] for c in cities}
+for c in countries: del c['_g']
 data = {'width': W, 'height': H, 'projection': {'lon0': LON0, 'lat0': LAT0, 'x0': x0, 'y1': y1, 'scale': S},
-        'land': geom_path(landp), 'borders': borders_path, 'countries': out_c}
-js = ('// Generated by tools/build_map.py from historical-basemaps (1930, GPL-3.0) and Natural Earth (public domain).\n'
-      '// Borders adjusted to about 1924: Irish Free State separated, Saar under League administration.\n'
-      'window.UPSHIP_MAP_EUROPE = ' + json.dumps(data, separators=(',', ':')) + ';\n')
-open('map-europe.js', 'w').write(js)
-print('size', len(js)//1024, 'KB', 'H', H, [ (c['name'], c['tint'], c['area']) for c in out_c][:40])
+        'borders': line_path(borders), 'countries': countries}
+open('map-europe.js', 'w').write(
+    '// Generated by tools/build_map.py from Natural Earth admin-1 provinces (public domain),\n'
+    '// regrouped into approximate 1924 countries by tools/assign1924.py.\n'
+    'window.UPSHIP_MAP_EUROPE = ' + json.dumps(data, separators=(',', ':')) + ';\n')
+print('KB', len(open('map-europe.js').read())//1024, 'H', H, len(countries))

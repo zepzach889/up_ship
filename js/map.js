@@ -22,24 +22,36 @@ window.UpShip = window.UpShip || {};
     return e;
   }
 
-  // Hand-placed country labels where the automatic spot collides with cities.
+  // Country labels are placed by hand. Countries not listed here are not labeled.
   const LABELS = {
-    "Irish Free State": { lon: -8.1, lat: 52.2, size: 9.5 },
-    "United Kingdom": { lon: -1.6, lat: 54.75, size: 13 },
-    "Poland": { lon: 20.6, lat: 50.95 },
-    "Hungary": { lon: 19.6, lat: 46.75, size: 13 },
-    "Spain": { lon: -3.6, lat: 39.3 },
+    "United Kingdom": { lon: -1.9, lat: 54.45, size: 12 },
+    "Irish Free State": { lon: -8.3, lat: 52.5, size: 9.5, lines: ["Irish Free", "State"] },
+    "France": { lon: 2.3, lat: 46.4 },
+    "Spain": { lon: -3.8, lat: 39.1 },
     "Portugal": { lon: -7.85, lat: 40.7, size: 11, rotate: -80 },
-    "Austria": { lon: 15.3, lat: 47.3, size: 13 },
-    "Czechoslovakia": { lon: 17.2, lat: 49.2, size: 13 },
-    "Switzerland": null, "Denmark": null, "Netherlands": null, "Belgium": null, "Albania": null,
-    "Norway": { lon: 8.4, lat: 60.9 },
-    "Soviet Union": { lon: 33, lat: 52.6 },
-    "Greece": { lon: 21.9, lat: 39.4, size: 13 },
+    "Germany": { lon: 9.2, lat: 51.6 },
+    "Poland": { lon: 19.8, lat: 51.0 },
+    "Czechoslovakia": { lon: 17.2, lat: 49.25, size: 12 },
+    "Austria": { lon: 15.3, lat: 47.0, size: 12 },
+    "Hungary": { lon: 19.1, lat: 46.65, size: 12 },
+    "Italy": { lon: 12.4, lat: 43.1 },
+    "Yugoslavia": { lon: 19.6, lat: 43.7 },
+    "Romania": { lon: 24.8, lat: 46.1 },
+    "Bulgaria": { lon: 25.3, lat: 42.75, size: 13 },
+    "Greece": { lon: 21.6, lat: 39.75, size: 11 },
+    "Turkey": { lon: 32.5, lat: 39.4 },
+    "Soviet Union": { lon: 33, lat: 53.2 },
     "Lithuania": { lon: 23.9, lat: 55.35, size: 10 },
     "Latvia": { lon: 25.6, lat: 56.9, size: 10 },
     "Estonia": { lon: 25.9, lat: 58.75, size: 10 },
-    "Finland": { lon: 26.5, lat: 62.2, size: 12 }
+    "Finland": { lon: 27.0, lat: 62.4, size: 12 },
+    "Sweden": { lon: 14.6, lat: 57.4, size: 12 },
+    "Norway": { lon: 8.4, lat: 61.0, size: 12 },
+    "Morocco": { lon: -5.5, lat: 33.0, size: 12 },
+    "Algeria": { lon: 3.0, lat: 34.5, size: 12 },
+    "Tunisia": { lon: 9.4, lat: 34.6, size: 11 },
+    "Libya": { lon: 17.0, lat: 29.8, size: 12 },
+    "Egypt": { lon: 29.5, lat: 28.5, size: 12 }
   };
 
   let svg, world, layers = {}, view = { x: 0, y: 0, w: M.width, h: M.height }, zoom = 1;
@@ -50,7 +62,9 @@ window.UpShip = window.UpShip || {};
     onSelect = handlers.onSelect;
     svg = el("svg", { class: "map", viewBox: `0 0 ${M.width} ${M.height}`, role: "img", "aria-label": "Map of Europe" }, container);
     const defs = el("defs", {}, svg);
-    el("path", { id: "land-shape", d: M.land }, defs);
+    // All countries together form the land; used for the water lining and the coastline.
+    const landShape = el("g", { id: "land-shape" }, defs);
+    for (const c of M.countries) el("path", { d: c.path }, landShape);
     const hull = el("g", { id: "ship-shape" }, defs);
     el("path", { d: "M-11,0 C-8,-3.6 7,-3.6 11,0 C7,3.6 -8,3.6 -11,0 Z", class: "ship-hull" }, hull);
     el("path", { d: "M-11,0 L-14,-3.2 L-12.2,0 L-14,3.2 Z", class: "ship-fin" }, hull);
@@ -71,22 +85,27 @@ window.UpShip = window.UpShip || {};
     // Water lining: alternating strokes of the coast, as on period atlases.
     [[15, "wl-line"], [13, "wl-sea"], [9.5, "wl-line"], [7.5, "wl-sea"], [4.5, "wl-line"], [3, "wl-sea"]]
       .forEach(([w, cls]) => el("use", { href: "#land-shape", class: cls, "stroke-width": w }, layers.waterlines));
-    el("use", { href: "#land-shape", class: "land" }, layers.land);
+    // Coast: a wide stroke under the country fills, so only its outer half shows along the sea.
+    el("use", { href: "#land-shape", class: "coast" }, layers.land);
 
     for (const c of M.countries) {
       el("path", { d: c.path, class: `country tint-${c.tint}` }, layers.countries);
       const o = LABELS[c.name];
-      if (o === null || (c.area < 9000 && !o)) continue;
-      const [x, y] = o ? project(o.lon, o.lat) : c.label;
+      if (!o) continue;
+      const [x, y] = project(o.lon, o.lat);
       const t = el("text", { x, y, class: "country-label" }, layers.countryLabels);
-      if (o && o.rotate) t.setAttribute("transform", `rotate(${o.rotate} ${x} ${y})`);
-      t.dataset.size = (o && o.size) || 15;
-      t.textContent = c.name;
+      if (o.rotate) t.setAttribute("transform", `rotate(${o.rotate} ${x} ${y})`);
+      t.dataset.size = o.size || 15;
+      if (o.lines) {
+        o.lines.forEach((line, i) => {
+          const ts = el("tspan", { x, dy: i ? "1.15em" : `${-(o.lines.length - 1) * 0.575}em` }, t);
+          ts.textContent = line;
+        });
+      } else t.textContent = c.name;
     }
     const lines = el("g", {}, null);
     world.insertBefore(lines, layers.countryLabels);
     el("path", { d: M.borders, class: "borders" }, lines);
-    el("use", { href: "#land-shape", class: "coast" }, lines);
 
     for (const city of U.CITIES) drawCity(city);
     setupZoomPan();

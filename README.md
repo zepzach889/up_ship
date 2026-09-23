@@ -26,10 +26,10 @@ Your game saves automatically in the browser.
 - `js/map.js`: map drawing, zoom, and pan
 - `js/ui.js`: top bar and detail panels
 - `js/main.js`: starts the game and runs the clock
-- `tools/build_map.py`: regenerates `js/data/map-europe.js` from the source map data
+- `tools/assign1924.py` and `tools/build_map.py`: regenerate `js/data/map-europe.js` from Natural Earth data (needs Python with shapely, and mapshaper)
 
 ## Credits and license
 
-Historical borders come from the [historical-basemaps](https://github.com/aourednik/historical-basemaps) project (GPL-3.0), adjusted to about 1924. Coastlines and the Irish Free State outline come from [Natural Earth](https://www.naturalearthdata.com/) (public domain), via [world-atlas](https://github.com/topojson/world-atlas).
+Map data comes from [Natural Earth](https://www.naturalearthdata.com/) (public domain). The 1924 borders are assembled from Natural Earth's modern province boundaries, so some borders are approximate.
 
 This game is released under the GNU General Public License, version 3. See `LICENSE`.
