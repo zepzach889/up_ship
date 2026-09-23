@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Up, Ship!</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:ital,wght@0,400;0,600;0,700;1,400&family=Poiret+One&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="bar">
+    <div class="wordmark" aria-label="Up, Ship!">
+      <span class="step" aria-hidden="true"></span>
+      <span class="wordmark-text">Up, Ship!</span>
+      <span class="step step-r" aria-hidden="true"></span>
+    </div>
+
+    <div class="clock">
+      <span id="date" class="date"></span>
+      <span id="time" class="time"></span>
+    </div>
+
+    <div class="speeds" role="group" aria-label="Game speed">
+      <button data-speed="0" title="Pause (Space)" aria-label="Pause">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="5" y="4" width="3.5" height="12"/><rect x="11.5" y="4" width="3.5" height="12"/></svg>
+      </button>
+      <button data-speed="1" title="Normal speed (1)" aria-label="Normal speed">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 4 L15 10 L6 16 Z"/></svg>
+      </button>
+      <button data-speed="2" title="Fast (2)" aria-label="Fast">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 4 L10 10 L2 16 Z M10 4 L18 10 L10 16 Z"/></svg>
+      </button>
+      <button data-speed="3" title="Fastest (3)" aria-label="Fastest">
+        <svg viewBox="0 0 24 20" aria-hidden="true"><path d="M1 4 L8 10 L1 16 Z M8 4 L15 10 L8 16 Z M15 4 L22 10 L15 16 Z"/></svg>
+      </button>
+    </div>
+
+    <div class="funds">
+      <span class="funds-label">Funds</span>
+      <span id="money" class="money"></span>
+    </div>
+
+    <button id="new-game" class="plain">New game</button>
+  </header>
+
+  <main class="stage">
+    <div id="map" class="map-wrap"></div>
+
+    <aside id="panel" class="panel" hidden>
+      <div class="panel-inner">
+        <button id="panel-close" class="close" aria-label="Close">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5 L15 15 M15 5 L5 15"/></svg>
+        </button>
+        <div id="panel-body" aria-live="polite"></div>
+      </div>
+    </aside>
+
+    <div class="zoom" role="group" aria-label="Zoom">
+      <button id="zoom-in" aria-label="Zoom in">+</button>
+      <button id="zoom-out" aria-label="Zoom out">−</button>
+    </div>
+
+    <p class="hint">Click a city, route, or ship for details. Space pauses; 1, 2 and 3 set the speed. Scroll or use the buttons to zoom, and drag to move the map.</p>
+  </main>
+
+  <script src="js/data/map-europe.js"></script>
+  <script src="js/data/cities.js"></script>
+  <script src="js/data/ships.js"></script>
+  <script src="js/sim.js"></script>
+  <script src="js/map.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
