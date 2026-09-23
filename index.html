@@ -61,12 +61,31 @@
       </div>
     </aside>
 
+    <nav class="dock" aria-label="Company">
+      <button data-open="shipyard">Shipyard</button>
+      <button data-open="fleet">Fleet</button>
+      <button data-open="routes">Routes</button>
+      <button data-open="finances">Finances</button>
+    </nav>
+
+    <div id="draft" class="draft" hidden>
+      <p class="draft-title">New route</p>
+      <p id="draft-text" class="draft-text"></p>
+      <div class="draft-actions">
+        <button id="draft-undo" class="btn-quiet">Undo last stop</button>
+        <button id="draft-cancel" class="btn-quiet">Cancel</button>
+        <button id="draft-create" class="btn">Create route</button>
+      </div>
+    </div>
+
+    <p id="notice" class="notice" role="status" hidden></p>
+
     <div class="zoom" role="group" aria-label="Zoom">
       <button id="zoom-in" aria-label="Zoom in">+</button>
       <button id="zoom-out" aria-label="Zoom out">−</button>
     </div>
 
-    <p class="hint">Press Next turn (or N) to play half a day, or turn on auto-play. Click a city, route, or ship for details. Scroll or use the buttons to zoom, and drag to move the map.</p>
+    <p class="hint">Press Next turn (or N) to play half a day, or turn on auto-play. Click a city, route, or ship for details. Order ships from the Shipyard and draw new routes from Routes.</p>
   </main>
 
   <script src="js/data/map-europe.js"></script>

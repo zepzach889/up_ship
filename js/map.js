@@ -166,59 +166,90 @@ window.UpShip = window.UpShip || {};
   }
 
   // Routes and ships -------------------------------------------------------
+  function routePathD(stops) {
+    return "M" + stops.map(id => U.cityById[id]).map(c => c.x.toFixed(1) + "," + c.y.toFixed(1)).join("L");
+  }
+
   function syncRoutes(state) {
+    const live = new Set(state.routes.map(r => r.id));
+    for (const id in routeNodes) if (!live.has(id)) { routeNodes[id].g.remove(); delete routeNodes[id]; }
     for (const route of state.routes) {
       let n = routeNodes[route.id];
-      const pts = route.stops.map(id => U.cityById[id]).map(c => [c.x, c.y]);
-      const d = "M" + pts.map(p => p.join(",")).join("L");
+      const d = routePathD(route.stops);
       if (!n) {
-        const g = el("g", { class: "route", tabindex: 0, role: "button", "aria-label": "Route " + route.stops.map(s => U.cityById[s].name).join(" to ") }, layers.routes);
-        const hit = el("path", { d, class: "route-hit" }, g);
-        const line = el("path", { d, class: "route-line" }, g);
+        const g = el("g", { class: "route", tabindex: 0, role: "button" }, layers.routes);
+        const hit = el("path", { class: "route-hit" }, g);
+        const line = el("path", { class: "route-line" }, g);
         g.addEventListener("click", e => { e.stopPropagation(); onSelect({ type: "route", id: route.id }); });
         g.addEventListener("keydown", e => { if (e.key === "Enter") onSelect({ type: "route", id: route.id }); });
         n = routeNodes[route.id] = { g, hit, line };
       }
+      n.hit.setAttribute("d", d); n.line.setAttribute("d", d);
+      n.g.setAttribute("aria-label", "Route " + U.sim.routeName(route.stops));
       const sum = U.sim.routeSummary(state, route.id);
       n.g.classList.toggle("is-profit", sum.days > 0 && sum.profit >= 0);
       n.g.classList.toggle("is-loss", sum.days > 0 && sum.profit < 0);
+      n.g.classList.toggle("is-empty", !state.ships.some(sh => sh.routeId === route.id));
     }
+  }
+
+  // The route being drawn, before it is confirmed.
+  let draftNode = null;
+  function drawDraft(stops) {
+    if (!draftNode) draftNode = el("path", { class: "route-draft" }, layers.routes);
+    draftNode.setAttribute("d", stops && stops.length > 1 ? routePathD(stops) : "");
+    for (const id in cityNodes) {
+      const i = stops ? stops.indexOf(id) : -1;
+      cityNodes[id].g.classList.toggle("in-draft", i >= 0);
+    }
+    svg.classList.toggle("is-drawing", !!stops);
   }
 
   function shipPosition(ship, progress) {
-    // progress: 0..1 through the current turn. Between turns the ship waits at its departure city.
-    if (!ship.leg || !U.turnActive) {
-      if (ship.leg) { const c = U.cityById[ship.leg.from]; return { x: c.x, y: c.y, angle: 0, flying: false }; }
-      const c = U.cityById[U.sim.routeOf(U.state, ship).stops[ship.at]];
-      return { x: c.x, y: c.y, angle: 0, flying: false };
+    const state = U.state;
+    if (!ship.leg) {
+      const c = U.cityById[ship.location];
+      return { x: c.x, y: c.y, angle: 0, flying: false, at: ship.location };
     }
     const a = U.cityById[ship.leg.from], b = U.cityById[ship.leg.to];
-    const f = Math.min(1, progress / (ship.leg.hours / U.TIME.tickHours));
-    const e = f < 1 ? f : 1;
+    const elapsed = (state.tick - ship.leg.startTick + (U.turnActive ? progress : 0)) * U.TIME.tickHours;
+    const f = Math.max(0, Math.min(1, elapsed / ship.leg.hours));
     const ang = Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
-    return { x: a.x + (b.x - a.x) * e, y: a.y + (b.y - a.y) * e, angle: ang, flying: f < 1, fraction: f };
+    const flying = f > 0 && f < 1;
+    return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, angle: ang, flying, fraction: f,
+      at: flying ? null : (f >= 1 ? ship.leg.to : ship.leg.from) };
   }
 
   function drawShips(state, progress) {
+    const live = new Set();
+    const moored = {};
     for (const ship of state.ships) {
+      if (ship.deliveryTick > state.tick) continue;
+      live.add(ship.id);
       let n = shipNodes[ship.id];
       if (!n) {
-        const g = el("g", { class: "ship", tabindex: 0, role: "button", "aria-label": "Ship " + ship.name }, layers.ships);
+        const g = el("g", { class: "ship", tabindex: 0, role: "button" }, layers.ships);
         el("circle", { r: 14, class: "ship-hit" }, g);
         const body = el("use", { href: "#ship-shape" }, g);
         g.addEventListener("click", e => { e.stopPropagation(); onSelect({ type: "ship", id: ship.id }); });
         g.addEventListener("keydown", e => { if (e.key === "Enter") onSelect({ type: "ship", id: ship.id }); });
         n = shipNodes[ship.id] = { g, body };
       }
+      n.g.setAttribute("aria-label", "Ship " + ship.name);
       const p = shipPosition(ship, progress);
       const s = 1.6 / zoom;
-      // When moored, sit just above the mast so the city stays clickable.
-      const dx = 0, dy = p.flying ? 0 : -15 / zoom;
-      let angle = p.flying ? p.angle : 0;
-      if (angle > 90 || angle < -90) { n.body.setAttribute("transform", `scale(1,-1)`); } else { n.body.removeAttribute("transform"); }
+      let dx = 0, dy = 0, angle = p.flying ? p.angle : 0;
+      if (!p.flying) {
+        // Moored ships stack above their city so the city stays clickable.
+        const k = moored[p.at] = (moored[p.at] || 0) + 1;
+        dy = -(8 + 9 * k) / zoom;
+      }
+      if (angle > 90 || angle < -90) n.body.setAttribute("transform", "scale(1,-1)"); else n.body.removeAttribute("transform");
       n.g.setAttribute("transform", `translate(${p.x + dx},${p.y + dy}) rotate(${angle}) scale(${s})`);
       n.g.classList.toggle("is-moored", !p.flying);
+      n.g.classList.toggle("is-idle", !ship.routeId);
     }
+    for (const id in shipNodes) if (!live.has(id)) { shipNodes[id].g.remove(); delete shipNodes[id]; }
   }
 
   // Zoom and pan ------------------------------------------------------------
@@ -303,5 +334,5 @@ window.UpShip = window.UpShip || {};
     for (const id in routeNodes) routeNodes[id].g.classList.toggle("is-selected", !!sel && sel.type === "route" && sel.id === id);
   }
 
-  U.map = { init, syncRoutes, drawShips, zoomBy, highlight, shipPosition, project };
+  U.map = { init, syncRoutes, drawShips, drawDraft, zoomBy, highlight, shipPosition, project };
 })(window.UpShip);

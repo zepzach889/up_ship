@@ -49,11 +49,11 @@ UpShip.TIERS = {
 };
 
 UpShip.SPECIALTIES = {
-  capital: { name: "Capital", note: "More mail and government travel", passengerBoost: 1.0 },
-  port: { name: "Port", note: "More freight", passengerBoost: 1.0 },
-  industrial: { name: "Industrial", note: "More freight, less tourism", passengerBoost: 0.9 },
-  culture: { name: "Culture", note: "More first-class travel", passengerBoost: 1.1 },
-  commerce: { name: "Commerce", note: "More business travel", passengerBoost: 1.05 }
+  capital: { name: "Capital", note: "More mail and government travel", passengerBoost: 1.0, freightBoost: 0.9 },
+  port: { name: "Port", note: "More freight", passengerBoost: 1.0, freightBoost: 1.4 },
+  industrial: { name: "Industrial", note: "More freight, less tourism", passengerBoost: 0.9, freightBoost: 1.4 },
+  culture: { name: "Culture", note: "More first-class travel", passengerBoost: 1.1, freightBoost: 0.7 },
+  commerce: { name: "Commerce", note: "More business travel", passengerBoost: 1.05, freightBoost: 1.1 }
 };
 
 UpShip.cityById = Object.fromEntries(UpShip.CITIES.map(c => [c.id, c]));
