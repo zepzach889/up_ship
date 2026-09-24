@@ -1,8 +1,8 @@
 // Game state, turns, routes, ships, wear, incidents, telegrams, and the economy.
 window.UpShip = window.UpShip || {};
 (function (U) {
-  const SAVE_KEY = "upship.save.v4";
-  const VERSION = 4;
+  const SAVE_KEY = "upship.save.v5";
+  const VERSION = 5;
   const E = () => U.ECONOMY;
   const TH = () => U.TIME.tickHours;
   const H = tick => tick * TH();                 // hours since 7 am, 1 January 1919
@@ -118,6 +118,8 @@ window.UpShip = window.UpShip || {};
     for (const id of catalog(state)) if (U.SHIP_CLASSES[id].kind === "surplus") state.surplusLeft[id] = E().surplusStock;
     const first = catalog(state)[0];
     newShip(state, first, suggestName(state, first), config.home, 0);
+    U.contracts.init(state);
+    state.tutorial = config.tutorial ? { step: 1 } : null;
     return state;
   }
 
@@ -175,7 +177,10 @@ window.UpShip = window.UpShip || {};
   // Buying, selling, renaming --------------------------------------------------------
   function order(state, classId, name) {
     const c = U.SHIP_CLASSES[classId], t = orderTerms(state, classId);
+    const grant = U.contracts.buildGrantFor(state, classId, t.price);
+    t.price -= grant;
     if (state.money < t.price) return null;
+    if (grant) U.contracts.useBuildGrant(state, grant);
     if (c.kind === "surplus" && !(state.surplusLeft[classId] > 0)) return null;
     if (c.kind === "surplus") state.surplusLeft[classId] -= 1;
     state.money -= t.price;
@@ -246,9 +251,9 @@ window.UpShip = window.UpShip || {};
     return out;
   }
 
-  function board(state, ship, route) {
+  function board(state, ship, route, reserved = 0) {
     const c = cls(ship);
-    let seats = c.passengers, hold = c.cargoTons, revenue = 0, pax = 0, tons = 0;
+    let seats = c.passengers, hold = c.cargoTons - reserved, revenue = 0, pax = 0, tons = 0;
     const from = route.stops[ship.stop];
     for (const to of downstream(route, ship)) {
       const w = state.waiting[pairKey(from, to)];
@@ -270,6 +275,15 @@ window.UpShip = window.UpShip || {};
   function addCost(state, ship, amount) {
     state.day.costs += amount; ship.stats.costs += amount; state.totals.costs += amount;
     routeDay(state, ship.routeId).costs += amount;
+  }
+
+  // A cost not tied to one ship, such as penalties and interest.
+  function addGeneral(state, amount) {
+    state.day.costs += amount; state.totals.costs += amount;
+  }
+  function addIncome(state, amount, kind) {
+    state.day.revenue += amount; state.totals.revenue += amount;
+    if (kind) { state.year[kind] = (state.year[kind] || 0) + amount; state.totals[kind] = (state.totals[kind] || 0) + amount; }
   }
 
   function wearFactor(state, ship) {
@@ -346,9 +360,11 @@ window.UpShip = window.UpShip || {};
       telegram(state, t, `${ship.name} flight to ${U.cityById[next.to].name} cancelled stop gas cell damage found at ${U.cityById[from].name} stop repairs two days stop compensation £${fine.toLocaleString("en-GB")} stop`, true, { type: "ship", id: ship.id });
       return;
     }
-    const load = next.ferry || !route ? { pax: 0, tons: 0, revenue: 0 } : board(state, ship, route);
+    const mail = next.ferry || !route ? 0 : U.contracts.mailReserve(state, from, next.to, c.cargoTons);
+    const load = next.ferry || !route ? { pax: 0, tons: 0, revenue: 0 } : board(state, ship, route, mail);
+    if (!next.ferry && route) U.contracts.recordFlight(state, from, next.to, mail > 0);
     const fuel = Math.round(km * c.fuelPerKm * E().costFactor);
-    ship.legs.push({ from, to: next.to, start: t, hours, km: Math.round(km), ferry: next.ferry,
+    ship.legs.push({ from, to: next.to, start: t, hours, km: Math.round(km), ferry: next.ferry, mail: mail > 0,
       pax: load.pax, tons: load.tons, seats: c.passengers, hold: c.cargoTons, revenue: load.revenue });
     state.day.revenue += load.revenue; state.totals.revenue += load.revenue;
     addCost(state, ship, fuel);
@@ -411,11 +427,13 @@ window.UpShip = window.UpShip || {};
         telegram(state, now, `${ship.name} has reached the end of its service life stop wear and costs will rise stop consider selling stop`, true, { type: "ship", id: ship.id });
       }
     }
-    if (state.tick % 2 === 0) settleDay(state);
+    if (state.tick % 2 === 0) { settleDay(state); U.contracts.daily(state); }
+    if (state.tick % 14 === 0) U.contracts.weekly(state);
     refillDemand(state, false);
     const d = dateOf(state.tick);
     const month = d.getUTCFullYear() * 12 + d.getUTCMonth();
     if (state.month && month !== state.month) {
+      U.contracts.monthly(state);
       for (const r of state.routes) {
         const s = routeSummary(state, r.id);
         if (s.days >= 30 && s.profit < 0)
@@ -468,10 +486,10 @@ window.UpShip = window.UpShip || {};
   }
   function clearSave() {
     saving = false;
-    try { for (const k of ["upship.save.v1", "upship.save.v2", "upship.save.v3", SAVE_KEY]) localStorage.removeItem(k); } catch (e) {}
+    try { for (const k of ["upship.save.v1", "upship.save.v2", "upship.save.v3", "upship.save.v4", SAVE_KEY]) localStorage.removeItem(k); } catch (e) {}
   }
 
-  U.sim = { distanceKm, fare, freightRate, dailyPassengers, dailyFreight, start, advance, beginTurn, dateOf, dateAtHour, H,
+  U.sim = { telegram, addGeneral, addIncome, nearestCity, distanceKm, fare, freightRate, dailyPassengers, dailyFreight, start, advance, beginTurn, dateOf, dateAtHour, H,
     routeSummary, save, load, clearSave, routeOf, routeName, routeLegs, createRoute, deleteRoute, canAssign, assign,
     order, rename, suggestName, longestLeg, catalog, orderTerms, saleValue, canSell, sell, positionAt, ageYears, roman };
 })(window.UpShip);

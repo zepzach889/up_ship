@@ -133,6 +133,7 @@ window.UpShip = window.UpShip || {};
       <div class="choices">${swatch(E.mainColors, "c1")}</div>
       <p class="field-label">Trim color</p>
       <div class="choices">${swatch(E.trimColors, "c2")}</div>
+      <label class="tutorial-check"><input type="checkbox" id="co-tutorial" ${identity.tutorial === false ? "" : "checked"}> Play the tutorial (recommended for your first company)</label>
       <div class="setup-actions">
         <button class="btn-quiet" data-setup="back-city">Back</button>
         <button class="btn" data-setup="found">Found the company</button>
@@ -140,7 +141,8 @@ window.UpShip = window.UpShip || {};
   }
 
   function readFields() {
-    const n = $("#co-name"), d = $("#co-director");
+    const n = $("#co-name"), d = $("#co-director"), t = $("#co-tutorial");
+    if (t) identity.tutorial = t.checked;
     if (n) identity.name = n.value;
     if (d) identity.director = d.value;
   }
@@ -168,7 +170,7 @@ window.UpShip = window.UpShip || {};
         step = null;
         document.body.classList.remove("is-setup");
         U.map.setSetup(null);
-        onDone({ nation, home, name, director: director || directorName(nation), emblem: identity.emblem });
+        onDone({ nation, home, name, director: director || directorName(nation), emblem: identity.emblem, tutorial: identity.tutorial !== false });
       }
     }
   }

@@ -6,6 +6,7 @@ UpShip.NATIONS = {
     strength: "Best early engineering",
     description: "Fast, well-built rigid ships from the builders who pioneered them.",
     catalog: ["seeschwalbe", "brieftaube", "marine"],
+    subsidy: { scale: 0.6, frequency: 0.5, buildShare: 0.15, leaning: "capitals" },
     companyNames: {
       patterns: ["{cityer} Luftreederei", "{adj} Luftreederei", "{adj} Luftschiff-Linie", "{adj} Luftverkehrs-Gesellschaft", "{cityer} Luftschiff-Linie"],
       adj: ["Rheinische", "Hanseatische", "Süddeutsche", "Norddeutsche", "Bayerische", "Mitteldeutsche", "Schwäbische", "Märkische"]
@@ -20,6 +21,7 @@ UpShip.NATIONS = {
     strength: "Imperial-route ambitions",
     description: "Large, long-ranged rigid ships, slower and costlier than the German designs.",
     catalog: ["swift", "petrel", "rclass"],
+    subsidy: { scale: 1.0, frequency: 1.0, buildShare: 0.25, leaning: "imperial" },
     companyNames: {
       patterns: ["{adj} Air Navigation Company", "{adj} Airship Company", "{adj} Aerial Transport Company", "{adj} Air Line", "{city} Airship Company"],
       adj: ["Royal", "British", "Atlantic", "Empire", "Albion", "Northern", "Dominion", "Commonwealth"]
@@ -34,6 +36,7 @@ UpShip.NATIONS = {
     strength: "Strong government support",
     description: "Cheap small semi-rigids, plus a German-built zeppelin received as war reparations.",
     catalog: ["hirondelle", "martinet", "reparations"],
+    subsidy: { scale: 1.5, frequency: 1.5, buildShare: 0.3, leaning: "any" },
     companyNames: {
       patterns: ["Compagnie {adj} de Navigation Aérienne", "Société des Dirigeables {of}", "Compagnie des Dirigeables {of}", "Lignes Aériennes {adj}s"],
       adj: ["Transcontinentale", "Méditerranéenne", "Atlantique", "Française", "Parisienne", "Provençale", "Nationale"],
@@ -49,6 +52,7 @@ UpShip.NATIONS = {
     strength: "Mediterranean reach",
     description: "The cheapest and quickest-to-build ships, all semi-rigids, with shorter range.",
     catalog: ["gabbiano", "colombo", "militare"],
+    subsidy: { scale: 1.0, frequency: 1.0, buildShare: 0.25, leaning: "mediterranean" },
     companyNames: {
       patterns: ["Società {adj} di Navigazione Aerea", "Aeronavi {adj}", "Linee Aeree {adjpl}", "Società {adj} Dirigibili"],
       adj: ["Italiana", "Tirrena", "Adriatica", "Ligure", "Lombarda", "Mediterranea", "Romana", "Partenopea"],
@@ -60,6 +64,9 @@ UpShip.NATIONS = {
     }
   }
 };
+// Cities that count as Mediterranean or imperial destinations for route grants.
+UpShip.MEDITERRANEAN = ["barcelona", "marseille", "toulon", "genoa", "rome", "naples", "athens", "constantinople", "tunis", "algiers", "malta", "alexandria", "cairo", "gibraltar"];
+UpShip.IMPERIAL = ["gibraltar", "malta", "alexandria", "cairo", "marseille", "rome", "naples", "athens", "lisbon"];
 UpShip.NATION_ORDER = ["germany", "britain", "france", "italy"];
 
 // City-name forms used in company names.

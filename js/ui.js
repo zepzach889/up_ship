@@ -64,11 +64,12 @@ window.UpShip = window.UpShip || {};
     $("#time").textContent = clock(d);
     $("#money").textContent = money(state.money);
     $("#money").classList.toggle("is-negative", state.money < 0);
-    document.querySelectorAll("[data-auto]").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.auto === auto)));
+    const turnsOk = U.tutorial.allowsTurns() && !state.bankrupt;
+    document.querySelectorAll("[data-auto]").forEach(b => { b.setAttribute("aria-pressed", String(+b.dataset.auto === auto)); b.disabled = !turnsOk; });
     const next = $("#next-turn");
-    next.disabled = (U.turnActive && !frozen) || auto > 0 || !!draft;
+    next.disabled = (U.turnActive && !frozen) || auto > 0 || !!draft || !turnsOk;
     next.textContent = frozen ? "Resume turn" : "Next turn";
-    $(".hint").hidden = state.tick > 0 || !!draft;
+    $(".hint").hidden = state.tick > 0 || !!draft || !!state.tutorial;
     const live = $("#live-status");
     if (live && selection && selection.type === "ship") {
       const ship = state.ships.find(s => s.id === selection.id);
@@ -92,6 +93,7 @@ window.UpShip = window.UpShip || {};
     if (draft && sel && sel.type === "city") { addDraftStop(sel.id); return; }
     selection = sel; editing = null; picking = null;
     U.map.highlight(sel);
+    if (U.tutorial) U.tutorial.check(sel);
     $("#panel").hidden = !sel;
     document.querySelectorAll("[data-open]").forEach(b => b.classList.toggle("is-active", !!sel && sel.type === b.dataset.open));
     render();
@@ -106,7 +108,7 @@ window.UpShip = window.UpShip || {};
     if (!selection) { body.innerHTML = ""; return; }
     const s = U.state;
     const views = { city: cityPanel, ship: shipPanel, route: routePanel, shipyard: shipyardPanel, fleet: fleetPanel, routes: routesPanel,
-      finances: financesPanel, company: companyPanel, telegrams: telegramsPanel };
+      finances: financesPanel, company: companyPanel, telegrams: telegramsPanel, contracts: contractsPanel };
     const html = views[selection.type](s, selection.id);
     if (html == null) { select(null); return; }
     body.innerHTML = html;
@@ -271,8 +273,11 @@ window.UpShip = window.UpShip || {};
     return `
       <h2>Shipyard</h2>
       <p class="sub">${nation.name}'s builders. New ships are delivered at ${home.name}${home.works ? ", where your works build them faster and cheaper" : ""}.</p>
+      ${state.buildGrant ? `<p class="status">Government construction grant: ${Math.round(state.buildGrant.share * 100)}% off your next national-built ship, until ${shortDate(U.sim.dateAtHour(state.buildGrant.until))}.</p>` : ""}
       ${U.sim.catalog(state).map(id => {
-        const c = U.SHIP_CLASSES[id], t = U.sim.orderTerms(state, id);
+        const c = U.SHIP_CLASSES[id], t = Object.assign({}, U.sim.orderTerms(state, id));
+        const grant = U.contracts.buildGrantFor(state, id, t.price);
+        t.price -= grant;
         const weeks = t.days < 45 ? `${Math.round(t.days / 7)} weeks` : `${Math.round(t.days / 30 * 2) / 2} months`;
         const surplus = c.kind === "surplus", left = state.surplusLeft[id] || 0;
         const blocked = state.money < t.price || (surplus && !left);
@@ -290,7 +295,7 @@ window.UpShip = window.UpShip || {};
             ${row("Service life", (surplus ? U.ECONOMY.lifeYears.surplus : U.ECONOMY.lifeYears.built) + " years")}
             ${surplus ? row("Hulls left", left ? `${left} of ${U.ECONOMY.surplusStock}` : "None") : ""}
           </dl>
-          <div class="card-foot"><span class="price">${money(t.price)}</span>
+          <div class="card-foot"><span class="price">${money(t.price)}${grant ? ` <small class="was">${money(t.price + grant)}</small>` : ""}</span>
             <button class="btn" data-order="${id}" ${blocked ? "disabled" : ""}>Order</button></div>
           ${surplus && !left ? `<p class="note">Every surplus hull has been sold.</p>` : state.money < t.price ? `<p class="note">Not enough funds.</p>` : ""}
         </section>`;
@@ -340,6 +345,51 @@ window.UpShip = window.UpShip || {};
       </dl>`;
   }
 
+  function offerText(o) {
+    const a = city(o.a || o.b || "berlin"), b = o.b ? city(o.b) : null;
+    if (o.kind === "mail") return `<h4>Mail contract: ${a.name} to ${b.name}</h4>
+      <p>${o.perWeek === 7 ? "One flight a day" : o.perWeek + " flights a week"} each way, ${km(U.sim.distanceKm(o.a, o.b))} apart. ${money(o.monthly)} a month for ${o.years} year${o.years > 1 ? "s" : ""}. Offered by ${o.authority === U.NATIONS[U.state.company.nation].name ? "your government's postal ministry" : "the postal authority of " + esc(o.authority)}.</p>`;
+    if (o.kind === "route") return `<h4>Route grant: ${a.name} to ${b.name}</h4>
+      <p>Open a service between them within ${U.ECONOMY.grantOpenMonths} months and fly it at least ${U.ECONOMY.grantMinPerMonth} times each way every month for ${o.years} years. ${money(o.upfront)} when the service opens, then ${money(o.monthly)} a month. Stopping early means repaying part of the opening grant.</p>`;
+    return `<h4>Construction grant</h4><p>The government pays ${Math.round(o.share * 100)}% of your next national-built ship (not war-surplus) ordered within ${U.ECONOMY.buildGrantMonths} months, in exchange for keeping it registered at home.</p>`;
+  }
+
+  function contractsPanel(state) {
+    const now = U.sim.H(state.tick);
+    const offers = state.offers.map(o => `<section class="card offer">${offerText(o)}
+      <p class="note">Open until ${shortDate(U.sim.dateAtHour(o.expiresHour))}.</p>
+      <div class="btn-row"><button class="btn-quiet" data-decline="${o.id}">Decline</button><button class="btn" data-accept="${o.id}">Accept</button></div></section>`).join("");
+    const mail = state.contracts.map(k => {
+      const rel = k.required ? Math.round(k.made / k.required * 100) + "%" : "New";
+      const has = state.routes.some(r => U.sim.routeLegs(r).some(([x, y]) => (x === k.a && y === k.b) || (x === k.b && y === k.a)));
+      return `<section class="card"><h4>Mail: ${city(k.a).name} to ${city(k.b).name}</h4>
+        <dl>
+          ${row("Required", `${k.perWeek === 7 ? "Daily" : k.perWeek + " a week"} each way`)}
+          ${row("This week", `${city(k.a).name} to ${city(k.b).name} ${k.week.ab} of ${k.perWeek}; back ${k.week.ba} of ${k.perWeek}`)}
+          ${row("Pay", money(k.monthly) + " a month")}
+          ${row("Reliability", rel)}
+          ${row("Penalties so far", money(k.penalties))}
+          ${row("Ends", shortDate(U.sim.dateAtHour(k.endHour)))}
+        </dl>
+        ${has ? "" : `<p class="note">No route of yours flies between these cities yet. Any ship with half a ton of cargo space flying directly between them carries the mail.</p>
+          <button class="btn" data-draw="${k.a}:${k.b}">Draw this route</button>`}</section>`;
+    }).join("");
+    const grants = state.grants.map(g => `<section class="card"><h4>Grant: ${city(g.a).name} to ${city(g.b).name}</h4>
+      <dl>
+        ${g.opened ? row("This month", `${g.month.ab} and ${g.month.ba} of ${U.ECONOMY.grantMinPerMonth} each way`) + row("Received", money(g.received)) + row("Ends", shortDate(U.sim.dateAtHour(g.endHour)))
+          : row("Open by", shortDate(U.sim.dateAtHour(g.openBy))) + row("On opening", money(g.upfront))}
+        ${row("Monthly", money(g.monthly))}
+      </dl>
+      ${g.opened || state.routes.some(r => U.sim.routeLegs(r).some(([x, y]) => (x === g.a && y === g.b) || (x === g.b && y === g.a))) ? "" : `<button class="btn" data-draw="${g.a}:${g.b}">Draw this route</button>`}</section>`).join("");
+    return `
+      <h2>Contracts</h2>
+      <p class="sub">Mail contracts and government grants</p>
+      <h3>Offers</h3>${offers || `<p class="note">No offers open. New ones arrive by telegram every month or two.</p>`}
+      <h3>Mail contracts</h3>${mail || `<p class="note">None yet.</p>`}
+      <h3>Grants</h3>${grants || `<p class="note">None yet.</p>`}
+      ${state.buildGrant ? `<p class="status">Construction grant: ${Math.round(state.buildGrant.share * 100)}% off your next national-built ship until ${shortDate(U.sim.dateAtHour(state.buildGrant.until))}.</p>` : ""}`;
+  }
+
   function telegramsPanel(state) {
     const log = state.telegrams.slice().reverse();
     return `
@@ -367,6 +417,7 @@ window.UpShip = window.UpShip || {};
 
   function financesPanel(state) {
     const y = state.year, net = y.revenue - y.costs - y.purchases + (y.sales || 0);
+    const limit = U.contracts.loanLimit(state), step = U.ECONOMY.loanStep;
     return `
       <h2>Finances</h2>
       <p class="sub">${esc(state.company.name)}, ${y.year} so far. Director ${esc(state.company.director)}.</p>
@@ -378,6 +429,24 @@ window.UpShip = window.UpShip || {};
         ${row("Ship sales", money(y.sales || 0))}
         ${row("Change in funds", `<span class="${net < 0 ? "neg" : "pos"}">${money(net)}</span>`)}
       </dl>
+      <h3>Income sources, ${y.year}</h3>
+      <dl>
+        ${row("Mail contracts", money(y.mail || 0))}
+        ${row("Government grants", money(y.grants || 0))}
+        ${row("Loan interest paid", money(y.interest || 0))}
+      </dl>
+      <h3>Bank loan</h3>
+      <dl>
+        ${row("Owed", money(state.loan))}
+        ${row("Credit limit", money(limit))}
+        ${row("Interest", `${Math.round(U.ECONOMY.loanRate * 100)}% a year, ${money(state.loan * U.ECONOMY.loanRate / 12)} a month`)}
+      </dl>
+      <div class="btn-row">
+        <button class="btn" data-loan="borrow" ${state.loan + step > limit ? "disabled" : ""}>Borrow ${money(step)}</button>
+        <button class="btn-quiet" data-loan="repay" ${!state.loan || state.money < Math.min(step, state.loan) ? "disabled" : ""}>Repay ${money(Math.min(step, state.loan || step))}</button>
+        <button class="btn-quiet" data-loan="repay-all" ${!state.loan || state.money < state.loan ? "disabled" : ""}>Repay all</button>
+      </div>
+      <p class="note">The credit limit is based on what your ships would sell for. Overdrawn funds with no credit left for three months running means bankruptcy.</p>
       <h3>Routes, last 30 days</h3>
       <dl>${state.routes.map(r => { const s = U.sim.routeSummary(state, r.id);
         return row(routeLink(r), s.days ? `<span class="${s.profit < 0 ? "neg" : "pos"}">${money(s.profit)}</span>` : "New"); }).join("") || `<p class="note">No routes.</p>`}</dl>
@@ -407,6 +476,14 @@ window.UpShip = window.UpShip || {};
       const [shipId, routeId] = b.dataset.assign.split(":");
       U.sim.assign(s, shipId, routeId || null);
       picking = null; h.changed(); render(); return;
+    }
+    if (b.dataset.accept) { U.contracts.accept(s, b.dataset.accept); h.changed(); render(); return; }
+    if (b.dataset.decline) { U.contracts.decline(s, b.dataset.decline); h.changed(); render(); return; }
+    if (b.dataset.draw) { startDraft(b.dataset.draw.split(":")); return; }
+    if (b.dataset.loan) {
+      if (b.dataset.loan === "borrow") U.contracts.borrow(s);
+      else U.contracts.repay(s, b.dataset.loan === "repay-all");
+      h.changed(); render(); return;
     }
     if (b.dataset.unassign) { U.sim.assign(s, b.dataset.unassign, null); h.changed(); render(); return; }
     switch (b.dataset.act) {
@@ -442,8 +519,8 @@ window.UpShip = window.UpShip || {};
   }
 
   // Drawing a route ---------------------------------------------------------------------
-  function startDraft() {
-    draft = [];
+  function startDraft(stops) {
+    draft = Array.isArray(stops) ? stops.slice() : [];
     $("#draft-circuit").checked = false;
     select(null);
     $("#draft").hidden = false;
@@ -520,6 +597,18 @@ window.UpShip = window.UpShip || {};
   const openTelegramCount = () => $("#telegrams").querySelectorAll(".telegram").length;
   const openMajorCount = () => $("#telegrams").querySelectorAll(".telegram.is-major").length;
 
-  U.ui = { init, showCompany, showTelegram, dismissAll, openTelegramCount, openMajorCount,
+  // Bankruptcy ends the game.
+  function showBankrupt(state) {
+    const T = state.totals;
+    $("#panel").hidden = false;
+    $("#panel-body").innerHTML = `<h2>Bankrupt</h2>
+      <p class="sub">${esc(state.company.name)} could not pay its debts, and its creditors have taken control.</p>
+      <dl>${row("Founded", "1 January 1919")}${row("Closed", shortDate(U.sim.dateOf(state.tick)))}
+        ${row("Flights", T.flights.toLocaleString("en-GB"))}${row("Passengers flown", T.passengers.toLocaleString("en-GB"))}</dl>
+      <button class="btn" data-act="bankrupt-new">Start a new company</button>`;
+    $("#panel-body").querySelector("[data-act=bankrupt-new]").addEventListener("click", () => { U.sim.clearSave(); location.reload(); });
+  }
+
+  U.ui = { init, showCompany, showTelegram, showBankrupt, dismissAll, openTelegramCount, openMajorCount,
     onTelegramClosed: fn => { onTelegramClosed = fn; }, updateBar, select, render, notify, isDrawing: () => !!draft, rerenderIf: types => { if (selection && types.includes(selection.type) && !editing) render(); } };
 })(window.UpShip);

@@ -15,6 +15,7 @@ window.UpShip = window.UpShip || {};
     U.ui.init({ nextTurn, setAuto, toggleAuto, newGame, changed });
     U.ui.onTelegramClosed(telegramClosed);
     U.setup.init();
+    U.tutorial.init();
     if (U.state) begin();
     else U.setup.start(config => { U.state = U.sim.start(config); U.sim.save(U.state); begin(); });
     frame(performance.now());
@@ -28,7 +29,10 @@ window.UpShip = window.UpShip || {};
     U.ui.showCompany(U.state);
     U.map.syncRoutes(U.state);
     U.ui.select(null);
-    if (U.state.tick === 0 && !U.state.routes.length) {
+    U.tutorial.render();
+    deliverTelegrams(U.sim.H(U.state.tick));
+    if (U.state.bankrupt) { U.ui.showBankrupt(U.state); return; }
+    if (U.state.tick === 0 && !U.state.routes.length && !U.state.tutorial) {
       const ship = U.state.ships[0];
       U.ui.notify(`${U.state.company.name} is founded. Your first ship, ${ship.name}, waits at ${U.cityById[U.homeCity].name}. Open Routes to draw its first route.`);
     }
@@ -36,6 +40,7 @@ window.UpShip = window.UpShip || {};
 
   function changed() {
     U.map.syncRoutes(U.state);
+    U.tutorial.check();
     U.sim.save(U.state);
   }
 
@@ -45,14 +50,14 @@ window.UpShip = window.UpShip || {};
   }
 
   function nextTurn() {
-    if (!U.state || U.ui.isDrawing()) return;
+    if (!U.state || U.ui.isDrawing() || U.state.bankrupt || !U.tutorial.allowsTurns()) return;
     if (U.turnActive) { frozen = false; return; }
     U.sim.beginTurn(U.state);
     U.turnActive = true; frozen = false; elapsed = 0; U.progress = 0;
     turnLength = U.TIME.msPerTurn[auto || 1];
   }
   function setAuto(s) {
-    if (!U.state) return;
+    if (!U.state || U.state.bankrupt || !U.tutorial.allowsTurns()) return;
     if (s) lastAuto = s;
     auto = s; slowedFrom = 0;
     if (U.turnActive) setTurnLength(U.TIME.msPerTurn[auto || 1]);
@@ -95,7 +100,9 @@ window.UpShip = window.UpShip || {};
     U.map.syncRoutes(U.state);
     U.sim.save(U.state);
     deliverTelegrams(U.sim.H(U.state.tick));
-    U.ui.rerenderIf(["ship", "route", "city", "fleet", "routes", "finances", "shipyard", "company", "telegrams"]);
+    U.ui.rerenderIf(["ship", "route", "city", "fleet", "routes", "finances", "shipyard", "company", "telegrams", "contracts"]);
+    U.tutorial.check();
+    if (U.state.bankrupt) { auto = 0; U.ui.showBankrupt(U.state); return; }
     if (auto && !U.ui.isDrawing()) nextTurn();
   }
 

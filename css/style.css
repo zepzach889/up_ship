@@ -26,6 +26,9 @@
 
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
+body { display: flex; flex-direction: column; }
+.bar { flex: none; }
+.stage { flex: 1 1 auto; min-height: 0; }
 body {
   background: var(--ink);
   color: var(--ivory);
@@ -113,7 +116,7 @@ button { font: inherit; color: inherit; }
 .plain:hover { color: var(--ivory); border-color: var(--brass); }
 
 /* Stage and map ---------------------------------------------------------- */
-.stage { position: relative; height: calc(100% - var(--bar-h)); }
+.stage { position: relative; }
 .map-wrap { position: absolute; inset: 0; background: var(--sea); }
 .map { width: 100%; height: 100%; display: block; cursor: grab; user-select: none; -webkit-user-select: none; touch-action: none; }
 .map.is-dragging { cursor: grabbing; }
@@ -354,6 +357,30 @@ body.is-setup .panel { width: 360px; }
 .company-head { display: flex; gap: 14px; align-items: center; margin-right: 34px; }
 .company-head h2 { margin: 0; }
 
+/* Contracts, loans, tutorial ------------------------------------------------------ */
+.btn-row { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; margin-top: 10px; }
+.btn-row .btn { margin-top: 0; }
+.card.offer p { font-size: 14px; margin: 6px 0; }
+.card h4 { font-size: 19px; }
+.was { font-size: 13px; color: var(--ivory-dim); text-decoration: line-through; font-weight: 400; }
+.tutorial-check { display: flex; gap: 8px; align-items: center; margin-top: 16px; font-size: 13px; color: var(--ivory-dim); cursor: pointer; }
+.tutorial-check input { accent-color: var(--brass); }
+.tutorial {
+  position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 4;
+  width: min(520px, calc(100% - 140px)); padding: 12px 16px; background: var(--ivory); color: var(--ink);
+  border: 2px solid var(--brass); box-shadow: 0 3px 0 var(--brass-dim);
+}
+.tutorial[hidden] { display: none; }
+.tutorial-step { margin: 0; font-size: 12px; letter-spacing: 0.08em; color: var(--brass-dim); }
+.tutorial-text { margin: 4px 0 0; font-size: 15px; line-height: 1.45; }
+.tutorial .btn-quiet { color: var(--ink-2); border-color: var(--brass-dim); }
+.tut-target { animation: tut-pulse 1.6s ease-in-out infinite; position: relative; z-index: 5; }
+@keyframes tut-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(230, 200, 134, 0.9); } 50% { box-shadow: 0 0 0 6px rgba(230, 200, 134, 0); } }
+@media (prefers-reduced-motion: reduce) { .tut-target { animation: none; outline: 3px solid var(--brass-hi); } }
+.dock button.is-locked { opacity: 0.35; cursor: not-allowed; }
+.dock button:disabled:hover { background: none; color: var(--ivory); }
+.speeds button:disabled, .next-turn:disabled { cursor: not-allowed; }
+
 /* Telegrams -------------------------------------------------------------------- */
 .telegrams { position: absolute; left: 180px; top: 16px; z-index: 3; width: min(380px, calc(100% - 560px)); min-width: 280px; display: flex; flex-direction: column; gap: 8px; }
 .telegrams[hidden], .telegram[hidden], .tg-all[hidden] { display: none; }
@@ -401,15 +428,18 @@ body.is-setup .panel { width: 360px; }
   .hint { display: none; }
   .company-name { display: none; }
   body.is-setup .panel { width: auto; }
-  .dock { flex-direction: row; top: auto; bottom: 8px; left: 8px; }
-  .dock button { padding: 9px 10px 7px; font-size: 13px; border-bottom: 0; border-right: 1px solid var(--ink-3); }
+  .dock { flex-direction: row; top: auto; bottom: 8px; left: 8px; right: 8px; overflow-x: auto; }
+  .dock button { flex: 1 0 auto; padding: 9px 7px 7px; font-size: 12px; letter-spacing: 0.02em; text-align: center; border-bottom: 0; border-right: 1px solid var(--ink-3); }
   .dock button:last-child { border-right: 0; }
   .notice { top: 60px; max-width: calc(100% - 24px); }
   .telegrams { left: 8px; right: 8px; width: auto; min-width: 0; top: 56px; }
   .draft { width: calc(100% - 16px); bottom: 56px; }
+  .tutorial { width: calc(100% - 16px); bottom: 54px; padding: 10px 12px; }
+  .tutorial-text { font-size: 14px; }
   .zoom { bottom: auto; top: 12px; right: 12px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   * { scroll-behavior: auto; }
 }
+.draft:not([hidden]) ~ .tutorial { bottom: 124px; }

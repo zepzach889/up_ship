@@ -64,6 +64,7 @@
     </aside>
 
     <nav class="dock" aria-label="Company">
+      <button data-open="contracts">Contracts</button>
       <button data-open="shipyard">Shipyard</button>
       <button data-open="fleet">Fleet</button>
       <button data-open="routes">Routes</button>
@@ -84,6 +85,12 @@
 
     <p id="notice" class="notice" role="status" hidden></p>
 
+    <aside id="tutorial" class="tutorial" hidden>
+      <p id="tutorial-step" class="tutorial-step"></p>
+      <p id="tutorial-text" class="tutorial-text"></p>
+      <div class="btn-row"><button id="tutorial-skip" class="btn-quiet">Skip tutorial</button><button id="tutorial-finish" class="btn" hidden>Finish</button></div>
+    </aside>
+
     <div id="telegrams" class="telegrams" aria-live="polite" hidden>
       <button class="tg-all btn-quiet" hidden>Dismiss all</button>
     </div>
@@ -103,9 +110,11 @@
   <script src="js/emblem.js"></script>
   <script src="js/shipart.js"></script>
   <script src="js/sim.js"></script>
+  <script src="js/contracts.js"></script>
   <script src="js/map.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/setup.js"></script>
+  <script src="js/tutorial.js"></script>
   <script src="js/main.js"></script>
 </body>
 </html>

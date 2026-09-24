@@ -123,6 +123,17 @@ UpShip.ECONOMY = {
   overhaulCostShare: 0.08,                // share of the class price
   surplusStock: 4,                        // war-surplus hulls each country can sell
   scrapShare: 0.1,
+  // Mail contracts
+  offerEveryDays: [30, 60],               // a new offer arrives every one to two months
+  offerOpenDays: 21,
+  mailTons: 0.5,                          // cargo space each mail flight sets aside
+  mailRatePerKm: 0.06,                    // monthly pay = km x flights per week each way / 7 x 30 x 2 x rate
+  missedFlightPenalty: 2,                 // times the pay share of one flight
+  contractGraceWeeks: 4, minReliability: 0.6,
+  // Loans
+  loanStep: 25000, loanRate: 0.06, loanBase: 25000, loanShipShare: 0.75, bankruptMonths: 3,
+  // Subsidies
+  grantOpenMonths: 6, grantYears: 3, grantMinPerMonth: 4, buildGrantMonths: 6,
   // Minor incidents, rolled once per flight
   incidentBase: 0.0003, incidentWear: 0.012
 };
