@@ -202,9 +202,11 @@ window.UpShip = window.UpShip || {};
   function drawDraft(stops, circuit) {
     if (!draftNode) draftNode = el("path", { class: "route-draft" }, layers.routes);
     draftNode.setAttribute("d", stops && stops.length > 1 ? routePathD(stops, circuit) : "");
+    const only = stops && U.tutorial && U.tutorial.draftCities ? U.tutorial.draftCities() : null;
     for (const id in cityNodes) {
       const i = stops ? stops.indexOf(id) : -1;
       cityNodes[id].g.classList.toggle("in-draft", i >= 0);
+      cityNodes[id].g.classList.toggle("draft-dimmed", !!only && !only.includes(id));
     }
     svg.classList.toggle("is-drawing", !!stops);
   }
@@ -233,7 +235,8 @@ window.UpShip = window.UpShip || {};
       if (!n) {
         const g = el("g", { class: "ship", tabindex: 0, role: "button" }, layers.ships);
         el("ellipse", { rx: 58, ry: 22, class: "ship-hit" }, g);
-        const body = el("use", { href: "#art-" + U.SHIP_CLASSES[ship.classId].kind }, g);
+        const c0 = U.SHIP_CLASSES[ship.classId];
+        const body = el("use", { href: "#art-" + (c0.art || c0.kind) }, g);
         g.addEventListener("click", e => { e.stopPropagation(); onSelect({ type: "ship", id: ship.id }); });
         g.addEventListener("keydown", e => { if (e.key === "Enter") onSelect({ type: "ship", id: ship.id }); });
         n = shipNodes[ship.id] = { g, body };

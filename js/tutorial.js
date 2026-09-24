@@ -16,7 +16,9 @@ window.UpShip = window.UpShip || {};
 
   const tut = () => U.state && U.state.tutorial;
   const contract = () => U.state.contracts.find(k => k.tutorial) || U.state.offers.find(o => o.tutorial);
-  const pairRoute = () => { const k = contract(); return k && U.state.routes.find(r => U.sim.routeLegs(r).some(([x, y]) => (x === k.a && y === k.b) || (x === k.b && y === k.a))); };
+  const pairRoute = () => { const k = contract(); return k && U.state.routes.find(r => r.stops.includes(k.a) && r.stops.includes(k.b)); };
+  // While the tutorial asks for its route, only the contract's two cities can be chosen.
+  function draftCities() { const t = tut(), k = t && t.step === 2 && contract(); return k ? [k.a, k.b] : null; }
 
   function text(step) {
     const k = contract(), ship = U.state.ships[0];
@@ -72,5 +74,5 @@ window.UpShip = window.UpShip || {};
     $("#tutorial-finish").addEventListener("click", finish);
   }
 
-  U.tutorial = { init, check, render, allowsDock, allowsTurns };
+  U.tutorial = { init, check, render, allowsDock, allowsTurns, draftCities };
 })(window.UpShip);

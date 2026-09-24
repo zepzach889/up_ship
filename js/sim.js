@@ -93,8 +93,10 @@ window.UpShip = window.UpShip || {};
       condition: surplus ? E().surplusStartCondition : 1,
       lifeYears: surplus ? E().lifeYears.surplus : E().lifeYears.built,
       overhaulAt: E().defaultOverhaulAt, overhaulUntil: null, endWarned: false,
+      fitted: state.research ? U.research.builtWith(state) : [], refitPlan: [],
       stats: blankStats()
     };
+    if (ship.fitted.includes("structures3")) ship.lifeYears += 3;
     state.usedNames[name] = true;
     state.ships.push(ship);
     return ship;
@@ -104,6 +106,7 @@ window.UpShip = window.UpShip || {};
   function start(config) {
     const homeCity = U.cityById[config.home];
     const state = {
+      research: null,
       version: VERSION, tick: 0, plannedTick: -1, nextId: 1,
       money: E().startingMoney + (homeCity.works ? 0 : E().noWorksBonus),
       company: { name: config.name, director: config.director, nation: config.nation, home: config.home, emblem: config.emblem },
@@ -115,6 +118,7 @@ window.UpShip = window.UpShip || {};
       telegrams: [], pendingTelegrams: [],
       month: 0, fundsWarned: false
     };
+    U.research.init(state);
     for (const id of catalog(state)) if (U.SHIP_CLASSES[id].kind === "surplus") state.surplusLeft[id] = E().surplusStock;
     const first = catalog(state)[0];
     newShip(state, first, suggestName(state, first), config.home, 0);
@@ -123,7 +127,8 @@ window.UpShip = window.UpShip || {};
     return state;
   }
 
-  function catalog(state) { return U.NATIONS[state.company.nation].catalog; }
+  // The national 1919 catalog plus any classes research has unlocked.
+  function catalog(state) { return U.NATIONS[state.company.nation].catalog.concat(state.research ? U.research.unlockedClasses(state) : []); }
 
   function orderTerms(state, classId) {
     const c = U.SHIP_CLASSES[classId], works = U.cityById[state.company.home].works;
@@ -160,7 +165,7 @@ window.UpShip = window.UpShip || {};
     state.routes = state.routes.filter(r => r.id !== routeId);
   }
   function canAssign(state, ship, route) {
-    const c = cls(ship), longest = longestLeg(route.stops, route.circuit);
+    const c = U.research.stats(state, ship), longest = longestLeg(route.stops, route.circuit);
     if (longest > c.rangeKm) return `A leg of ${Math.round(longest)} km is beyond its ${c.rangeKm.toLocaleString("en-GB")} km range`;
     return null;
   }
@@ -252,7 +257,7 @@ window.UpShip = window.UpShip || {};
   }
 
   function board(state, ship, route, reserved = 0) {
-    const c = cls(ship);
+    const c = U.research.stats(state, ship);
     let seats = c.passengers, hold = c.cargoTons - reserved, revenue = 0, pax = 0, tons = 0;
     const from = route.stops[ship.stop];
     for (const to of downstream(route, ship)) {
@@ -263,7 +268,7 @@ window.UpShip = window.UpShip || {};
       const t = Math.min(hold, Math.floor(w.tons * 10) / 10);
       w.pax -= p; w.tons -= t; seats -= p; hold -= t;
       pax += p; tons += t;
-      revenue += p * fare(km) + t * freightRate(km);
+      revenue += p * fare(km) * c.fare + t * freightRate(km);
     }
     return { pax, tons: Math.round(tons * 10) / 10, revenue: Math.round(revenue) };
   }
@@ -288,17 +293,19 @@ window.UpShip = window.UpShip || {};
 
   function wearFactor(state, ship) {
     const frac = ageYears(state, ship) / ship.lifeYears;
-    return (cls(ship).kind === "surplus" ? E().surplusWearFactor : 1) * (frac >= 1 ? 2 : frac > 0.8 ? 1.5 : 1);
+    return (cls(ship).kind === "surplus" ? E().surplusWearFactor : 1) * (frac >= 1 ? 2 : frac > 0.8 ? 1.5 : 1) * U.research.stats(state, ship).wear;
   }
 
   function startOverhaul(state, ship, t) {
     const frac = ageYears(state, ship) / ship.lifeYears;
     const cost = Math.round(cls(ship).price * E().overhaulCostShare * (frac > 0.8 ? 1.5 : 1) / 100) * 100;
-    addCost(state, ship, cost);
+    const refit = U.research.applyRefits(state, ship);
+    addCost(state, ship, cost + refit.cost);
     ship.overhaulNow = false;
     ship.overhaulUntil = t + E().overhaulDays * 24;
     ship.readyHour = ship.overhaulUntil;
-    telegram(state, t, `${ship.name} in for overhaul at ${U.cityById[ship.location].name} stop cost £${cost.toLocaleString("en-GB")} stop back in service in three weeks stop`, false, { type: "ship", id: ship.id });
+    const refitText = refit.done.length ? ` refit with ${refit.done.join(" and ").toLowerCase()} stop` : "";
+    telegram(state, t, `${ship.name} in for overhaul at ${U.cityById[ship.location].name} stop${refitText} cost £${(cost + refit.cost).toLocaleString("en-GB")} stop back in service in three weeks stop`, false, { type: "ship", id: ship.id });
   }
   function finishOverhaul(state, ship) {
     const frac = ageYears(state, ship) / ship.lifeYears;
@@ -333,7 +340,7 @@ window.UpShip = window.UpShip || {};
 
   function worthLeaving(state, ship, route, next, t) {
     if (t - (ship.arrivedHour ?? -1e9) >= E().maxWaitHours) return true;
-    const c = cls(ship), from = route.stops[ship.stop];
+    const c = U.research.stats(state, ship), from = route.stops[ship.stop];
     let pax = 0, tons = 0;
     for (const to of downstream(route, ship)) {
       const w = state.waiting[pairKey(from, to)];
@@ -344,13 +351,14 @@ window.UpShip = window.UpShip || {};
   }
 
   function fly(state, ship, next, t) {
-    const c = cls(ship), route = routeOf(state, ship);
+    const c = Object.assign({ price: cls(ship).price }, U.research.stats(state, ship)), route = routeOf(state, ship);
     const km = distanceKm(ship.location, next.to);
     const hours = km / c.speedKmh;
     const from = ship.location;
     // Minor incidents, more likely in poor condition.
-    const p = E().incidentBase + E().incidentWear * (1 - ship.condition) ** 2;
-    const incident = Math.random() < p ? (Math.random() < 0.6 ? "forced" : "cancelled") : null;
+    const p = (E().incidentBase + E().incidentWear * (1 - ship.condition) ** 2) * c.incidents;
+    let incident = Math.random() < p ? (Math.random() < 0.6 ? "forced" : "cancelled") : null;
+    if (incident === "forced" && Math.random() > c.engineFailure) incident = null;
     if (incident === "cancelled") {
       const days = 2;
       const fine = Math.round(c.passengers * fare(km) * 0.3 + 300);
@@ -360,9 +368,10 @@ window.UpShip = window.UpShip || {};
       telegram(state, t, `${ship.name} flight to ${U.cityById[next.to].name} cancelled stop gas cell damage found at ${U.cityById[from].name} stop repairs two days stop compensation £${fine.toLocaleString("en-GB")} stop`, true, { type: "ship", id: ship.id });
       return;
     }
-    const mail = next.ferry || !route ? 0 : U.contracts.mailReserve(state, from, next.to, c.cargoTons);
+    const ahead = next.ferry || !route ? [] : downstream(route, ship);
+    const mail = next.ferry || !route ? 0 : U.contracts.loadMail(state, ship, from, ahead, c.cargoTons);
     const load = next.ferry || !route ? { pax: 0, tons: 0, revenue: 0 } : board(state, ship, route, mail);
-    if (!next.ferry && route) U.contracts.recordFlight(state, from, next.to, mail > 0);
+    if (!next.ferry && route) U.contracts.recordGrantFlight(state, from, ahead);
     const fuel = Math.round(km * c.fuelPerKm * E().costFactor);
     ship.legs.push({ from, to: next.to, start: t, hours, km: Math.round(km), ferry: next.ferry, mail: mail > 0,
       pax: load.pax, tons: load.tons, seats: c.passengers, hold: c.cargoTons, revenue: load.revenue });
@@ -376,11 +385,11 @@ window.UpShip = window.UpShip || {};
     ship.condition = Math.max(0, ship.condition - hours * E().wearPerFlightHour * wearFactor(state, ship));
     ship.location = next.to;
     ship.arrivedHour = t + hours;
-    ship.readyHour = t + hours + E().turnaroundHours;
+    ship.readyHour = t + hours + c.turnaround;
     if (incident === "forced") {
       const a = U.cityById[from], b = U.cityById[next.to];
       const near = nearestCity((a.lat + b.lat) / 2, (a.lon + b.lon) / 2);
-      const days = Math.round(rand(3, 10));
+      const days = Math.max(1, Math.round(rand(3, 10) * c.repairDays));
       const cost = Math.round(rand(1000, 4000) * c.price / 90000 / 100) * 100;
       addCost(state, ship, cost);
       ship.condition = Math.max(0, ship.condition - 0.05);
@@ -400,9 +409,10 @@ window.UpShip = window.UpShip || {};
   function settleDay(state) {
     for (const ship of state.ships) {
       if (ship.deliveryTick > state.tick) continue;
-      const c = cls(ship);
+      const c = U.research.stats(state, ship);
       addCost(state, ship, Math.round(c.dailyCost * E().costFactor * (1 + E().lowConditionCostRise * (1 - ship.condition))));
     }
+    U.research.daily(state);
     state.money += state.day.revenue - state.day.costs;
     state.year.revenue += state.day.revenue; state.year.costs += state.day.costs;
     state.history.push(state.day);
@@ -481,7 +491,12 @@ window.UpShip = window.UpShip || {};
       const raw = localStorage.getItem(SAVE_KEY);
       if (!raw) return null;
       const s = JSON.parse(raw);
-      return s && s.version === VERSION ? s : null;
+      if (!s || s.version !== VERSION) return null;
+      // Games saved before research existed carry on with an empty research record.
+      if (!s.research) U.research.init(s);
+      for (const sh of s.ships) { sh.fitted = sh.fitted || []; sh.refitPlan = sh.refitPlan || []; }
+      s.installment = s.installment || 0;
+      return s;
     } catch (e) { return null; }
   }
   function clearSave() {

@@ -183,12 +183,13 @@ button { font: inherit; color: inherit; }
 .a-navy { fill: #221917; }
 .a-window { fill: #f0e7d1; opacity: 0.9; }
 .a-prop { fill: #8a8f93; opacity: 0.7; }
+.a-hatch rect { fill: none; stroke: color-mix(in srgb, var(--company) 70%, black); stroke-width: 0.5; }
 .a-ring line, .a-rib line { stroke: color-mix(in srgb, var(--company) 70%, black); stroke-width: 0.45; opacity: 0.5; }
 .a-long { fill: none; stroke: color-mix(in srgb, var(--company) 70%, black); stroke-width: 0.35; opacity: 0.45; }
 .a-hinge { stroke: color-mix(in srgb, var(--company) 72%, white); stroke-width: 0.4; }
 .a-strut { stroke: color-mix(in srgb, var(--company) 35%, black); stroke-width: 0.6; }
 .ship.is-selected use, .ship:focus-visible use { filter: drop-shadow(0 0 1.5px #f3d58f) drop-shadow(0 0 1.5px #f3d58f); }
-.ship-art { display: block; margin: 6px auto 2px; }
+.ship-art { display: block; margin: 6px auto 2px; max-width: 100%; height: auto; }
 .ship:focus { outline: none; }
 
 /* Panel ------------------------------------------------------------------ */
@@ -443,3 +444,45 @@ body.is-setup .panel { width: 360px; }
   * { scroll-behavior: auto; }
 }
 .draft:not([hidden]) ~ .tutorial { bottom: 124px; }
+
+/* Research ---------------------------------------------------------------------- */
+.research-diagram { width: 100%; height: auto; display: block; margin: 8px 0 12px; }
+.rd-head { fill: var(--brass); font-family: var(--ui); font-size: 11px; letter-spacing: 0.08em; text-anchor: middle; }
+.rd-line { fill: none; stroke: var(--ink-3); stroke-width: 1.2; }
+.rd-line.is-done { stroke: var(--brass-dim); }
+.rd-node rect { fill: var(--ink-2); stroke: var(--ink-3); stroke-width: 1; }
+.rd-node text, .rd-unlock text { font-family: var(--ui); font-size: 10.5px; text-anchor: middle; fill: var(--ivory-dim); pointer-events: none; }
+.rd-node.is-done rect { fill: var(--brass-dim); stroke: var(--brass); }
+.rd-node.is-done text { fill: var(--ink); }
+.rd-node.is-open { cursor: pointer; }
+.rd-node.is-open rect { stroke: var(--brass); }
+.rd-node.is-open text { fill: var(--ivory); }
+.rd-node.is-open:hover rect, .rd-node.is-open:focus rect { fill: var(--ink-3); }
+.rd-node:focus { outline: none; }
+.rd-node.is-current rect { stroke: var(--brass-hi); stroke-width: 2; fill: var(--ink-3); }
+.rd-node.is-current text { fill: var(--brass-hi); }
+.rd-node.is-locked { opacity: 0.55; }
+.rd-progress { fill: var(--brass-hi); stroke: none !important; }
+.rd-unlock rect { fill: var(--ink); stroke: var(--ink-3); stroke-dasharray: 3 2; }
+.rd-unlock.is-done rect { stroke: var(--brass-hi); stroke-dasharray: none; fill: var(--ink-2); }
+.rd-unlock.is-done text { fill: var(--brass-hi); }
+.research-list { list-style: none; margin: 0; padding: 0; }
+.research-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 7px 0 6px; border-bottom: 1px dotted var(--ink-3); }
+.research-list li b { font-weight: 600; font-size: 14px; }
+.research-list li small { display: block; color: var(--ivory-dim); font-size: 12px; }
+.research-list .rt-done b { color: var(--brass); }
+.research-list .rt-current b { color: var(--brass-hi); }
+.research-list .rt-locked { opacity: 0.6; }
+.rt-status { font-size: 12px; color: var(--ivory-dim); white-space: nowrap; }
+.research-list .btn-quiet { padding: 4px 8px 2px; font-size: 12px; white-space: nowrap; }
+.panel .small { font-size: 13px; color: var(--ivory-dim); margin: 4px 0 6px; }
+.refits { list-style: none; margin: 0 0 6px; padding: 0; }
+.refits li { padding: 5px 0; border-bottom: 1px dotted var(--ink-3); }
+.refits label { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; font-size: 13px; }
+.refits input { margin-top: 3px; accent-color: var(--brass); }
+.refits small { display: block; color: var(--ivory-dim); font-size: 12px; }
+.card.is-locked { opacity: 0.6; border-style: dashed; }
+.loan-form { margin-top: 6px; }
+.loan-form .pound { align-self: center; color: var(--ivory-dim); }
+.loan-form input::-webkit-outer-spin-button, .loan-form input::-webkit-inner-spin-button { -webkit-appearance: none; }
+.map.is-drawing .city.draft-dimmed { opacity: 0.3; pointer-events: none; }

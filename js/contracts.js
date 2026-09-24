@@ -144,22 +144,31 @@ window.UpShip = window.UpShip || {};
   function decline(state, offerId) { state.offers = state.offers.filter(x => x.id !== offerId); }
 
   // Flights --------------------------------------------------------------------------------
-  // Cargo space to set aside for mail on this flight, if a contract still needs one this week.
-  function mailReserve(state, from, to, hold) {
-    if (hold < E().mailTons) return 0;
+  // Mail rides between the contract's two cities on any route that carries between them,
+  // including through stops in between. On leaving a city, a ship takes on mail for every
+  // contract whose other city lies ahead of it on its route and still needs a flight this week.
+  function mailToLoad(state, from, ahead) {
+    const out = [];
     for (const k of state.contracts) {
-      if (k.a === from && k.b === to && k.week.ab < k.perWeek) return E().mailTons;
-      if (k.b === from && k.a === to && k.week.ba < k.perWeek) return E().mailTons;
+      if (k.a === from && ahead.includes(k.b) && k.week.ab < k.perWeek) out.push({ k, dir: "ab", to: k.b });
+      else if (k.b === from && ahead.includes(k.a) && k.week.ba < k.perWeek) out.push({ k, dir: "ba", to: k.a });
     }
-    return 0;
+    return out;
   }
-  function recordFlight(state, from, to, mail) {
-    if (mail) for (const k of state.contracts) {
-      if (k.a === from && k.b === to && k.week.ab < k.perWeek) { k.week.ab++; break; }
-      if (k.b === from && k.a === to && k.week.ba < k.perWeek) { k.week.ba++; break; }
+  // Returns the tons of cargo space the mail aboard takes on this leg, and counts new mail.
+  function loadMail(state, ship, from, ahead, hold) {
+    ship.mailAboard = (ship.mailAboard || []).filter(m => m.to !== from && ahead.includes(m.to));
+    for (const m of mailToLoad(state, from, ahead)) {
+      if ((ship.mailAboard.length + 1) * E().mailTons > hold) break;
+      m.k.week[m.dir]++;
+      ship.mailAboard.push({ to: m.to });
     }
+    return ship.mailAboard.length * E().mailTons;
+  }
+  // Route grants count any flight leaving one of the two cities with the other ahead on the route.
+  function recordGrantFlight(state, from, ahead) {
     for (const g of state.grants) {
-      const dir = g.a === from && g.b === to ? "ab" : g.b === from && g.a === to ? "ba" : null;
+      const dir = g.a === from && ahead.includes(g.b) ? "ab" : g.b === from && ahead.includes(g.a) ? "ba" : null;
       if (!dir) continue;
       g.month[dir]++;
       if (!g.opened && g.month.ab > 0 && g.month.ba > 0) {
@@ -249,6 +258,13 @@ window.UpShip = window.UpShip || {};
         S().telegram(state, now, `grant for ${name(g.a)} to ${name(g.b)} completed stop`, false, { type: "contracts" });
       }
     }
+    // Standing monthly installment, if one is set, skipped when it would overdraw the account.
+    if (state.installment && state.loan > 0) {
+      const due = Math.min(state.installment, state.loan);
+      if (state.money - due >= 0) { state.loan -= due; state.money -= due; }
+      else S().telegram(state, now, `loan installment of ${gbp(due)} skipped stop not enough funds stop`, false, { type: "finances" });
+      if (state.loan <= 0) { state.installment = 0; S().telegram(state, now, `bank loan repaid in full stop`, false, { type: "finances" }); }
+    }
     // Loan interest and bankruptcy.
     if (state.loan > 0) {
       const interest = Math.round(state.loan * E().loanRate / 12);
@@ -276,12 +292,14 @@ window.UpShip = window.UpShip || {};
     state.loan += E().loanStep; state.money += E().loanStep;
     return true;
   }
-  function repay(state, all) {
-    const amount = all ? state.loan : Math.min(E().loanStep, state.loan);
-    if (!amount || state.money < amount) return false;
+  // Repay any amount up to what is owed and what the account holds.
+  function repay(state, amount) {
+    amount = Math.floor(Math.min(amount, state.loan, state.money));
+    if (!(amount > 0)) return 0;
     state.loan -= amount; state.money -= amount;
-    return true;
+    return amount;
   }
+  function setInstallment(state, amount) { state.installment = Math.max(0, Math.floor(amount || 0)); }
 
   // Construction grants ---------------------------------------------------------------------
   function buildGrantFor(state, classId, price) {
@@ -294,6 +312,6 @@ window.UpShip = window.UpShip || {};
     state.year.grants = (state.year.grants || 0) + amount;
   }
 
-  U.contracts = { init, accept, decline, describe, mailReserve, recordFlight, daily, weekly, monthly,
-    loanLimit, borrow, repay, buildGrantFor, useBuildGrant, mailMonthly };
+  U.contracts = { init, accept, decline, describe, loadMail, recordGrantFlight, daily, weekly, monthly,
+    loanLimit, borrow, repay, setInstallment, buildGrantFor, useBuildGrant, mailMonthly };
 })(window.UpShip);

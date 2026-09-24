@@ -46,6 +46,11 @@ window.UpShip = window.UpShip || {};
     // Panel buttons are rebuilt often, so listen once on the panel itself.
     $("#panel-body").addEventListener("click", onPanelClick);
     $("#panel-body").addEventListener("submit", onPanelSubmit);
+    $("#panel-body").addEventListener("change", onPanelChange);
+    $("#panel-body").addEventListener("keydown", e => {
+      const n = e.target.closest("g[data-research]");
+      if (n && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); e.stopPropagation(); n.dispatchEvent(new MouseEvent("click", { bubbles: true })); }
+    });
     document.addEventListener("keydown", e => {
       if (e.target.closest("input, textarea, select")) return;
       const onControl = e.target.closest("button, [role=button]");
@@ -97,6 +102,7 @@ window.UpShip = window.UpShip || {};
     $("#panel").hidden = !sel;
     document.querySelectorAll("[data-open]").forEach(b => b.classList.toggle("is-active", !!sel && sel.type === b.dataset.open));
     render();
+    $(".panel-inner").scrollTop = 0;    // a newly opened panel starts at its top
   }
 
   const row = (label, value) => `<div class="row"><dt>${label}</dt><dd>${value}</dd></div>`;
@@ -107,7 +113,7 @@ window.UpShip = window.UpShip || {};
     const body = $("#panel-body");
     if (!selection) { body.innerHTML = ""; return; }
     const s = U.state;
-    const views = { city: cityPanel, ship: shipPanel, route: routePanel, shipyard: shipyardPanel, fleet: fleetPanel, routes: routesPanel,
+    const views = { research: researchPanel, city: cityPanel, ship: shipPanel, route: routePanel, shipyard: shipyardPanel, fleet: fleetPanel, routes: routesPanel,
       finances: financesPanel, company: companyPanel, telegrams: telegramsPanel, contracts: contractsPanel };
     const html = views[selection.type](s, selection.id);
     if (html == null) { select(null); return; }
@@ -148,10 +154,25 @@ window.UpShip = window.UpShip || {};
     return `Moored at ${c(pos.at)}`;
   }
 
+  // Improvements a ship carries, and the refits the player can choose for its next overhaul.
+  function improvementsBlock(state, ship) {
+    const fitted = (ship.fitted || []).map(id => U.research.techById[id].name);
+    const options = U.research.refitOptions(state, ship);
+    const plan = ship.refitPlan || [];
+    const total = options.filter(o => plan.includes(o.id)).reduce((a, o) => a + o.cost, 0);
+    if (!fitted.length && !options.length) return "";
+    return `<h3>Improvements</h3>
+      ${fitted.length ? `<p class="small">Fitted: ${fitted.join(", ")}.</p>` : ""}
+      ${options.length ? `<p class="small">Available as refits, fitted during the ship's next overhaul:</p>
+        <ul class="refits">${options.map(o => `<li><label><input type="checkbox" data-refit="${o.id}" ${plan.includes(o.id) ? "checked" : ""}>
+          <span><b>${o.name}</b> ${money(o.cost)}<small>${o.effect}</small></span></label></li>`).join("")}</ul>
+        ${total ? `<p class="small">Planned: ${money(total)} at the next overhaul. Use "Overhaul at next chance" to fit them sooner.</p>` : ""}` : ""}`;
+  }
+
   function shipPanel(state, id) {
     const ship = state.ships.find(s => s.id === id);
     if (!ship) return null;
-    const cls = U.SHIP_CLASSES[ship.classId];
+    const cls = U.SHIP_CLASSES[ship.classId], rs = U.research.stats(state, ship);
     const route = U.sim.routeOf(state, ship);
     const building = ship.deliveryTick > state.tick;
     const title = editing === ship.id
@@ -185,12 +206,12 @@ window.UpShip = window.UpShip || {};
     return `
       <div class="title-row">${title}</div>
       <p class="sub">${cls.name}. ${cls.role}.</p>
-      ${U.shipArt.illustration(cls.kind, 250)}
+      ${U.shipArt.illustration(cls.art || cls.kind, cls.liner ? 290 : 250)}
       <p class="status" id="live-status">${shipStatus(state, ship, U.progress || 0)}</p>
       ${routeBlock}
       ${leg && !leg.ferry ? `<dl class="spaced">
-        ${cls.passengers ? row("Passengers aboard", `${leg.pax} of ${cls.passengers}`) : ""}
-        ${row("Cargo aboard", `${leg.tons} of ${cls.cargoTons} ${cls.cargoTons === 1 ? "ton" : "tons"}`)}
+        ${rs.passengers ? row("Passengers aboard", `${leg.pax} of ${rs.passengers}`) : ""}
+        ${row("Cargo aboard", `${leg.tons} of ${rs.cargoTons} ${rs.cargoTons === 1 ? "ton" : "tons"}`)}
       </dl>` : ""}
       ${building ? "" : `<h3>Condition</h3>
       <div class="meter" role="img" aria-label="Condition ${cond} percent"><span style="width:${cond}%" class="${cond < 40 ? "low" : cond < 60 ? "mid" : ""}"></span></div>
@@ -203,12 +224,15 @@ window.UpShip = window.UpShip || {};
       ${ship.overhaulUntil || ship.overhaulNow ? "" : `<button class="btn-quiet" data-act="overhaul-now">Overhaul at next chance</button>`}`}
       <h3>Ship</h3>
       <dl>
-        ${row("Passengers", cls.passengers || "None")}
-        ${row("Cargo", cls.cargoTons + (cls.cargoTons === 1 ? " ton" : " tons"))}
-        ${row("Cruising speed", cls.speedKmh + " km/h")}
-        ${row("Range", km(cls.rangeKm))}
+        ${row("Passengers", rs.passengers || "None")}
+        ${row("Cargo", rs.cargoTons + (rs.cargoTons === 1 ? " ton" : " tons"))}
+        ${row("Cruising speed", rs.speedKmh + " km/h")}
+        ${row("Range", km(rs.rangeKm))}
         ${row("Crew", cls.crew)}
-        ${row("Running cost", money(cls.dailyCost * U.ECONOMY.costFactor) + " a day, plus fuel")}
+        ${row("Running cost", money(rs.dailyCost * U.ECONOMY.costFactor) + " a day, plus fuel")}
+      </dl>
+      ${improvementsBlock(state, ship)}
+      <dl>
       </dl>
       ${building ? "" : `<h3>This year</h3>
       <dl>
@@ -268,6 +292,18 @@ window.UpShip = window.UpShip || {};
       <button class="btn-danger" data-act="delete-route">Delete route</button>`;
   }
 
+  function lockedClassCards(state) {
+    const open = new Set(U.sim.catalog(state));
+    return (U.RESEARCH_CATALOG[state.company.nation] || []).filter(id => !open.has(id)).map(id => {
+      const c = U.SHIP_CLASSES[id];
+      const needs = c.requires.map(t => `${U.research.techById[t].name}${U.research.has(state, t) ? " ✓" : ""}`).join(", ");
+      return `<section class="card is-locked">
+        <h4>${c.name}</h4>
+        <p class="card-role">${c.role}. ${c.passengers ? c.passengers + " passengers, " : ""}${c.cargoTons} tons, ${km(c.rangeKm)} range, ${money(c.price)}.</p>
+        <p class="note">Needs research: ${needs}.</p></section>`;
+    }).join("");
+  }
+
   function shipyardPanel(state) {
     const home = city(state.company.home), nation = U.NATIONS[state.company.nation];
     return `
@@ -283,7 +319,7 @@ window.UpShip = window.UpShip || {};
         const blocked = state.money < t.price || (surplus && !left);
         return `<section class="card">
           <h4>${c.name}</h4>
-          ${U.shipArt.illustration(c.kind, 270)}
+          ${U.shipArt.illustration(c.art || c.kind, c.liner ? 290 : 270)}
           <p class="card-role">${c.role}. ${c.basis}.</p>
           <dl>
             ${row("Passengers", c.passengers || "None")}
@@ -299,7 +335,76 @@ window.UpShip = window.UpShip || {};
             <button class="btn" data-order="${id}" ${blocked ? "disabled" : ""}>Order</button></div>
           ${surplus && !left ? `<p class="note">Every surplus hull has been sold.</p>` : state.money < t.price ? `<p class="note">Not enough funds.</p>` : ""}
         </section>`;
-      }).join("")}`;
+      }).join("")}
+      ${U.research.builtWith(state).length ? `<p class="note">New ships are built with: ${U.research.builtWith(state).map(id => U.research.techById[id].name).join(", ")}.</p>` : ""}
+      ${lockedClassCards(state)}`;
+  }
+
+  // Research ---------------------------------------------------------------------------
+  function wrapLabel(text) {
+    const words = text.split(" ");
+    if (words.length === 1) return [text];
+    let best = 1, bestDiff = 1e9;
+    for (let i = 1; i < words.length; i++) {
+      const d = Math.abs(words.slice(0, i).join(" ").length - words.slice(i).join(" ").length);
+      if (d < bestDiff) { bestDiff = d; best = i; }
+    }
+    return [words.slice(0, best).join(" "), words.slice(best).join(" ")];
+  }
+  function researchDiagram(state) {
+    const R = U.research, r = state.research, cols = { engines: 52, structures: 150, operations: 248 };
+    const W = 96, Hn = 34, y = tier => 30 + (tier - 1) * 46;
+    const unlocks = (U.RESEARCH_CATALOG[state.company.nation] || []).map((id, i) => ({ id, x: 52 + i * 98, y: 262 }));
+    let lines = "", nodes = "";
+    for (const u of unlocks) for (const t of U.SHIP_CLASSES[u.id].requires) {
+      const tech = R.techById[t], x1 = cols[tech.branch], y1 = y(tech.tier) + Hn / 2;
+      lines += `<path d="M${x1},${y1} C${x1},${y1 + 40} ${u.x},${u.y - 60} ${u.x},${u.y - 16}" class="rd-line${R.has(state, t) ? " is-done" : ""}"/>`;
+    }
+    for (const t of R.TECHS) {
+      const x = cols[t.branch] - W / 2, yy = y(t.tier);
+      const st = R.has(state, t.id) ? "done" : r.current === t.id ? "current" : R.available(state, t.id) ? "open" : "locked";
+      const lab = wrapLabel(t.name);
+      nodes += `<g class="rd-node is-${st}" ${st === "open" ? `data-research="${t.id}" role="button" tabindex="0"` : ""}>
+        <rect x="${x}" y="${yy}" width="${W}" height="${Hn}" rx="3"/>
+        ${lab.map((l, i) => `<text x="${cols[t.branch]}" y="${yy + (lab.length === 1 ? 21 : 14 + i * 12)}">${esc(l)}</text>`).join("")}
+        ${st === "current" ? `<rect class="rd-progress" x="${x}" y="${yy + Hn - 3}" width="${W * (r.progress[t.id] || 0)}" height="3"/>` : ""}</g>`;
+    }
+    for (const u of unlocks) {
+      const c = U.SHIP_CLASSES[u.id], open = c.requires.every(t => R.has(state, t));
+      const lab = wrapLabel(c.name);
+      nodes += `<g class="rd-unlock${open ? " is-done" : ""}"><rect x="${u.x - 46}" y="${u.y - 16}" width="92" height="34" rx="17"/>
+        ${lab.map((l, i) => `<text x="${u.x}" y="${u.y + (lab.length === 1 ? 5 : -2 + i * 12)}">${esc(l)}</text>`).join("")}</g>`;
+    }
+    const heads = U.research.BRANCHES.map(b => `<text class="rd-head" x="${cols[b.id]}" y="16">${b.name}</text>`).join("");
+    return `<svg class="research-diagram" viewBox="0 0 300 286" role="img" aria-label="Research tree">${heads}${lines}${nodes}</svg>`;
+  }
+
+  function researchPanel(state) {
+    const R = U.research, r = state.research;
+    const cur = r.current ? R.projectInfo(state, r.current) : null;
+    const pctDone = cur ? Math.round((r.progress[r.current] || 0) * 100) : 0;
+    const days = cur ? R.daysLeft(state) : 0;
+    const funding = Object.entries(R.FUNDING).map(([k, f]) => `<button class="${r.funding === k ? "btn" : "btn-quiet"}" data-funding="${k}">${f.name}</button>`).join("");
+    const row2 = (t, status) => `<li class="rt-${status}"><div><b>${t.name}</b><small>${t.effect}</small></div>
+      ${status === "open" ? `<button class="btn-quiet" data-research="${t.id}">Research</button>` : `<span class="rt-status">${{ done: "Done", current: "In progress", locked: "Locked" }[status]}</span>`}</li>`;
+    const branches = R.BRANCHES.map(b => {
+      const techs = R.TECHS.filter(t => t.branch === b.id).map(t => row2(t, R.has(state, t.id) ? "done" : r.current === t.id ? "current" : R.available(state, t.id) ? "open" : "locked")).join("");
+      const refId = "refine-" + b.id, ref = R.projectInfo(state, refId), refOpen = R.available(state, refId);
+      const refRow = `<li class="rt-${r.current === refId ? "current" : refOpen ? "open" : "locked"}"><div><b>${ref.name}</b><small>${ref.effect}. Repeatable, ${money(ref.cost)}.</small></div>
+        ${r.current === refId ? `<span class="rt-status">In progress</span>` : refOpen ? `<button class="btn-quiet" data-research="${refId}">Research</button>` : `<span class="rt-status">After all four</span>`}</li>`;
+      return `<h3>${b.name}</h3><ul class="research-list">${techs}${refRow}</ul>`;
+    }).join("");
+    return `
+      <h2>Research</h2>
+      <p class="sub">One project at a time. Progress on a project is kept if you switch away from it.</p>
+      ${researchDiagram(state)}
+      ${cur ? `<div class="status"><b>${cur.name}</b>: ${cur.effect}.
+        <div class="meter"><span style="width:${pctDone}%"></span></div>
+        ${pctDone}% done, about ${days < 60 ? days + " days" : Math.round(days / 30) + " months"} left at this funding. Costs ${money(R.monthlyCost(state))} a month.</div>
+        <p class="field-label">Funding</p><div class="btn-row">${funding}</div>`
+        : `<p class="status">No project under way. Choose one from the diagram or the lists below.</p>
+        <p class="field-label">Funding for the next project</p><div class="btn-row">${funding}</div>`}
+      ${branches}`;
   }
 
   function fleetPanel(state) {
@@ -443,9 +548,24 @@ window.UpShip = window.UpShip || {};
       </dl>
       <div class="btn-row">
         <button class="btn" data-loan="borrow" ${state.loan + step > limit ? "disabled" : ""}>Borrow ${money(step)}</button>
-        <button class="btn-quiet" data-loan="repay" ${!state.loan || state.money < Math.min(step, state.loan) ? "disabled" : ""}>Repay ${money(Math.min(step, state.loan || step))}</button>
-        <button class="btn-quiet" data-loan="repay-all" ${!state.loan || state.money < state.loan ? "disabled" : ""}>Repay all</button>
       </div>
+      ${state.loan ? `<form class="loan-form" data-loan-form="repay">
+        <label for="repay-amount" class="field-label">Repay an amount</label>
+        <div class="field"><span class="pound">£</span><input id="repay-amount" name="amount" type="number" min="0" step="any"
+          max="${Math.floor(Math.min(state.loan, Math.max(0, state.money)))}" placeholder="${Math.min(5000, state.loan)}" inputmode="numeric">
+          <button type="submit" class="btn-quiet">Repay</button></div>
+        <div class="btn-row">
+          <button type="button" class="btn-quiet" data-loan="repay-step" ${state.money < 1 ? "disabled" : ""}>Repay ${money(Math.min(step, state.loan))}</button>
+          <button type="button" class="btn-quiet" data-loan="repay-all" ${state.money < state.loan ? "disabled" : ""}>Repay all</button>
+        </div>
+      </form>
+      <form class="loan-form" data-loan-form="installment">
+        <label for="installment-amount" class="field-label">Monthly installment ${state.installment ? `(now ${money(state.installment)} a month)` : "(off)"}</label>
+        <div class="field"><span class="pound">£</span><input id="installment-amount" name="amount" type="number" min="0" step="any" placeholder="${state.installment || 2000}" inputmode="numeric">
+          <button type="submit" class="btn-quiet">Set</button>
+          ${state.installment ? `<button type="button" class="btn-quiet" data-loan="stop-installment">Stop</button>` : ""}</div>
+        <p class="note">Paid at the end of each month, skipped in any month it would overdraw the account.</p>
+      </form>` : ""}
       <p class="note">The credit limit is based on what your ships would sell for. Overdrawn funds with no credit left for three months running means bankruptcy.</p>
       <h3>Routes, last 30 days</h3>
       <dl>${state.routes.map(r => { const s = U.sim.routeSummary(state, r.id);
@@ -457,7 +577,7 @@ window.UpShip = window.UpShip || {};
 
   // Panel actions -------------------------------------------------------------------
   function onPanelClick(e) {
-    const b = e.target.closest("button");
+    const b = e.target.closest("button, [data-research]");
     if (!b) return;
     const s = U.state;
     if (b.dataset.go) { const [type, id] = b.dataset.go.split(":"); select({ type, id: id || undefined }); return; }
@@ -481,10 +601,15 @@ window.UpShip = window.UpShip || {};
     if (b.dataset.decline) { U.contracts.decline(s, b.dataset.decline); h.changed(); render(); return; }
     if (b.dataset.draw) { startDraft(b.dataset.draw.split(":")); return; }
     if (b.dataset.loan) {
-      if (b.dataset.loan === "borrow") U.contracts.borrow(s);
-      else U.contracts.repay(s, b.dataset.loan === "repay-all");
+      const act = b.dataset.loan;
+      if (act === "borrow") U.contracts.borrow(s);
+      else if (act === "repay-step") U.contracts.repay(s, U.ECONOMY.loanStep);
+      else if (act === "repay-all") U.contracts.repay(s, s.loan);
+      else if (act === "stop-installment") U.contracts.setInstallment(s, 0);
       h.changed(); render(); return;
     }
+    if (b.dataset.research) { U.research.choose(s, b.dataset.research); h.changed(); render(); return; }
+    if (b.dataset.funding) { U.research.setFunding(s, b.dataset.funding); h.changed(); render(); return; }
     if (b.dataset.unassign) { U.sim.assign(s, b.dataset.unassign, null); h.changed(); render(); return; }
     switch (b.dataset.act) {
       case "rename": editing = selection.id; render(); break;
@@ -516,6 +641,25 @@ window.UpShip = window.UpShip || {};
     if (f.dataset.rename) {
       if (U.sim.rename(U.state, f.dataset.rename, f.elements.name.value)) { editing = null; h.changed(); render(); }
     }
+    if (f.dataset.loanForm) {
+      const amount = +f.elements.amount.value;
+      if (!(amount > 0) && f.dataset.loanForm === "repay") return;
+      if (f.dataset.loanForm === "repay") {
+        const paid = U.contracts.repay(U.state, amount);
+        if (paid) notify(`Repaid ${money(paid)}. ${U.state.loan ? money(U.state.loan) + " still owed." : "The loan is paid off."}`);
+      } else U.contracts.setInstallment(U.state, amount);
+      h.changed(); render();
+    }
+  }
+  // Refit checkboxes in a ship's panel.
+  function onPanelChange(e) {
+    const box = e.target.closest("[data-refit]");
+    if (!box || !selection || selection.type !== "ship") return;
+    const ship = U.state.ships.find(x => x.id === selection.id);
+    const plan = new Set(ship.refitPlan || []);
+    if (box.checked) plan.add(box.dataset.refit); else plan.delete(box.dataset.refit);
+    ship.refitPlan = [...plan];
+    h.changed(); render();
   }
 
   // Drawing a route ---------------------------------------------------------------------
@@ -532,6 +676,8 @@ window.UpShip = window.UpShip || {};
     U.map.drawDraft(null);
   }
   function addDraftStop(id) {
+    const only = U.tutorial.draftCities && U.tutorial.draftCities();
+    if (only && !only.includes(id)) return;
     if (draft.includes(id) || draft.length >= U.ECONOMY.maxStops) return;
     draft.push(id);
     updateDraft();
