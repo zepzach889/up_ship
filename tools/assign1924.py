@@ -1,7 +1,7 @@
 # Assign each Natural Earth province to its approximate 1924 country.
 import json
 from shapely.geometry import shape, mapping, box, Polygon
-BOX = box(-30, 26, 52, 72)
+BOX = box(-30, 20, 60, 72)
 RENAME = {
   'Czech Republic': 'Czechoslovakia', 'Slovakia': 'Czechoslovakia',
   'Republic of Serbia': 'Yugoslavia', 'Kosovo': 'Yugoslavia', 'Montenegro': 'Yugoslavia',
@@ -12,8 +12,8 @@ RENAME = {
   'Turkmenistan': 'Soviet Union', 'Kyrgyzstan': 'Soviet Union', 'Tajikistan': 'Soviet Union',
   'Ireland': 'Irish Free State', 'Aland': 'Finland', 'Faroe Islands': 'Denmark',
   'Guernsey': 'United Kingdom', 'Jersey': 'United Kingdom', 'Isle of Man': 'United Kingdom', 'Gibraltar': 'United Kingdom',
-  'Northern Cyprus': 'Cyprus', 'Israel': 'Palestine', 'Jordan': 'Transjordan', 'Saudi Arabia': 'Arabia',
-  'Iran': 'Persia', 'Western Sahara': 'Spanish Sahara', 'Republic of the Congo': 'Congo'
+  'Northern Cyprus': 'United Kingdom', 'Israel': 'Palestine', 'Jordan': 'Transjordan', 'Saudi Arabia': 'Arabia',
+  'Iran': 'Persia', 'Malta': 'United Kingdom', 'Cyprus': 'United Kingdom', 'Western Sahara': 'Spanish Sahara', 'Republic of the Congo': 'Congo'
 }
 PROV = {  # (country, province name) -> 1924 owner
   ('Germany', 'Saarland'): 'Saar',

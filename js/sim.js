@@ -1,12 +1,15 @@
-// Game state, turns, routes, ships, and the economy.
+// Game state, turns, routes, ships, wear, incidents, telegrams, and the economy.
 window.UpShip = window.UpShip || {};
 (function (U) {
-  const SAVE_KEY = "upship.save.v3";
-  const VERSION = 3;
+  const SAVE_KEY = "upship.save.v4";
+  const VERSION = 4;
   const E = () => U.ECONOMY;
-  const HOURS = () => U.TIME.tickHours;
+  const TH = () => U.TIME.tickHours;
+  const H = tick => tick * TH();                 // hours since 7 am, 1 January 1919
+  const cls = ship => U.SHIP_CLASSES[ship.classId];
+  const rand = (a, b) => a + Math.random() * (b - a);
 
-  // Geography -----------------------------------------------------------------
+  // Geography -------------------------------------------------------------------
   function distanceKm(a, b) {
     if (typeof a === "string") a = U.cityById[a];
     if (typeof b === "string") b = U.cityById[b];
@@ -15,51 +18,84 @@ window.UpShip = window.UpShip || {};
     const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLon / 2) ** 2;
     return 2 * R * Math.asin(Math.sqrt(h));
   }
+  function nearestCity(lat, lon) {
+    let best = null, bd = Infinity;
+    for (const c of U.CITIES) { const d = distanceKm({ lat, lon }, c); if (d < bd) { bd = d; best = c; } }
+    return best;
+  }
 
-  // Prices and demand -----------------------------------------------------------
-  const fare = km => Math.round(E().fareBase + E().farePerKm * km);
-  const freightRate = km => Math.round(E().freightBase + E().freightPerKm * km);
-
+  // Prices and demand -------------------------------------------------------------
+  const fare = km => E().fareBase + E().farePerKm * km;
+  const freightRate = km => E().freightBase + E().freightPerKm * km;
   function paxWeight(c) { return U.TIERS[c.tier].demand * U.SPECIALTIES[c.specialty].passengerBoost; }
   function freightWeight(c) { return U.TIERS[c.tier].demand / 6 * U.SPECIALTIES[c.specialty].freightBoost; }
   function dailyPassengers(a, b) { return Math.sqrt(paxWeight(U.cityById[a]) * paxWeight(U.cityById[b])) * E().passengerShare; }
   function dailyFreight(a, b) { return Math.sqrt(freightWeight(U.cityById[a]) * freightWeight(U.cityById[b])) * E().freightShare; }
-
   const pairKey = (a, b) => a + ">" + b;
 
-  // All origin-destination pairs the company's routes serve, in both directions.
   function servedPairs(state) {
     const set = new Set();
     for (const r of state.routes)
       for (let i = 0; i < r.stops.length; i++)
         for (let j = 0; j < r.stops.length; j++)
-          if (i !== j && r.stops[i] !== r.stops[j]) set.add(pairKey(r.stops[i], r.stops[j]));
+          if (i !== j) set.add(pairKey(r.stops[i], r.stops[j]));
     return [...set];
   }
 
-  // Waiting passengers and freight build up daily and give up after a while.
-  function refillDemand(state, first) {
+  // Travelers arrive through the day; a half-day turn brings half a day's worth.
+  function refillDemand(state, first, share = 0.5) {
     const swing = () => 1 + (Math.random() * 2 - 1) * E().demandSwing;
     const next = {};
     for (const key of servedPairs(state)) {
       const [a, b] = key.split(">");
       const p = dailyPassengers(a, b), f = dailyFreight(a, b);
-      const w = state.waiting[key] || { pax: 0, tons: 0 };
-      next[key] = first && !state.waiting[key]
-        ? { pax: p, tons: f }
-        : { pax: Math.min(w.pax + p * swing(), p * E().passengerWaitDays), tons: Math.min(w.tons + f * swing(), f * E().freightWaitDays) };
+      const w = state.waiting[key];
+      next[key] = !w ? (first ? { pax: p, tons: f } : { pax: 0, tons: 0 })
+        : { pax: Math.min(w.pax + p * share * swing(), p * E().passengerWaitDays), tons: Math.min(w.tons + f * share * swing(), f * E().freightWaitDays) };
     }
     state.waiting = next;
   }
 
-  // New game --------------------------------------------------------------------
+  // Names -------------------------------------------------------------------------
+  function roman(n) {
+    const map = [[1000, "M"], [900, "CM"], [500, "D"], [400, "CD"], [100, "C"], [90, "XC"], [50, "L"], [40, "XL"], [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"]];
+    let out = "";
+    for (const [v, s] of map) while (n >= v) { out += s; n -= v; }
+    return out;
+  }
+  // Uses every name in the class's list, then the whole list again with II, III, and so on.
+  function suggestName(state, classId) {
+    const names = U.SHIP_CLASSES[classId].names;
+    for (let round = 1; round < 100; round++)
+      for (const n of names) {
+        const name = round === 1 ? n : `${n} ${roman(round)}`;
+        if (!state.usedNames[name]) return name;
+      }
+    return names[0] + " " + Date.now();
+  }
+
+  // Telegrams ---------------------------------------------------------------------
+  // major: stops auto-play. Minor ones slow it to normal speed until dismissed.
+  function telegram(state, hour, text, major, target) {
+    state.pendingTelegrams.push({ id: "t" + state.nextId++, hour, text: text.toUpperCase(), major: !!major, target: target || null });
+  }
+
+  // New game ----------------------------------------------------------------------
+  function blankDay() { return { revenue: 0, costs: 0, byRoute: {} }; }
+  function blankStats() { return { flights: 0, passengers: 0, tons: 0, revenue: 0, costs: 0 }; }
+
   function newShip(state, classId, name, location, deliveryTick) {
+    const c = U.SHIP_CLASSES[classId], surplus = c.kind === "surplus";
     const ship = {
       id: "s" + state.nextId++, name, classId,
-      routeId: null, location, stop: 0, dir: 1,
-      leg: null, deliveryTick,
-      stats: { flights: 0, passengers: 0, tons: 0, revenue: 0, costs: 0 }
+      routeId: null, location, turnLocation: location, stop: 0, dir: 1,
+      legs: [], readyHour: H(deliveryTick), deliveryTick,
+      condition: surplus ? E().surplusStartCondition : 1,
+      lifeYears: surplus ? E().lifeYears.surplus : E().lifeYears.built,
+      overhaulAt: E().defaultOverhaulAt, overhaulUntil: null, endWarned: false,
+      stats: blankStats()
     };
+    state.usedNames[name] = true;
     state.ships.push(ship);
     return ship;
   }
@@ -68,94 +104,85 @@ window.UpShip = window.UpShip || {};
   function start(config) {
     const homeCity = U.cityById[config.home];
     const state = {
-      version: VERSION, tick: 0, nextId: 1,
+      version: VERSION, tick: 0, plannedTick: -1, nextId: 1,
       money: E().startingMoney + (homeCity.works ? 0 : E().noWorksBonus),
       company: { name: config.name, director: config.director, nation: config.nation, home: config.home, emblem: config.emblem },
-      routes: [], ships: [], waiting: {},
-      usedNames: {},
+      routes: [], ships: [], waiting: {}, usedNames: {},
+      surplusLeft: {},
       day: blankDay(), history: [],
-      year: { year: 1919, revenue: 0, costs: 0, purchases: 0 },
-      notices: []
+      year: { year: 1919, revenue: 0, costs: 0, purchases: 0, sales: 0 },
+      totals: blankStats(),
+      telegrams: [], pendingTelegrams: [],
+      month: 0, fundsWarned: false
     };
+    for (const id of catalog(state)) if (U.SHIP_CLASSES[id].kind === "surplus") state.surplusLeft[id] = E().surplusStock;
     const first = catalog(state)[0];
-    const name = suggestName(state, first);
-    state.usedNames[name] = true;
-    newShip(state, first, name, config.home, 0);
+    newShip(state, first, suggestName(state, first), config.home, 0);
     return state;
   }
 
   function catalog(state) { return U.NATIONS[state.company.nation].catalog; }
 
-  // Price and build time for this company, after home-city effects.
   function orderTerms(state, classId) {
-    const cls = U.SHIP_CLASSES[classId], works = U.cityById[state.company.home].works;
+    const c = U.SHIP_CLASSES[classId], works = U.cityById[state.company.home].works;
     return {
-      price: Math.round(cls.price * (works ? E().worksPriceFactor : 1) / 1000) * 1000,
-      days: Math.round(cls.buildDays * (works ? E().worksBuildFactor : 1))
+      price: Math.round(c.price * (works ? E().worksPriceFactor : 1) / 1000) * 1000,
+      days: Math.round(c.buildDays * (works ? E().worksBuildFactor : 1))
     };
   }
 
-  function blankDay() { return { revenue: 0, costs: 0, byRoute: {} }; }
-
   // Routes ------------------------------------------------------------------------
-  function routeName(stops) { return stops.map(s => U.cityById[s].name).join("–"); }
-
-  function createRoute(state, stops) {
-    const route = { id: "r" + state.nextId++, stops: stops.slice() };
+  function routeName(stops, circuit) {
+    const names = stops.map(s => U.cityById[s].name);
+    return circuit ? names.join("–") + "–" + names[0] : names.join("–");
+  }
+  function routeLegs(route) {
+    const legs = [];
+    for (let i = 1; i < route.stops.length; i++) legs.push([route.stops[i - 1], route.stops[i]]);
+    if (route.circuit && route.stops.length > 2) legs.push([route.stops[route.stops.length - 1], route.stops[0]]);
+    return legs;
+  }
+  function longestLeg(stops, circuit) {
+    let m = 0;
+    for (const [a, b] of routeLegs({ stops, circuit })) m = Math.max(m, distanceKm(a, b));
+    return m;
+  }
+  function createRoute(state, stops, circuit) {
+    const route = { id: "r" + state.nextId++, stops: stops.slice(), circuit: !!circuit && stops.length > 2 };
     state.routes.push(route);
     refillDemand(state, true);
     return route;
   }
-
   function deleteRoute(state, routeId) {
     for (const s of state.ships) if (s.routeId === routeId) s.routeId = null;
     state.routes = state.routes.filter(r => r.id !== routeId);
   }
-
-  function longestLeg(stops) {
-    let m = 0;
-    for (let i = 1; i < stops.length; i++) m = Math.max(m, distanceKm(stops[i - 1], stops[i]));
-    return m;
-  }
-
-  // Can this ship fly this route? Returns an explanation when it can't.
   function canAssign(state, ship, route) {
-    const cls = U.SHIP_CLASSES[ship.classId];
-    if (ship.deliveryTick > state.tick) return "Still being built";
-    const longest = longestLeg(route.stops);
-    if (longest > cls.rangeKm) return `A leg of ${Math.round(longest)} km is beyond its ${cls.rangeKm.toLocaleString("en-GB")} km range`;
+    const c = cls(ship), longest = longestLeg(route.stops, route.circuit);
+    if (longest > c.rangeKm) return `A leg of ${Math.round(longest)} km is beyond its ${c.rangeKm.toLocaleString("en-GB")} km range`;
     return null;
   }
-
   function assign(state, shipId, routeId) {
     const ship = state.ships.find(s => s.id === shipId);
-    ship.routeId = routeId;
-    if (!routeId || ship.leg) return;
-    const route = state.routes.find(r => r.id === routeId);
+    ship.routeId = routeId || null;
+    const route = routeOf(state, ship);
+    if (!route) return;
     const at = route.stops.indexOf(ship.location);
-    if (at >= 0) { ship.stop = at; ship.dir = at === route.stops.length - 1 ? -1 : 1; }
+    if (at >= 0) { ship.stop = at; ship.dir = !route.circuit && at === route.stops.length - 1 ? -1 : 1; }
   }
+  function routeOf(state, ship) { return state.routes.find(r => r.id === ship.routeId) || null; }
 
-  // Ships -------------------------------------------------------------------------
-  function suggestName(state, classId) {
-    const names = U.SHIP_CLASSES[classId].names;
-    const free = names.find(n => !state.usedNames[n]);
-    if (free) return free;
-    let i = 2;
-    while (state.usedNames[names[0] + " " + i]) i++;
-    return names[0] + " " + i;
-  }
-
+  // Buying, selling, renaming --------------------------------------------------------
   function order(state, classId, name) {
-    const t = orderTerms(state, classId);
+    const c = U.SHIP_CLASSES[classId], t = orderTerms(state, classId);
     if (state.money < t.price) return null;
+    if (c.kind === "surplus" && !(state.surplusLeft[classId] > 0)) return null;
+    if (c.kind === "surplus") state.surplusLeft[classId] -= 1;
     state.money -= t.price;
     state.year.purchases += t.price;
     const clean = (name || "").trim() || suggestName(state, classId);
-    state.usedNames[clean] = true;
     return newShip(state, classId, clean, state.company.home, state.tick + t.days * 2);
   }
-
   function rename(state, shipId, name) {
     const clean = name.trim();
     if (!clean) return false;
@@ -164,126 +191,253 @@ window.UpShip = window.UpShip || {};
     return true;
   }
 
-  function routeOf(state, ship) { return state.routes.find(r => r.id === ship.routeId) || null; }
+  const ageYears = (state, ship) => Math.max(0, (state.tick - ship.deliveryTick) / 730);
+  function saleValue(state, ship) {
+    const life = Math.max(E().scrapShare, 1 - ageYears(state, ship) / ship.lifeYears);
+    return Math.round(cls(ship).price * life * (0.6 + 0.4 * ship.condition) / 100) * 100;
+  }
+  // Where the ship is at a given hour: flying (with the leg), or moored at a city.
+  function positionAt(ship, hour) {
+    let last = null;
+    for (const leg of ship.legs) {
+      if (leg.start <= hour) {
+        if (hour < leg.start + leg.hours) return { flying: true, leg, fraction: (hour - leg.start) / leg.hours };
+        last = leg;
+      }
+    }
+    if (last) return { flying: false, at: last.to, leg: last };
+    const next = ship.legs.find(l => l.start > hour);
+    return { flying: false, at: next ? next.from : ship.turnLocation, upcoming: next || null };
+  }
+  function canSell(state, ship, hour) {
+    if (ship.deliveryTick > state.tick) return "Still being built";
+    if (positionAt(ship, hour).flying) return "In flight";
+    return null;
+  }
+  function sell(state, shipId, hour) {
+    const ship = state.ships.find(s => s.id === shipId);
+    if (!ship || canSell(state, ship, hour)) return 0;
+    const value = saleValue(state, ship);
+    state.money += value;
+    state.year.sales += value;
+    state.ships = state.ships.filter(s => s !== ship);
+    return value;
+  }
 
-  // Where the ship goes next, or null to stay put.
-  function nextLeg(state, ship) {
-    const route = routeOf(state, ship);
-    if (!route) return null;
+  // Flying ------------------------------------------------------------------------------
+  function nextStop(state, ship, route) {
     const at = route.stops.indexOf(ship.location);
     if (at < 0) {
-      // Not on its route yet: fly empty to the nearest stop.
       let best = route.stops[0], bd = Infinity;
       for (const s of route.stops) { const d = distanceKm(ship.location, s); if (d < bd) { bd = d; best = s; } }
       return { to: best, ferry: true };
     }
     ship.stop = at;
+    if (route.circuit && route.stops.length > 2) { ship.dir = 1; return { to: route.stops[(at + 1) % route.stops.length], ferry: false }; }
     if (at + ship.dir < 0 || at + ship.dir >= route.stops.length) ship.dir = -ship.dir;
     return { to: route.stops[at + ship.dir], ferry: false };
   }
 
+  // Downstream stops a passenger boarding here can travel to, nearest first.
+  function downstream(route, ship) {
+    const n = route.stops.length, out = [];
+    if (route.circuit && n > 2) for (let k = 1; k < n; k++) out.push(route.stops[(ship.stop + k) % n]);
+    else for (let j = ship.stop + ship.dir; j >= 0 && j < n; j += ship.dir) out.push(route.stops[j]);
+    return out;
+  }
+
   function board(state, ship, route) {
-    const cls = U.SHIP_CLASSES[ship.classId];
-    let seats = cls.passengers, hold = cls.cargoTons, revenue = 0, pax = 0, tons = 0;
-    // Serve the nearest downstream stops first.
-    for (let j = ship.stop + ship.dir; j >= 0 && j < route.stops.length; j += ship.dir) {
-      const key = pairKey(route.stops[ship.stop], route.stops[j]);
-      const w = state.waiting[key];
+    const c = cls(ship);
+    let seats = c.passengers, hold = c.cargoTons, revenue = 0, pax = 0, tons = 0;
+    const from = route.stops[ship.stop];
+    for (const to of downstream(route, ship)) {
+      const w = state.waiting[pairKey(from, to)];
       if (!w) continue;
-      const km = distanceKm(route.stops[ship.stop], route.stops[j]);
+      const km = distanceKm(from, to);
       const p = Math.min(seats, Math.floor(w.pax));
       const t = Math.min(hold, Math.floor(w.tons * 10) / 10);
       w.pax -= p; w.tons -= t; seats -= p; hold -= t;
       pax += p; tons += t;
-      revenue += p * fare(km) + Math.round(t * freightRate(km));
+      revenue += p * fare(km) + t * freightRate(km);
     }
-    return { pax, tons: Math.round(tons * 10) / 10, revenue };
-  }
-
-  function depart(state, ship) {
-    if (ship.leg || ship.deliveryTick > state.tick) return;
-    const next = nextLeg(state, ship);
-    if (!next) return;
-    const cls = U.SHIP_CLASSES[ship.classId];
-    const km = distanceKm(ship.location, next.to);
-    const load = next.ferry ? { pax: 0, tons: 0, revenue: 0 } : board(state, ship, routeOf(state, ship));
-    const fuel = Math.round(km * cls.fuelPerKm);
-    ship.leg = { from: ship.location, to: next.to, km: Math.round(km), hours: km / cls.speedKmh,
-      startTick: state.tick, ferry: next.ferry, pax: load.pax, tons: load.tons,
-      seats: cls.passengers, hold: cls.cargoTons, revenue: load.revenue, fuel };
-    const rd = routeDay(state, ship.routeId);
-    state.day.revenue += load.revenue; state.day.costs += fuel;
-    rd.revenue += load.revenue; rd.costs += fuel;
-    if (!next.ferry) { rd.seats += cls.passengers; rd.pax += load.pax; rd.hold += cls.cargoTons; rd.tons += load.tons; }
-    ship.stats.flights += 1; ship.stats.passengers += load.pax; ship.stats.tons += load.tons;
-    ship.stats.revenue += load.revenue; ship.stats.costs += fuel;
-  }
-
-  function departAll(state) { for (const ship of state.ships) depart(state, ship); }
-
-  // The hour (from the start of the game) when a leg's ship is ready to leave again.
-  const readyHour = leg => leg.startTick * HOURS() + leg.hours + U.TIME.turnaroundHours;
-
-  function arrivals(state) {
-    const endHour = (state.tick + 1) * HOURS();
-    for (const ship of state.ships) {
-      if (ship.leg && readyHour(ship.leg) <= endHour) {
-        ship.location = ship.leg.to;
-        ship.leg = null;
-        const route = routeOf(state, ship);
-        if (route) {
-          const at = route.stops.indexOf(ship.location);
-          if (at >= 0) ship.stop = at;
-        }
-      }
-    }
+    return { pax, tons: Math.round(tons * 10) / 10, revenue: Math.round(revenue) };
   }
 
   function routeDay(state, routeId) {
     const key = routeId || "none";
     return state.day.byRoute[key] = state.day.byRoute[key] || { revenue: 0, costs: 0, seats: 0, pax: 0, hold: 0, tons: 0 };
   }
+  function addCost(state, ship, amount) {
+    state.day.costs += amount; ship.stats.costs += amount; state.totals.costs += amount;
+    routeDay(state, ship.routeId).costs += amount;
+  }
 
+  function wearFactor(state, ship) {
+    const frac = ageYears(state, ship) / ship.lifeYears;
+    return (cls(ship).kind === "surplus" ? E().surplusWearFactor : 1) * (frac >= 1 ? 2 : frac > 0.8 ? 1.5 : 1);
+  }
+
+  function startOverhaul(state, ship, t) {
+    const frac = ageYears(state, ship) / ship.lifeYears;
+    const cost = Math.round(cls(ship).price * E().overhaulCostShare * (frac > 0.8 ? 1.5 : 1) / 100) * 100;
+    addCost(state, ship, cost);
+    ship.overhaulNow = false;
+    ship.overhaulUntil = t + E().overhaulDays * 24;
+    ship.readyHour = ship.overhaulUntil;
+    telegram(state, t, `${ship.name} in for overhaul at ${U.cityById[ship.location].name} stop cost £${cost.toLocaleString("en-GB")} stop back in service in three weeks stop`, false, { type: "ship", id: ship.id });
+  }
+  function finishOverhaul(state, ship) {
+    const frac = ageYears(state, ship) / ship.lifeYears;
+    ship.condition = frac > 0.8 ? Math.max(0.75, 1 - (frac - 0.8)) : 1;
+    telegram(state, ship.overhaulUntil, `${ship.name} overhaul complete stop condition ${Math.round(ship.condition * 100)} percent stop`, false, { type: "ship", id: ship.id });
+    ship.overhaulUntil = null;
+  }
+
+  // Plans every departure that happens during the coming turn.
+  function planShip(state, ship, T0, T1) {
+    ship.turnLocation = ship.location;
+    ship.legs = ship.legs.filter(l => l.start + l.hours > T0 - TH());
+    for (let guard = 0; guard < 8; guard++) {
+      if (ship.overhaulUntil && ship.overhaulUntil <= Math.max(ship.readyHour, T0)) finishOverhaul(state, ship);
+      const t = Math.max(ship.readyHour, T0);
+      if (t >= T1 || ship.overhaulUntil) return;
+      const home = state.company.home;
+      let next;
+      if (ship.condition < ship.overhaulAt || ship.overhaulNow) {
+        if (ship.location === home) { startOverhaul(state, ship, t); continue; }
+        next = { to: home, ferry: true };
+      } else {
+        const route = routeOf(state, ship);
+        if (!route) { ship.readyHour = t; return; }
+        next = nextStop(state, ship, route);
+        // A ship won't leave nearly empty: it waits for a fair load, but never more than about half a day.
+        if (!next.ferry && !worthLeaving(state, ship, route, next, t)) { ship.readyHour = T1; return; }
+      }
+      fly(state, ship, next, t);
+    }
+  }
+
+  function worthLeaving(state, ship, route, next, t) {
+    if (t - (ship.arrivedHour ?? -1e9) >= E().maxWaitHours) return true;
+    const c = cls(ship), from = route.stops[ship.stop];
+    let pax = 0, tons = 0;
+    for (const to of downstream(route, ship)) {
+      const w = state.waiting[pairKey(from, to)];
+      if (w) { pax += w.pax; tons += w.tons; }
+    }
+    const fill = (c.passengers ? Math.min(1, pax / c.passengers) * 0.8 : 0) + Math.min(1, tons / c.cargoTons) * (c.passengers ? 0.2 : 1);
+    return fill >= E().minLoadToLeave;
+  }
+
+  function fly(state, ship, next, t) {
+    const c = cls(ship), route = routeOf(state, ship);
+    const km = distanceKm(ship.location, next.to);
+    const hours = km / c.speedKmh;
+    const from = ship.location;
+    // Minor incidents, more likely in poor condition.
+    const p = E().incidentBase + E().incidentWear * (1 - ship.condition) ** 2;
+    const incident = Math.random() < p ? (Math.random() < 0.6 ? "forced" : "cancelled") : null;
+    if (incident === "cancelled") {
+      const days = 2;
+      const fine = Math.round(c.passengers * fare(km) * 0.3 + 300);
+      addCost(state, ship, fine);
+      ship.readyHour = t + days * 24;
+      ship.condition = Math.max(0, ship.condition - 0.02);
+      telegram(state, t, `${ship.name} flight to ${U.cityById[next.to].name} cancelled stop gas cell damage found at ${U.cityById[from].name} stop repairs two days stop compensation £${fine.toLocaleString("en-GB")} stop`, true, { type: "ship", id: ship.id });
+      return;
+    }
+    const load = next.ferry || !route ? { pax: 0, tons: 0, revenue: 0 } : board(state, ship, route);
+    const fuel = Math.round(km * c.fuelPerKm * E().costFactor);
+    ship.legs.push({ from, to: next.to, start: t, hours, km: Math.round(km), ferry: next.ferry,
+      pax: load.pax, tons: load.tons, seats: c.passengers, hold: c.cargoTons, revenue: load.revenue });
+    state.day.revenue += load.revenue; state.totals.revenue += load.revenue;
+    addCost(state, ship, fuel);
+    const rd = routeDay(state, ship.routeId);
+    rd.revenue += load.revenue;
+    if (!next.ferry) { rd.seats += c.passengers; rd.pax += load.pax; rd.hold += c.cargoTons; rd.tons += load.tons; }
+    ship.stats.flights += 1; ship.stats.passengers += load.pax; ship.stats.tons += load.tons; ship.stats.revenue += load.revenue;
+    state.totals.flights += 1; state.totals.passengers += load.pax; state.totals.tons += load.tons;
+    ship.condition = Math.max(0, ship.condition - hours * E().wearPerFlightHour * wearFactor(state, ship));
+    ship.location = next.to;
+    ship.arrivedHour = t + hours;
+    ship.readyHour = t + hours + E().turnaroundHours;
+    if (incident === "forced") {
+      const a = U.cityById[from], b = U.cityById[next.to];
+      const near = nearestCity((a.lat + b.lat) / 2, (a.lon + b.lon) / 2);
+      const days = Math.round(rand(3, 10));
+      const cost = Math.round(rand(1000, 4000) * c.price / 90000 / 100) * 100;
+      addCost(state, ship, cost);
+      ship.condition = Math.max(0, ship.condition - 0.05);
+      ship.readyHour += days * 24;
+      telegram(state, t + hours * 0.6, `${ship.name} forced down near ${near.name} stop engine failure stop no one hurt stop repairs ${days} days cost £${cost.toLocaleString("en-GB")} stop`, true, { type: "ship", id: ship.id });
+    }
+  }
+
+  function beginTurn(state) {
+    if (state.plannedTick === state.tick) return;
+    state.plannedTick = state.tick;
+    const T0 = H(state.tick), T1 = T0 + TH();
+    for (const ship of state.ships) planShip(state, ship, T0, T1);
+  }
+
+  // Money settles once a day.
   function settleDay(state) {
     for (const ship of state.ships) {
       if (ship.deliveryTick > state.tick) continue;
-      const cost = U.SHIP_CLASSES[ship.classId].dailyCost;
-      state.day.costs += cost; ship.stats.costs += cost;
-      routeDay(state, ship.routeId).costs += cost;
+      const c = cls(ship);
+      addCost(state, ship, Math.round(c.dailyCost * E().costFactor * (1 + E().lowConditionCostRise * (1 - ship.condition))));
     }
     state.money += state.day.revenue - state.day.costs;
     state.year.revenue += state.day.revenue; state.year.costs += state.day.costs;
     state.history.push(state.day);
     if (state.history.length > 30) state.history.shift();
     state.day = blankDay();
-    refillDemand(state, false);
+    if (state.money < 0 && !state.fundsWarned) {
+      state.fundsWarned = true;
+      telegram(state, H(state.tick), `funds exhausted stop company account overdrawn stop sell ships or cut costs stop`, true, { type: "finances" });
+    } else if (state.money >= 0) state.fundsWarned = false;
   }
 
-  // One turn: finish arrivals, move the clock on half a day, then depart.
+  // Ends the turn: the clock moves on half a day.
   function advance(state) {
-    arrivals(state);
+    beginTurn(state);
     state.tick += 1;
-    // Deliveries
+    const now = H(state.tick);
     for (const ship of state.ships) {
-      if (ship.deliveryTick === state.tick) {
-        state.notices.push(`${ship.name} has been delivered at ${U.cityById[ship.location].name}.`);
+      if (ship.deliveryTick === state.tick)
+        telegram(state, now, `${ship.name} delivered at ${U.cityById[ship.location].name} stop ready for service stop`, false, { type: "ship", id: ship.id });
+      if (!ship.endWarned && ship.deliveryTick <= state.tick && ageYears(state, ship) >= ship.lifeYears) {
+        ship.endWarned = true;
+        telegram(state, now, `${ship.name} has reached the end of its service life stop wear and costs will rise stop consider selling stop`, true, { type: "ship", id: ship.id });
       }
     }
     if (state.tick % 2 === 0) settleDay(state);
-    const year = dateOf(state.tick).getUTCFullYear();
-    if (year !== state.year.year) {
-      state.year = { year, revenue: 0, costs: 0, purchases: 0 };
-      for (const s of state.ships) s.stats = { flights: 0, passengers: 0, tons: 0, revenue: 0, costs: 0 };
+    refillDemand(state, false);
+    const d = dateOf(state.tick);
+    const month = d.getUTCFullYear() * 12 + d.getUTCMonth();
+    if (state.month && month !== state.month) {
+      for (const r of state.routes) {
+        const s = routeSummary(state, r.id);
+        if (s.days >= 30 && s.profit < 0)
+          telegram(state, now, `route ${routeName(r.stops, r.circuit)} lost £${Math.abs(s.profit).toLocaleString("en-GB")} last month stop`, false, { type: "route", id: r.id });
+      }
     }
-    departAll(state);
+    state.month = month;
+    const year = d.getUTCFullYear();
+    if (year !== state.year.year) {
+      const y = state.year, profit = y.revenue - y.costs;
+      telegram(state, now, `${y.year} results stop income £${Math.round(y.revenue).toLocaleString("en-GB")} stop costs £${Math.round(y.costs).toLocaleString("en-GB")} stop operating ${profit < 0 ? "loss" : "profit"} £${Math.abs(Math.round(profit)).toLocaleString("en-GB")} stop`, false, { type: "company" });
+      state.year = { year, revenue: 0, costs: 0, purchases: 0, sales: 0 };
+      for (const s of state.ships) s.stats = blankStats();
+    }
   }
 
   function dateOf(tick, fraction = 0) {
-    const hours = U.TIME.firstDepartureHour + (tick + fraction) * HOURS();
+    const hours = U.TIME.firstDepartureHour + (tick + fraction) * TH();
     return new Date(U.TIME.startDate + hours * 3600 * 1000);
   }
+  const dateAtHour = hour => new Date(U.TIME.startDate + (U.TIME.firstDepartureHour + hour) * 3600 * 1000);
 
-  // Results over the last 30 days.
   function routeSummary(state, routeId) {
     const sum = { revenue: 0, costs: 0, seats: 0, pax: 0, hold: 0, tons: 0, days: 0 };
     for (const d of state.history) {
@@ -298,10 +452,10 @@ window.UpShip = window.UpShip || {};
     return sum;
   }
 
-  // Saving ----------------------------------------------------------------------
+  // Saving ------------------------------------------------------------------------------
   let saving = true;
   function save(state) {
-    if (!saving) return false;
+    if (!saving || !state) return false;
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); return true; } catch (e) { return false; }
   }
   function load() {
@@ -312,13 +466,12 @@ window.UpShip = window.UpShip || {};
       return s && s.version === VERSION ? s : null;
     } catch (e) { return null; }
   }
-  // Stops all further saving for this page, so a reload starts fresh.
   function clearSave() {
     saving = false;
-    try { localStorage.removeItem(SAVE_KEY); localStorage.removeItem("upship.save.v1"); } catch (e) {}
+    try { for (const k of ["upship.save.v1", "upship.save.v2", "upship.save.v3", SAVE_KEY]) localStorage.removeItem(k); } catch (e) {}
   }
 
-  U.sim = { distanceKm, fare, freightRate, dailyPassengers, dailyFreight, start, advance, dateOf, routeSummary,
-    save, load, clearSave, routeOf, catalog, orderTerms, routeName, createRoute, deleteRoute, canAssign, assign, order, rename,
-    suggestName, longestLeg, readyHour };
+  U.sim = { distanceKm, fare, freightRate, dailyPassengers, dailyFreight, start, advance, beginTurn, dateOf, dateAtHour, H,
+    routeSummary, save, load, clearSave, routeOf, routeName, routeLegs, createRoute, deleteRoute, canAssign, assign,
+    order, rename, suggestName, longestLeg, catalog, orderTerms, saleValue, canSell, sell, positionAt, ageYears, roman };
 })(window.UpShip);

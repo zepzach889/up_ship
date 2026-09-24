@@ -66,10 +66,7 @@ window.UpShip = window.UpShip || {};
     // All countries together form the land; used for the water lining and the coastline.
     const landShape = el("g", { id: "land-shape" }, defs);
     for (const c of M.countries) el("path", { d: c.path }, landShape);
-    const hull = el("g", { id: "ship-shape" }, defs);
-    el("path", { d: "M-11,0 C-8,-3.6 7,-3.6 11,0 C7,3.6 -8,3.6 -11,0 Z", class: "ship-hull" }, hull);
-    el("path", { d: "M-11,0 L-14,-3.2 L-12.2,0 L-14,3.2 Z", class: "ship-fin" }, hull);
-    el("rect", { x: -2.5, y: 2.6, width: 5, height: 1.8, rx: 0.6, class: "ship-car" }, hull);
+    defs.insertAdjacentHTML("beforeend", U.shipArt.DEFS);
 
     world = el("g", {}, svg);
     el("rect", { x: -M.width, y: -M.height, width: M.width * 3, height: M.height * 3, class: "sea" }, world);
@@ -173,8 +170,8 @@ window.UpShip = window.UpShip || {};
   }
 
   // Routes and ships -------------------------------------------------------
-  function routePathD(stops) {
-    return "M" + stops.map(id => U.cityById[id]).map(c => c.x.toFixed(1) + "," + c.y.toFixed(1)).join("L");
+  function routePathD(stops, circuit) {
+    return "M" + stops.map(id => U.cityById[id]).map(c => c.x.toFixed(1) + "," + c.y.toFixed(1)).join("L") + (circuit && stops.length > 2 ? "Z" : "");
   }
 
   function syncRoutes(state) {
@@ -182,7 +179,7 @@ window.UpShip = window.UpShip || {};
     for (const id in routeNodes) if (!live.has(id)) { routeNodes[id].g.remove(); delete routeNodes[id]; }
     for (const route of state.routes) {
       let n = routeNodes[route.id];
-      const d = routePathD(route.stops);
+      const d = routePathD(route.stops, route.circuit);
       if (!n) {
         const g = el("g", { class: "route", tabindex: 0, role: "button" }, layers.routes);
         const hit = el("path", { class: "route-hit" }, g);
@@ -192,7 +189,7 @@ window.UpShip = window.UpShip || {};
         n = routeNodes[route.id] = { g, hit, line };
       }
       n.hit.setAttribute("d", d); n.line.setAttribute("d", d);
-      n.g.setAttribute("aria-label", "Route " + U.sim.routeName(route.stops));
+      n.g.setAttribute("aria-label", "Route " + U.sim.routeName(route.stops, route.circuit));
       const sum = U.sim.routeSummary(state, route.id);
       n.g.classList.toggle("is-profit", sum.days > 0 && sum.profit >= 0);
       n.g.classList.toggle("is-loss", sum.days > 0 && sum.profit < 0);
@@ -202,9 +199,9 @@ window.UpShip = window.UpShip || {};
 
   // The route being drawn, before it is confirmed.
   let draftNode = null;
-  function drawDraft(stops) {
+  function drawDraft(stops, circuit) {
     if (!draftNode) draftNode = el("path", { class: "route-draft" }, layers.routes);
-    draftNode.setAttribute("d", stops && stops.length > 1 ? routePathD(stops) : "");
+    draftNode.setAttribute("d", stops && stops.length > 1 ? routePathD(stops, circuit) : "");
     for (const id in cityNodes) {
       const i = stops ? stops.indexOf(id) : -1;
       cityNodes[id].g.classList.toggle("in-draft", i >= 0);
@@ -214,17 +211,15 @@ window.UpShip = window.UpShip || {};
 
   function shipPosition(ship, progress) {
     const state = U.state;
-    if (!ship.leg) {
-      const c = U.cityById[ship.location];
-      return { x: c.x, y: c.y, angle: 0, flying: false, at: ship.location };
+    const hour = U.sim.H(state.tick) + (U.turnActive ? progress : 0) * U.TIME.tickHours;
+    const p = U.sim.positionAt(ship, hour);
+    if (p.flying) {
+      const a = U.cityById[p.leg.from], b = U.cityById[p.leg.to], f = p.fraction;
+      return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, angle: Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI,
+        flying: true, fraction: f, leg: p.leg, hour };
     }
-    const a = U.cityById[ship.leg.from], b = U.cityById[ship.leg.to];
-    const elapsed = (state.tick - ship.leg.startTick + (U.turnActive ? progress : 0)) * U.TIME.tickHours;
-    const f = Math.max(0, Math.min(1, elapsed / ship.leg.hours));
-    const ang = Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
-    const flying = f > 0 && f < 1;
-    return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, angle: ang, flying, fraction: f,
-      at: flying ? null : (f >= 1 ? ship.leg.to : ship.leg.from) };
+    const c = U.cityById[p.at];
+    return { x: c.x, y: c.y, angle: 0, flying: false, at: p.at, leg: p.leg || null, upcoming: p.upcoming || null, hour };
   }
 
   function drawShips(state, progress) {
@@ -237,20 +232,20 @@ window.UpShip = window.UpShip || {};
       let n = shipNodes[ship.id];
       if (!n) {
         const g = el("g", { class: "ship", tabindex: 0, role: "button" }, layers.ships);
-        el("circle", { r: 14, class: "ship-hit" }, g);
-        const body = el("use", { href: "#ship-shape" }, g);
+        el("ellipse", { rx: 58, ry: 22, class: "ship-hit" }, g);
+        const body = el("use", { href: "#art-" + U.SHIP_CLASSES[ship.classId].kind }, g);
         g.addEventListener("click", e => { e.stopPropagation(); onSelect({ type: "ship", id: ship.id }); });
         g.addEventListener("keydown", e => { if (e.key === "Enter") onSelect({ type: "ship", id: ship.id }); });
         n = shipNodes[ship.id] = { g, body };
       }
       n.g.setAttribute("aria-label", "Ship " + ship.name);
       const p = shipPosition(ship, progress);
-      const s = 1.6 / zoom;
+      const s = 0.36 / zoom;
       let dx = 0, dy = 0, angle = p.flying ? p.angle : 0;
       if (!p.flying) {
         // Moored ships stack above their city so the city stays clickable.
         const k = moored[p.at] = (moored[p.at] || 0) + 1;
-        dy = -(8 + 9 * k) / zoom;
+        dy = -(4 + 11 * k) / zoom;
       }
       if (angle > 90 || angle < -90) n.body.setAttribute("transform", "scale(1,-1)"); else n.body.removeAttribute("transform");
       n.g.setAttribute("transform", `translate(${p.x + dx},${p.y + dy}) rotate(${angle}) scale(${s})`);

@@ -6,7 +6,7 @@
   <title>Up, Ship!</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:ital,wght@0,400;0,600;0,700;1,400&family=Poiret+One&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:ital,wght@0,400;0,600;0,700;1,400&family=Poiret+One&family=Special+Elite&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -41,7 +41,7 @@
       </div>
     </div>
 
-    <div id="company" class="company" hidden></div>
+    <button id="company" class="company" title="Company statistics" hidden></button>
 
     <div class="funds">
       <span class="funds-label">Funds</span>
@@ -68,12 +68,14 @@
       <button data-open="fleet">Fleet</button>
       <button data-open="routes">Routes</button>
       <button data-open="finances">Finances</button>
+      <button data-open="telegrams">Telegrams</button>
     </nav>
 
     <div id="draft" class="draft" hidden>
       <p class="draft-title">New route</p>
       <p id="draft-text" class="draft-text"></p>
       <div class="draft-actions">
+        <label class="draft-circuit"><input type="checkbox" id="draft-circuit"> Circuit (return to the first city)</label>
         <button id="draft-undo" class="btn-quiet">Undo last stop</button>
         <button id="draft-cancel" class="btn-quiet">Cancel</button>
         <button id="draft-create" class="btn">Create route</button>
@@ -81,6 +83,10 @@
     </div>
 
     <p id="notice" class="notice" role="status" hidden></p>
+
+    <div id="telegrams" class="telegrams" aria-live="polite" hidden>
+      <button class="tg-all btn-quiet" hidden>Dismiss all</button>
+    </div>
 
     <div class="zoom" role="group" aria-label="Zoom">
       <button id="zoom-in" aria-label="Zoom in">+</button>
@@ -95,6 +101,7 @@
   <script src="js/data/ships.js"></script>
   <script src="js/data/nations.js"></script>
   <script src="js/emblem.js"></script>
+  <script src="js/shipart.js"></script>
   <script src="js/sim.js"></script>
   <script src="js/map.js"></script>
   <script src="js/ui.js"></script>

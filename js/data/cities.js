@@ -9,7 +9,7 @@ UpShip.CITIES = [
 
   { id: "cardington", name: "Cardington", country: "United Kingdom", lat: 52.11, lon: -0.42, tier: "small", specialty: "industrial", home: true, works: true, pro: "Government airship works with big sheds", con: "Small; the demand is in London", label: "t" },
   { id: "london", name: "London", country: "United Kingdom", lat: 51.51, lon: -0.13, tier: "major", specialty: "capital", home: true, works: false, pro: "Huge demand", con: "Fog and costly land", label: "b" },
-  { id: "glasgow", name: "Glasgow", country: "United Kingdom", lat: 55.86, lon: -4.25, tier: "large", specialty: "industrial", home: true, works: true, pro: "The Beardmore works at Inchinnan, where R34 was built", con: "Far from the rest of Europe", label: "r" },
+  { id: "glasgow", name: "Glasgow", country: "United Kingdom", lat: 55.86, lon: -4.25, tier: "large", specialty: "industrial", home: true, works: true, pro: "The Beardmore works at Inchinnan, where R34 was built", con: "Far from the rest of Europe", label: "l" },
   { id: "manchester", name: "Manchester", country: "United Kingdom", lat: 53.48, lon: -2.24, tier: "large", specialty: "industrial", home: true, works: false, pro: "Industrial freight and a large population", con: "Wet weather and no works", label: "r" },
 
   { id: "paris", name: "Paris", country: "France", lat: 48.86, lon: 2.35, tier: "major", specialty: "capital", home: true, works: false, pro: "Strong demand at the center of the network", con: "No shipbuilding base", label: "r" },
@@ -38,7 +38,19 @@ UpShip.CITIES = [
   { id: "barcelona", name: "Barcelona", country: "Spain", lat: 41.39, lon: 2.17, tier: "large", specialty: "port", label: "r" },
   { id: "athens", name: "Athens", country: "Greece", lat: 37.98, lon: 23.73, tier: "medium", specialty: "culture", label: "r" },
   { id: "constantinople", name: "Constantinople", country: "Turkey", lat: 41.01, lon: 28.98, tier: "large", specialty: "port", label: "r" },
-  { id: "dublin", name: "Dublin", country: "Irish Free State", lat: 53.35, lon: -6.26, tier: "medium", specialty: "capital", label: "r" }
+  { id: "dublin", name: "Dublin", country: "Irish Free State", lat: 53.35, lon: -6.26, tier: "medium", specialty: "capital", label: "r" },
+  { id: "edinburgh", name: "Edinburgh", country: "United Kingdom", lat: 55.95, lon: -3.19, tier: "medium", specialty: "culture", label: "r" },
+  { id: "munich", name: "Munich", country: "Germany", lat: 48.14, lon: 11.58, tier: "large", specialty: "culture", label: "r" },
+  { id: "cologne", name: "Cologne", country: "Germany", lat: 50.94, lon: 6.96, tier: "large", specialty: "commerce", label: "r" },
+  { id: "gibraltar", name: "Gibraltar", country: "United Kingdom", lat: 36.14, lon: -5.35, tier: "small", specialty: "port", label: "b" },
+  { id: "malta", name: "Malta", country: "United Kingdom", lat: 35.90, lon: 14.51, tier: "small", specialty: "port", label: "r" },
+  { id: "algiers", name: "Algiers", country: "Algeria", lat: 36.75, lon: 3.06, tier: "medium", specialty: "port", label: "r" },
+  { id: "tunis", name: "Tunis", country: "Tunisia", lat: 36.81, lon: 10.18, tier: "medium", specialty: "port", label: "r" },
+  { id: "alexandria", name: "Alexandria", country: "Egypt", lat: 31.20, lon: 29.92, tier: "medium", specialty: "port", label: "l" },
+  { id: "cairo", name: "Cairo", country: "Egypt", lat: 30.04, lon: 31.24, tier: "large", specialty: "capital", label: "r" },
+  { id: "moscow", name: "Moscow", country: "Soviet Union", lat: 55.76, lon: 37.62, tier: "major", specialty: "capital", label: "r" },
+  { id: "leningrad", name: "Leningrad", country: "Soviet Union", lat: 59.94, lon: 30.31, tier: "large", specialty: "port", label: "r" },
+  { id: "kiev", name: "Kiev", country: "Soviet Union", lat: 50.45, lon: 30.52, tier: "large", specialty: "culture", label: "r" }
 ];
 
 UpShip.TIERS = {

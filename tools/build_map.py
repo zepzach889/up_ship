@@ -4,7 +4,7 @@
 import json, math
 from shapely.geometry import shape, box, Polygon, LineString
 from shapely.ops import unary_union
-LON0, LAT0 = 10.0, 50.0
+LON0, LAT0 = 14.0, 47.0
 def proj(lon, lat):
     l, p, p1 = math.radians(lon - LON0), math.radians(lat), math.radians(LAT0)
     k = math.sqrt(2 / (1 + math.sin(p1)*math.sin(p) + math.cos(p1)*math.cos(p)*math.cos(l)))
@@ -15,7 +15,7 @@ xs, ys = [p[0] for p in pts], [p[1] for p in pts]
 minx, maxx, miny, maxy = min(xs), max(xs), min(ys), max(ys)
 W = 1600.0
 sx, sy = maxx-minx, maxy-miny
-x0 = minx - sx*0.09; x1 = maxx + sx*0.08; y0 = miny - sy*0.10; y1 = maxy + sy*0.10
+x0 = minx - sx*0.07; x1 = maxx + sx*0.07; y0 = miny - sy*0.07; y1 = maxy + sy*0.08
 S = W/(x1-x0); H = round((y1-y0)*S)
 view = box(-W*0.6, -H*0.2, W*1.6, H*1.2)
 def px(g):
