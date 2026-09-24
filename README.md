@@ -9,20 +9,23 @@ A tycoon game about running an airship passenger and cargo line in a golden age 
 
 Your game saves automatically in the browser.
 
-## Current state: milestone 2
+## Current state: milestone 3
 
-- Map of Europe in about 1924 borders, with the 33 cities of the first region
-- Half-day turns from January 1919: press Next turn, or use auto-play at three speeds
-- Shipyard with the German 1919 catalog: Seeschwalbe class, Brieftaube class, and Marine conversion
-- Draw routes of up to five stops on the map, then assign ships to them
-- Passengers and freight between every pair of stops on a route
+- New-game setup on the map: choose Germany, Britain, France, or Italy, then one of four home cities, then name your company, director, and emblem
+- Home cities with airship works build ships faster and cheaper; the others start with extra funds
+- Each country has its own 1919 ship catalog
+- Map of Europe in about 1924 borders, with 33 cities
+- Half-day turns: press Next turn, or use auto-play at three speeds; turning auto-play off pauses instantly
+- Draw routes of up to five stops, assign ships, carry passengers and freight
 - Fleet, Routes, and Finances panels; ships can be renamed
 
 ## Project layout
 
 - `index.html`: the page
 - `css/style.css`: all styling
-- `js/data/`: map, city, and ship data
+- `js/data/`: map, city, ship, and country data
+- `js/emblem.js`: company emblems
+- `js/setup.js`: the new-game setup screens
 - `js/sim.js`: game clock and economy
 - `js/map.js`: map drawing, zoom, and pan
 - `js/ui.js`: top bar and detail panels

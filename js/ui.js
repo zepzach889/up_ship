@@ -52,7 +52,8 @@ window.UpShip = window.UpShip || {};
   }
 
   // Top bar ----------------------------------------------------------------------
-  function updateBar(state, auto, progress) {
+  function updateBar(state, auto, progress, frozen) {
+    if (!state) { $("#date").textContent = dateLine(U.sim.dateOf(0)); $("#time").textContent = ""; return; }
     const d = U.sim.dateOf(state.tick, progress);
     $("#date").textContent = dateLine(d);
     $("#time").textContent = clock(d);
@@ -60,7 +61,8 @@ window.UpShip = window.UpShip || {};
     $("#money").classList.toggle("is-negative", state.money < 0);
     document.querySelectorAll("[data-auto]").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.auto === auto)));
     const next = $("#next-turn");
-    next.disabled = U.turnActive || auto > 0 || !!draft;
+    next.disabled = (U.turnActive && !frozen) || auto > 0 || !!draft;
+    next.textContent = frozen ? "Resume turn" : "Next turn";
     $(".hint").hidden = state.tick > 0 || !!draft;
     const live = $("#live-status");
     if (live && selection && selection.type === "ship") {
@@ -80,6 +82,8 @@ window.UpShip = window.UpShip || {};
 
   // Selection and panels ----------------------------------------------------------
   function select(sel) {
+    if (U.setup && U.setup.handleSelect(sel)) return;
+    if (sel && sel.type === "country") return;
     if (draft && sel && sel.type === "city") { addDraftStop(sel.id); return; }
     selection = sel; editing = null; picking = null;
     U.map.highlight(sel);
@@ -239,13 +243,13 @@ window.UpShip = window.UpShip || {};
   }
 
   function shipyardPanel(state) {
-    const home = city(state.company.home);
+    const home = city(state.company.home), nation = U.NATIONS[state.company.nation];
     return `
       <h2>Shipyard</h2>
-      <p class="sub">German builders. New ships are delivered at ${home.name}.</p>
-      ${U.CATALOG.map(id => {
-        const c = U.SHIP_CLASSES[id];
-        const weeks = c.buildDays < 30 ? `${Math.round(c.buildDays / 7)} weeks` : `${Math.round(c.buildDays / 30)} months`;
+      <p class="sub">${nation.name}'s builders. New ships are delivered at ${home.name}${home.works ? ", where your works build them faster and cheaper" : ""}.</p>
+      ${U.sim.catalog(state).map(id => {
+        const c = U.SHIP_CLASSES[id], t = U.sim.orderTerms(state, id);
+        const weeks = t.days < 45 ? `${Math.round(t.days / 7)} weeks` : `${Math.round(t.days / 30 * 2) / 2} months`;
         return `<section class="card">
           <h4>${c.name}</h4>
           <p class="card-role">${c.role}. ${c.basis}.</p>
@@ -257,9 +261,9 @@ window.UpShip = window.UpShip || {};
             ${row("Running cost", money(c.dailyCost) + " a day")}
             ${row("Delivery", weeks)}
           </dl>
-          <div class="card-foot"><span class="price">${money(c.price)}</span>
-            <button class="btn" data-order="${id}" ${state.money < c.price ? "disabled" : ""}>Order</button></div>
-          ${state.money < c.price ? `<p class="note">Not enough funds.</p>` : ""}
+          <div class="card-foot"><span class="price">${money(t.price)}</span>
+            <button class="btn" data-order="${id}" ${state.money < t.price ? "disabled" : ""}>Order</button></div>
+          ${state.money < t.price ? `<p class="note">Not enough funds.</p>` : ""}
         </section>`;
       }).join("")}`;
   }
@@ -295,7 +299,7 @@ window.UpShip = window.UpShip || {};
     const y = state.year, net = y.revenue - y.costs - y.purchases;
     return `
       <h2>Finances</h2>
-      <p class="sub">${y.year} so far</p>
+      <p class="sub">${esc(state.company.name)}, ${y.year} so far. Director ${esc(state.company.director)}.</p>
       <dl>
         ${row("Income", money(y.revenue))}
         ${row("Running costs", money(y.costs))}
@@ -376,9 +380,10 @@ window.UpShip = window.UpShip || {};
     else if (n === 1) text = `${city(draft[0]).name}. Click the next city.`;
     else {
       const longest = U.sim.longestLeg(draft);
-      const fits = U.CATALOG.filter(c => U.SHIP_CLASSES[c].rangeKm >= longest).map(c => U.SHIP_CLASSES[c].name);
+      const cat = U.sim.catalog(U.state);
+      const fits = cat.filter(c => U.SHIP_CLASSES[c].rangeKm >= longest).map(c => U.SHIP_CLASSES[c].name);
       text = `${U.sim.routeName(draft)}. Longest leg ${km(longest)}. ` +
-        (fits.length === U.CATALOG.length ? "Every ship class can fly it." : fits.length ? `Only the ${fits.join(" and ")} can fly it.` : "No ship class has the range for it.");
+        (fits.length === cat.length ? "Every ship class can fly it." : fits.length ? `Only the ${fits.join(" and ")} can fly it.` : "No ship class has the range for it.");
       if (n < max) text += ` Add up to ${max - n} more ${max - n === 1 ? "city" : "cities"}, or create the route.`;
     }
     $("#draft-text").textContent = text;
@@ -386,5 +391,13 @@ window.UpShip = window.UpShip || {};
     $("#draft-create").disabled = n < 2;
   }
 
-  U.ui = { init, updateBar, select, render, notify, isDrawing: () => !!draft, rerenderIf: types => { if (selection && types.includes(selection.type) && !editing) render(); } };
+  // Company name and emblem in the top bar, and the company color on the map.
+  function showCompany(state) {
+    const c = state.company;
+    $("#company").innerHTML = `${U.emblem.svg(c.emblem, 34)}<span class="company-name">${esc(c.name)}</span>`;
+    $("#company").hidden = false;
+    document.documentElement.style.setProperty("--company", c.emblem.c1);
+  }
+
+  U.ui = { init, showCompany, updateBar, select, render, notify, isDrawing: () => !!draft, rerenderIf: types => { if (selection && types.includes(selection.type) && !editing) render(); } };
 })(window.UpShip);

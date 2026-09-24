@@ -41,7 +41,7 @@ button { font: inherit; color: inherit; }
 /* Top bar ---------------------------------------------------------------- */
 .bar {
   height: var(--bar-h);
-  display: flex; align-items: center; gap: 28px;
+  display: flex; align-items: center; gap: 20px;
   padding: 0 20px;
   background: linear-gradient(var(--ink-2), var(--ink));
   border-bottom: 1px solid var(--brass);
@@ -64,7 +64,7 @@ button { font: inherit; color: inherit; }
 }
 .step-r { transform: scaleX(-1); }
 
-.clock { display: flex; flex-direction: column; min-width: 15em; line-height: 1.2; }
+.clock { display: flex; flex-direction: column; min-width: 13.5em; line-height: 1.2; }
 .date { font-size: 15px; letter-spacing: 0.04em; }
 .time { font-size: 13px; color: var(--ivory-dim); font-variant-numeric: tabular-nums; }
 
@@ -74,6 +74,7 @@ button { font: inherit; color: inherit; }
   background: var(--brass); color: var(--ink); border: 0;
   font-weight: 700; font-size: 14px; letter-spacing: 0.08em;
   clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 8px 100%, 0 50%);
+  white-space: nowrap; min-width: 8.5em;
 }
 .next-turn:hover:not(:disabled) { background: var(--brass-hi); }
 .next-turn:disabled { background: var(--brass-dim); color: var(--ink-2); cursor: default; }
@@ -91,12 +92,20 @@ button { font: inherit; color: inherit; }
 .speeds button[aria-pressed="true"] { background: var(--brass); }
 .speeds button[aria-pressed="true"] svg { fill: var(--ink); }
 
-.funds { margin-left: auto; display: flex; align-items: baseline; gap: 10px; }
+.company { margin-left: auto; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.company[hidden] { display: none; }
+.company .emblem { flex: none; }
+.company-name { font-size: 14px; color: var(--ivory); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 16em; }
+@media (max-width: 1500px) { .auto-label { display: none; } .company-name { max-width: 11em; } }
+@media (max-width: 1180px) { .company-name { display: none; } .wordmark .step { display: none; } }
+.funds { display: flex; align-items: baseline; gap: 10px; }
+.company[hidden] + .funds { margin-left: auto; }
 .funds-label { font-size: 13px; color: var(--ivory-dim); letter-spacing: 0.06em; }
 .money { font-size: 22px; font-weight: 600; color: var(--brass-hi); font-variant-numeric: tabular-nums; }
 .money.is-negative { color: #e39a8e; }
 
 .plain {
+  white-space: nowrap;
   background: none; border: 1px solid var(--brass-dim); padding: 7px 12px 5px;
   font-size: 13px; letter-spacing: 0.04em; cursor: pointer; color: var(--ivory-dim);
 }
@@ -159,9 +168,9 @@ button { font: inherit; color: inherit; }
 
 .ship { cursor: pointer; }
 .ship-hit { fill: transparent; }
-.ship-hull { fill: var(--company); stroke: #3b120f; stroke-width: 0.9; }
-.ship-fin { fill: #6f1d19; }
-.ship-car { fill: #3b120f; }
+.ship-hull { fill: var(--company); stroke: color-mix(in srgb, var(--company) 45%, black); stroke-width: 0.9; }
+.ship-fin { fill: color-mix(in srgb, var(--company) 70%, black); }
+.ship-car { fill: color-mix(in srgb, var(--company) 45%, black); }
 .ship.is-selected .ship-hull, .ship:focus-visible .ship-hull { stroke: var(--brass-hi); stroke-width: 1.6; }
 .ship:focus { outline: none; }
 
@@ -280,12 +289,44 @@ button { font: inherit; color: inherit; }
 .route-draft { fill: none; stroke: var(--company); stroke-width: 3; stroke-dasharray: 8 5; stroke-linecap: round; vector-effect: non-scaling-stroke; }
 
 .notice {
-  position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 3; margin: 0;
+  position: absolute; left: 50%; top: 16px; transform: translateX(-50%); z-index: 3; margin: 0;
   max-width: calc(100% - 140px); padding: 10px 16px 8px; background: var(--ink); border: 1px solid var(--brass); border-left-width: 4px;
   font-size: 14px;
 }
 .notice[hidden], .hint[hidden], .draft[hidden] { display: none; }
 .ship.is-idle .ship-hull { opacity: 0.75; }
+
+/* New-game setup ---------------------------------------------------------- */
+body.is-setup .turns, body.is-setup .funds, body.is-setup .dock, body.is-setup .hint, body.is-setup #new-game, body.is-setup .close { display: none; }
+body.is-setup .panel { width: 360px; }
+.setup-step { margin: 0 0 4px; font-size: 12px; letter-spacing: 0.08em; color: var(--brass); }
+.map.is-setup .country { transition: opacity 0.2s; }
+.map.is-setup .country.playable { cursor: pointer; }
+.map.is-setup .country.playable:hover { filter: brightness(1.06) saturate(1.3); }
+.map.is-setup .country.chosen { filter: brightness(1.05) saturate(1.4); }
+.map.setup-country .country:not(.playable), .map.setup-city .country:not(.chosen) { opacity: 0.45; }
+.map.is-setup .city.dimmed { opacity: 0.35; pointer-events: none; }
+.map.is-setup .city.choosable .city-dot { fill: var(--company); stroke: var(--brass-hi); stroke-width: 2; }
+.map.is-setup .city.choosable .city-label { font-weight: 700; }
+.map.is-setup .city.chosen-home .city-dot { fill: var(--brass-hi); stroke: var(--company); stroke-width: 3; }
+.map.is-setup .city.chosen-home .city-label { fill: var(--company); }
+.ledger-item.is-chosen { color: var(--brass-hi); border-left: 3px solid var(--brass); padding-left: 8px; }
+.setup-actions { display: flex; justify-content: space-between; margin-top: 18px; }
+.setup-actions .btn { margin: 0; }
+.field-label { display: block; margin: 14px 0 5px; font-size: 13px; color: var(--ivory-dim); }
+.field { display: flex; gap: 6px; }
+.field input { flex: 1; min-width: 0; font: inherit; font-size: 15px; color: var(--ivory); background: var(--ink-2); border: 1px solid var(--brass-dim); padding: 7px 8px 5px; }
+.field input:focus { border-color: var(--brass-hi); outline: none; }
+.emblem-preview { display: flex; align-items: center; gap: 16px; margin-top: 16px; }
+.choices { display: flex; flex-wrap: wrap; gap: 6px; }
+.choice { width: 38px; height: 38px; display: grid; place-items: center; background: var(--ink-2); border: 1px solid var(--ink-3); color: var(--ivory-dim); cursor: pointer; }
+.choice:hover { color: var(--ivory); border-color: var(--brass-dim); }
+.choice.is-chosen { color: var(--brass-hi); border-color: var(--brass-hi); }
+.swatch { width: 26px; height: 26px; border: 2px solid var(--ink-3); cursor: pointer; padding: 0; }
+.swatch.is-chosen { border-color: var(--brass-hi); box-shadow: 0 0 0 2px var(--ink), 0 0 0 3px var(--brass-hi); }
+
+/* Ships ignore clicks while drawing a route or setting up, so cities under them can be chosen. */
+.map.is-drawing .ships, .map.is-setup .ships { pointer-events: none; }
 
 /* Zoom and hint ---------------------------------------------------------- */
 .zoom { position: absolute; right: 16px; bottom: 16px; display: flex; flex-direction: column; border: 1px solid var(--brass); background: var(--ink); z-index: 1; }
@@ -313,10 +354,12 @@ button { font: inherit; color: inherit; }
   #new-game { order: 2; }
   .panel { left: 8px; right: 8px; top: auto; bottom: 8px; width: auto; max-height: 55%; }
   .hint { display: none; }
+  .company-name { display: none; }
+  body.is-setup .panel { width: auto; }
   .dock { flex-direction: row; top: auto; bottom: 8px; left: 8px; }
   .dock button { padding: 9px 10px 7px; font-size: 13px; border-bottom: 0; border-right: 1px solid var(--ink-3); }
   .dock button:last-child { border-right: 0; }
-  .notice { bottom: 64px; max-width: calc(100% - 24px); }
+  .notice { top: 60px; max-width: calc(100% - 24px); }
   .zoom { bottom: auto; top: 12px; right: 12px; }
 }
 

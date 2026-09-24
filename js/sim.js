@@ -1,8 +1,8 @@
 // Game state, turns, routes, ships, and the economy.
 window.UpShip = window.UpShip || {};
 (function (U) {
-  const SAVE_KEY = "upship.save.v2";
-  const VERSION = 2;
+  const SAVE_KEY = "upship.save.v3";
+  const VERSION = 3;
   const E = () => U.ECONOMY;
   const HOURS = () => U.TIME.tickHours;
 
@@ -64,24 +64,35 @@ window.UpShip = window.UpShip || {};
     return ship;
   }
 
-  function start() {
+  // config: { nation, home, name, director, emblem } from the setup screen.
+  function start(config) {
+    const homeCity = U.cityById[config.home];
     const state = {
       version: VERSION, tick: 0, nextId: 1,
-      money: E().startingMoney,
-      company: { name: "Your company", home: "friedrichshafen", country: "Germany" },
+      money: E().startingMoney + (homeCity.works ? 0 : E().noWorksBonus),
+      company: { name: config.name, director: config.director, nation: config.nation, home: config.home, emblem: config.emblem },
       routes: [], ships: [], waiting: {},
       usedNames: {},
       day: blankDay(), history: [],
       year: { year: 1919, revenue: 0, costs: 0, purchases: 0 },
       notices: []
     };
-    const route = createRoute(state, ["friedrichshafen", "berlin"]);
-    const ship = newShip(state, "seeschwalbe", "Konstanz", "friedrichshafen", 0);
-    state.usedNames.Konstanz = true;
-    assign(state, ship.id, route.id);
-    refillDemand(state, true);
-    departAll(state);
+    const first = catalog(state)[0];
+    const name = suggestName(state, first);
+    state.usedNames[name] = true;
+    newShip(state, first, name, config.home, 0);
     return state;
+  }
+
+  function catalog(state) { return U.NATIONS[state.company.nation].catalog; }
+
+  // Price and build time for this company, after home-city effects.
+  function orderTerms(state, classId) {
+    const cls = U.SHIP_CLASSES[classId], works = U.cityById[state.company.home].works;
+    return {
+      price: Math.round(cls.price * (works ? E().worksPriceFactor : 1) / 1000) * 1000,
+      days: Math.round(cls.buildDays * (works ? E().worksBuildFactor : 1))
+    };
   }
 
   function blankDay() { return { revenue: 0, costs: 0, byRoute: {} }; }
@@ -136,13 +147,13 @@ window.UpShip = window.UpShip || {};
   }
 
   function order(state, classId, name) {
-    const cls = U.SHIP_CLASSES[classId];
-    if (state.money < cls.price) return null;
-    state.money -= cls.price;
-    state.year.purchases += cls.price;
+    const t = orderTerms(state, classId);
+    if (state.money < t.price) return null;
+    state.money -= t.price;
+    state.year.purchases += t.price;
     const clean = (name || "").trim() || suggestName(state, classId);
     state.usedNames[clean] = true;
-    return newShip(state, classId, clean, state.company.home, state.tick + cls.buildDays * 2);
+    return newShip(state, classId, clean, state.company.home, state.tick + t.days * 2);
   }
 
   function rename(state, shipId, name) {
@@ -308,6 +319,6 @@ window.UpShip = window.UpShip || {};
   }
 
   U.sim = { distanceKm, fare, freightRate, dailyPassengers, dailyFreight, start, advance, dateOf, routeSummary,
-    save, load, clearSave, routeOf, routeName, createRoute, deleteRoute, canAssign, assign, order, rename,
+    save, load, clearSave, routeOf, catalog, orderTerms, routeName, createRoute, deleteRoute, canAssign, assign, order, rename,
     suggestName, longestLeg, readyHour };
 })(window.UpShip);

@@ -55,7 +55,8 @@ window.UpShip = window.UpShip || {};
   };
 
   let svg, world, layers = {}, view = { x: 0, y: 0, w: M.width, h: M.height }, zoom = 1;
-  const cityNodes = {}, shipNodes = {}, routeNodes = {};
+  const cityNodes = {}, shipNodes = {}, routeNodes = {}, countryNodes = {};
+  let setupMode = null;
   let onSelect = () => {};
 
   function init(container, handlers) {
@@ -89,7 +90,13 @@ window.UpShip = window.UpShip || {};
     el("use", { href: "#land-shape", class: "coast" }, layers.land);
 
     for (const c of M.countries) {
-      el("path", { d: c.path, class: `country tint-${c.tint}` }, layers.countries);
+      const cp = el("path", { d: c.path, class: `country tint-${c.tint}` }, layers.countries);
+      countryNodes[c.name] = cp;
+      cp.addEventListener("click", e => {
+        if (!setupMode) return;
+        e.stopPropagation();
+        onSelect({ type: "country", id: c.name });
+      });
       const o = LABELS[c.name];
       if (!o) continue;
       const [x, y] = project(o.lon, o.lat);
@@ -221,6 +228,7 @@ window.UpShip = window.UpShip || {};
   }
 
   function drawShips(state, progress) {
+    if (!state) return;
     const live = new Set();
     const moored = {};
     for (const ship of state.ships) {
@@ -334,5 +342,26 @@ window.UpShip = window.UpShip || {};
     for (const id in routeNodes) routeNodes[id].g.classList.toggle("is-selected", !!sel && sel.type === "route" && sel.id === id);
   }
 
-  U.map = { init, syncRoutes, drawShips, drawDraft, zoomBy, highlight, shipPosition, project };
+  // New-game setup: highlight the playable countries, then the home cities.
+  const PLAYABLE = ["Germany", "United Kingdom", "France", "Italy"];
+  function setSetup(mode, data = {}) {
+    setupMode = mode;
+    svg.classList.toggle("is-setup", !!mode);
+    for (const m of ["country", "city", "identity"]) svg.classList.toggle("setup-" + m, mode === m);
+    for (const name in countryNodes) {
+      countryNodes[name].classList.toggle("playable", mode === "country" && PLAYABLE.includes(name));
+      countryNodes[name].classList.toggle("chosen", !!mode && mode !== "country" && name === data.country);
+    }
+    for (const id in cityNodes) {
+      cityNodes[id].g.classList.toggle("choosable", (mode === "city" && (data.cities || []).includes(id)) || (mode === "country" && U.cityById[id].home));
+      cityNodes[id].g.classList.toggle("chosen-home", !!mode && id === data.chosen);
+      cityNodes[id].g.classList.toggle("dimmed", mode === "city" && !(data.cities || []).includes(id));
+    }
+  }
+
+  function setHome(id) {
+    for (const cid in cityNodes) cityNodes[cid].g.classList.toggle("is-home", cid === id);
+  }
+
+  U.map = { init, syncRoutes, drawShips, drawDraft, zoomBy, highlight, shipPosition, project, setSetup, setHome };
 })(window.UpShip);

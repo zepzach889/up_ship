@@ -2,25 +2,25 @@
 // label: which side of the marker the name sits on ("r", "l", "t", "b").
 window.UpShip = window.UpShip || {};
 UpShip.CITIES = [
-  { id: "friedrichshafen", name: "Friedrichshafen", country: "Germany", lat: 47.65, lon: 9.48, tier: "small", specialty: "culture", home: true, label: "r" },
-  { id: "berlin", name: "Berlin", country: "Germany", lat: 52.52, lon: 13.40, tier: "major", specialty: "capital", home: true, label: "r" },
-  { id: "hamburg", name: "Hamburg", country: "Germany", lat: 53.55, lon: 9.99, tier: "large", specialty: "port", home: true, label: "r" },
-  { id: "frankfurt", name: "Frankfurt", country: "Germany", lat: 50.11, lon: 8.68, tier: "medium", specialty: "commerce", home: true, label: "r" },
+  { id: "friedrichshafen", name: "Friedrichshafen", country: "Germany", lat: 47.65, lon: 9.48, tier: "small", specialty: "culture", home: true, works: true, pro: "Zeppelin works and calm lake weather", con: "A small town, far in Germany's southern corner", label: "r" },
+  { id: "berlin", name: "Berlin", country: "Germany", lat: 52.52, lon: 13.40, tier: "major", specialty: "capital", home: true, works: false, pro: "The largest demand in Germany", con: "No airship works", label: "r" },
+  { id: "hamburg", name: "Hamburg", country: "Germany", lat: 53.55, lon: 9.99, tier: "large", specialty: "port", home: true, works: false, pro: "Port freight and access to the North Sea", con: "Fog and rough coastal weather", label: "r" },
+  { id: "frankfurt", name: "Frankfurt", country: "Germany", lat: 50.11, lon: 8.68, tier: "medium", specialty: "commerce", home: true, works: false, pro: "Central location, trade fairs, and banking", con: "No airship works", label: "r" },
 
-  { id: "cardington", name: "Cardington", country: "United Kingdom", lat: 52.11, lon: -0.42, tier: "small", specialty: "industrial", home: true, label: "t" },
-  { id: "london", name: "London", country: "United Kingdom", lat: 51.51, lon: -0.13, tier: "major", specialty: "capital", home: true, label: "b" },
-  { id: "glasgow", name: "Glasgow", country: "United Kingdom", lat: 55.86, lon: -4.25, tier: "large", specialty: "industrial", home: true, label: "r" },
-  { id: "manchester", name: "Manchester", country: "United Kingdom", lat: 53.48, lon: -2.24, tier: "large", specialty: "industrial", home: true, label: "r" },
+  { id: "cardington", name: "Cardington", country: "United Kingdom", lat: 52.11, lon: -0.42, tier: "small", specialty: "industrial", home: true, works: true, pro: "Government airship works with big sheds", con: "Small; the demand is in London", label: "t" },
+  { id: "london", name: "London", country: "United Kingdom", lat: 51.51, lon: -0.13, tier: "major", specialty: "capital", home: true, works: false, pro: "Huge demand", con: "Fog and costly land", label: "b" },
+  { id: "glasgow", name: "Glasgow", country: "United Kingdom", lat: 55.86, lon: -4.25, tier: "large", specialty: "industrial", home: true, works: true, pro: "The Beardmore works at Inchinnan, where R34 was built", con: "Far from the rest of Europe", label: "r" },
+  { id: "manchester", name: "Manchester", country: "United Kingdom", lat: 53.48, lon: -2.24, tier: "large", specialty: "industrial", home: true, works: false, pro: "Industrial freight and a large population", con: "Wet weather and no works", label: "r" },
 
-  { id: "paris", name: "Paris", country: "France", lat: 48.86, lon: 2.35, tier: "major", specialty: "capital", home: true, label: "r" },
-  { id: "marseille", name: "Marseille", country: "France", lat: 43.30, lon: 5.37, tier: "medium", specialty: "port", home: true, label: "l" },
-  { id: "toulon", name: "Toulon", country: "France", lat: 43.12, lon: 5.93, tier: "small", specialty: "port", home: true, label: "b" },
-  { id: "bordeaux", name: "Bordeaux", country: "France", lat: 44.84, lon: -0.58, tier: "medium", specialty: "port", home: true, label: "l" },
+  { id: "paris", name: "Paris", country: "France", lat: 48.86, lon: 2.35, tier: "major", specialty: "capital", home: true, works: false, pro: "Strong demand at the center of the network", con: "No shipbuilding base", label: "r" },
+  { id: "marseille", name: "Marseille", country: "France", lat: 43.30, lon: 5.37, tier: "medium", specialty: "port", home: true, works: false, pro: "Mediterranean and North Africa routes", con: "The mistral wind", label: "l" },
+  { id: "toulon", name: "Toulon", country: "France", lat: 43.12, lon: 5.93, tier: "small", specialty: "port", home: true, works: true, pro: "A naval airship base with sheds", con: "A small local market", label: "b" },
+  { id: "bordeaux", name: "Bordeaux", country: "France", lat: 44.84, lon: -0.58, tier: "medium", specialty: "port", home: true, works: false, pro: "Atlantic reach toward South America", con: "Far from Europe's center", label: "l" },
 
-  { id: "rome", name: "Rome", country: "Italy", lat: 41.90, lon: 12.50, tier: "large", specialty: "culture", home: true, label: "l" },
-  { id: "milan", name: "Milan", country: "Italy", lat: 45.46, lon: 9.19, tier: "large", specialty: "industrial", home: true, label: "r" },
-  { id: "naples", name: "Naples", country: "Italy", lat: 40.85, lon: 14.27, tier: "large", specialty: "port", home: true, label: "r" },
-  { id: "genoa", name: "Genoa", country: "Italy", lat: 44.41, lon: 8.93, tier: "medium", specialty: "port", home: true, label: "l" },
+  { id: "rome", name: "Rome", country: "Italy", lat: 41.90, lon: 12.50, tier: "large", specialty: "culture", home: true, works: true, pro: "The Ciampino airship works and government favor", con: "Only modest demand", label: "l" },
+  { id: "milan", name: "Milan", country: "Italy", lat: 45.46, lon: 9.19, tier: "large", specialty: "industrial", home: true, works: false, pro: "Industrial wealth and freight", con: "The Alps block routes to the north", label: "r" },
+  { id: "naples", name: "Naples", country: "Italy", lat: 40.85, lon: 14.27, tier: "large", specialty: "port", home: true, works: false, pro: "A southern port toward Africa and the eastern Mediterranean", con: "The poorest local market", label: "r" },
+  { id: "genoa", name: "Genoa", country: "Italy", lat: 44.41, lon: 8.93, tier: "medium", specialty: "port", home: true, works: false, pro: "Port and shipping money", con: "Mountains behind the city leave little room for sheds", label: "l" },
 
   { id: "vienna", name: "Vienna", country: "Austria", lat: 48.21, lon: 16.37, tier: "large", specialty: "culture", label: "r" },
   { id: "prague", name: "Prague", country: "Czechoslovakia", lat: 50.08, lon: 14.44, tier: "medium", specialty: "culture", label: "r" },
@@ -56,4 +56,5 @@ UpShip.SPECIALTIES = {
   commerce: { name: "Commerce", note: "More business travel", passengerBoost: 1.05, freightBoost: 1.1 }
 };
 
+UpShip.nationOfCountry = { "Germany": "germany", "United Kingdom": "britain", "France": "france", "Italy": "italy" };
 UpShip.cityById = Object.fromEntries(UpShip.CITIES.map(c => [c.id, c]));
