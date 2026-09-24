@@ -11,10 +11,13 @@ window.UpShip = window.UpShip || {};
     3: { dock: ["contracts", "routes", "fleet", "telegrams"], turns: false, target: null },
     4: { dock: ["contracts", "routes", "fleet", "telegrams"], turns: true, target: "#next-turn" },
     5: { dock: ["contracts", "routes", "fleet", "finances", "telegrams"], turns: true, target: '[data-open="finances"]' },
-    6: { dock: null, turns: true, target: null }
+    6: { dock: ["contracts", "routes", "fleet", "finances", "research", "telegrams"], turns: true, target: '[data-open="research"]' },
+    7: { dock: ["contracts", "routes", "fleet", "finances", "research", "telegrams"], turns: true, target: null },
+    8: { dock: null, turns: true, target: null }
   };
 
   const tut = () => U.state && U.state.tutorial;
+  const facilityCount = () => Object.values(U.state.facilities || {}).reduce((a, f) => a + f.mast + f.terminal + f.shed, 0);
   const contract = () => U.state.contracts.find(k => k.tutorial) || U.state.offers.find(o => o.tutorial);
   const pairRoute = () => { const k = contract(); return k && U.state.routes.find(r => r.stops.includes(k.a) && r.stops.includes(k.b)); };
   // While the tutorial asks for its route, only the contract's two cities can be chosen.
@@ -29,7 +32,9 @@ window.UpShip = window.UpShip || {};
       3: `Put ${ship ? ship.name : "your ship"} on the new route: in the route's panel, choose <b>Add a ship</b> and pick it.`,
       4: `Press <b>Next turn</b> to play half a day, and keep going until ${ship ? ship.name : "your ship"} has flown the route. Auto-play works too.`,
       5: `The route's results appear after its first full day: click the route line to see them. Then open <b>Finances</b> for the company's money.`,
-      6: `That's the basics. Everything is unlocked now: order ships from the <b>Shipyard</b>, draw more routes, and watch for new offers by telegram.`
+      6: `Research makes ships faster, bigger, and cheaper to run, and unlocks new classes. Open <b>Research</b> and start a project. <b>Normal</b> funding is a good default.`,
+      7: `Cities need masts, terminals, and sheds. Larger cities have public ones you pay to use; your own avoid the fees and add room. Click ${b || "a city on your route"} on the map and build or enlarge something under <b>Facilities</b>.`,
+      8: `That's the basics. Everything is unlocked now: order ships from the <b>Shipyard</b>, draw more routes, and watch for new offers by telegram.`
     }[step];
   }
 
@@ -49,6 +54,8 @@ window.UpShip = window.UpShip || {};
     if (t.step === 3 && route && U.state.ships.some(s => s.routeId === route.id)) t.step = 4;
     if (t.step === 4 && U.state.totals.flights >= 1 && U.state.history.some(d => route && d.byRoute[route.id])) t.step = 5;
     if (t.step === 5 && selection && selection.type === "finances") t.step = 6;
+    if (t.step === 6 && (U.state.research.current || Object.keys(U.state.research.done).length)) { t.step = 7; t.facBase = facilityCount(); }
+    if (t.step === 7 && facilityCount() > (t.facBase || 0)) t.step = 8;
     if (!k && t.step < 3) { U.state.tutorial = null; }
     render();
   }
@@ -60,9 +67,9 @@ window.UpShip = window.UpShip || {};
     if (!t) { box.hidden = true; return; }
     box.hidden = false;
     $("#tutorial-text").innerHTML = text(t.step);
-    $("#tutorial-step").textContent = t.step < 6 ? `Getting started, ${t.step} of 5` : "Getting started";
-    $("#tutorial-finish").hidden = t.step !== 6;
-    $("#tutorial-skip").hidden = t.step === 6;
+    $("#tutorial-step").textContent = t.step < 8 ? `Getting started, ${t.step} of 7` : "Getting started";
+    $("#tutorial-finish").hidden = t.step !== 8;
+    $("#tutorial-skip").hidden = t.step === 8;
     const target = STEPS[t.step].target && $(STEPS[t.step].target);
     if (target) target.classList.add("tut-target");
   }

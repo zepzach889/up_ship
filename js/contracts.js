@@ -67,13 +67,28 @@ window.UpShip = window.UpShip || {};
         if (!aHome && !net.has(b.id)) continue;
         if (state.contracts.some(k => (k.a === a.id && k.b === b.id) || (k.a === b.id && k.b === a.id))) continue;
         const w = (U.TIERS[a.tier].demand * U.TIERS[b.tier].demand) * (net.has(a.id) || net.has(b.id) ? 2 : 1);
-        pairs.push({ a: a.id, b: b.id, w, authority: aHome ? U.NATIONS[nation].name : a.country });
+        const authority = aHome ? U.NATIONS[nation].name : a.country;
+        if ((state.postBlocks || {})[authority] > nowHour(state)) continue;   // a postal service we walked out on
+        pairs.push({ a: a.id, b: b.id, w, authority });
       }
     }
     if (!pairs.length) return null;
     let r = Math.random() * pairs.reduce((s, p) => s + p.w, 0);
     const chosen = pairs.find(p => (r -= p.w) <= 0) || pairs[0];
     return mailOffer(state, chosen.a, chosen.b, { authority: chosen.authority });
+  }
+
+  // Dropping a mail contract costs a month's pay, and that postal service offers nothing for about six months.
+  function dropContract(state, id) {
+    const k = state.contracts.find(x => x.id === id);
+    if (!k) return 0;
+    state.contracts = state.contracts.filter(x => x !== k);
+    S().addGeneral(state, k.monthly);
+    state.year.penalties = (state.year.penalties || 0) + k.monthly;
+    state.postBlocks = state.postBlocks || {};
+    state.postBlocks[k.authority] = nowHour(state) + 180 * 24;
+    for (const sh of state.ships) sh.mailAboard = (sh.mailAboard || []).filter(m => m.to !== k.a && m.to !== k.b);
+    return k.monthly;
   }
 
   // Grants ---------------------------------------------------------------------------
@@ -312,6 +327,6 @@ window.UpShip = window.UpShip || {};
     state.year.grants = (state.year.grants || 0) + amount;
   }
 
-  U.contracts = { init, accept, decline, describe, loadMail, recordGrantFlight, daily, weekly, monthly,
+  U.contracts = { init, dropContract, accept, decline, describe, loadMail, recordGrantFlight, daily, weekly, monthly,
     loanLimit, borrow, repay, setInstallment, buildGrantFor, useBuildGrant, mailMonthly };
 })(window.UpShip);

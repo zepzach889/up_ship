@@ -1,8 +1,8 @@
 // Game state, turns, routes, ships, wear, incidents, telegrams, and the economy.
 window.UpShip = window.UpShip || {};
 (function (U) {
-  const SAVE_KEY = "upship.save.v5";
-  const VERSION = 5;
+  const SAVE_KEY = "upship.save.v6";
+  const VERSION = 6;
   const E = () => U.ECONOMY;
   const TH = () => U.TIME.tickHours;
   const H = tick => tick * TH();                 // hours since 7 am, 1 January 1919
@@ -48,7 +48,8 @@ window.UpShip = window.UpShip || {};
     const next = {};
     for (const key of servedPairs(state)) {
       const [a, b] = key.split(">");
-      const p = dailyPassengers(a, b), f = dailyFreight(a, b);
+      const boost = state.facilities ? U.facilities.demandBoost(state, a) * U.facilities.demandBoost(state, b) : 1;
+      const p = dailyPassengers(a, b) * boost, f = dailyFreight(a, b);
       const w = state.waiting[key];
       next[key] = !w ? (first ? { pax: p, tons: f } : { pax: 0, tons: 0 })
         : { pax: Math.min(w.pax + p * share * swing(), p * E().passengerWaitDays), tons: Math.min(w.tons + f * share * swing(), f * E().freightWaitDays) };
@@ -119,6 +120,7 @@ window.UpShip = window.UpShip || {};
       month: 0, fundsWarned: false
     };
     U.research.init(state);
+    U.facilities.init(state);
     for (const id of catalog(state)) if (U.SHIP_CLASSES[id].kind === "surplus") state.surplusLeft[id] = E().surplusStock;
     const first = catalog(state)[0];
     newShip(state, first, suggestName(state, first), config.home, 0);
@@ -160,6 +162,20 @@ window.UpShip = window.UpShip || {};
     refillDemand(state, true);
     return route;
   }
+  // Change an existing route's stops. Ships on it pick up the new stops as they go.
+  function editRoute(state, routeId, stops, circuit) {
+    const route = state.routes.find(r => r.id === routeId);
+    if (!route) return null;
+    route.stops = stops.slice();
+    route.circuit = !!circuit && stops.length > 2;
+    for (const s of state.ships) if (s.routeId === routeId) {
+      const at = route.stops.indexOf(s.location);
+      if (at >= 0) { s.stop = at; if (!route.circuit && at === route.stops.length - 1) s.dir = -1; }
+    }
+    refillDemand(state, true);
+    return route;
+  }
+
   function deleteRoute(state, routeId) {
     for (const s of state.ships) if (s.routeId === routeId) s.routeId = null;
     state.routes = state.routes.filter(r => r.id !== routeId);
@@ -187,11 +203,13 @@ window.UpShip = window.UpShip || {};
     if (state.money < t.price) return null;
     if (grant) U.contracts.useBuildGrant(state, grant);
     if (c.kind === "surplus" && !(state.surplusLeft[classId] > 0)) return null;
+    const deliverAt = U.facilities.deliveryCity(state, classId);
+    if (!deliverAt) return null;
     if (c.kind === "surplus") state.surplusLeft[classId] -= 1;
     state.money -= t.price;
     state.year.purchases += t.price;
     const clean = (name || "").trim() || suggestName(state, classId);
-    return newShip(state, classId, clean, state.company.home, state.tick + t.days * 2);
+    return newShip(state, classId, clean, deliverAt, state.tick + t.days * 2);
   }
   function rename(state, shipId, name) {
     const clean = name.trim();
@@ -258,8 +276,9 @@ window.UpShip = window.UpShip || {};
 
   function board(state, ship, route, reserved = 0) {
     const c = U.research.stats(state, ship);
-    let seats = c.passengers, hold = c.cargoTons - reserved, revenue = 0, pax = 0, tons = 0;
     const from = route.stops[ship.stop];
+    const room = U.facilities.roomToday(state, from);
+    let seats = Math.min(c.passengers, room.pax), hold = Math.min(c.cargoTons - reserved, room.tons), revenue = 0, pax = 0, tons = 0;
     for (const to of downstream(route, ship)) {
       const w = state.waiting[pairKey(from, to)];
       if (!w) continue;
@@ -270,7 +289,8 @@ window.UpShip = window.UpShip || {};
       pax += p; tons += t;
       revenue += p * fare(km) * c.fare + t * freightRate(km);
     }
-    return { pax, tons: Math.round(tons * 10) / 10, revenue: Math.round(revenue) };
+    const fee = U.facilities.recordBoarding(state, from, pax, tons);
+    return { pax, tons: Math.round(tons * 10) / 10, revenue: Math.round(revenue), fee: Math.round(fee) };
   }
 
   function routeDay(state, routeId) {
@@ -298,7 +318,8 @@ window.UpShip = window.UpShip || {};
 
   function startOverhaul(state, ship, t) {
     const frac = ageYears(state, ship) / ship.lifeYears;
-    const cost = Math.round(cls(ship).price * E().overhaulCostShare * (frac > 0.8 ? 1.5 : 1) / 100) * 100;
+    const publicShed = !U.facilities.effective(state, ship.location, "shed").own;
+    const cost = Math.round(cls(ship).price * E().overhaulCostShare * (frac > 0.8 ? 1.5 : 1) * (publicShed ? 1 + U.facilities.FEES.shed : 1) / 100) * 100;
     const refit = U.research.applyRefits(state, ship);
     addCost(state, ship, cost + refit.cost);
     ship.overhaulNow = false;
@@ -322,12 +343,19 @@ window.UpShip = window.UpShip || {};
       if (ship.overhaulUntil && ship.overhaulUntil <= Math.max(ship.readyHour, T0)) finishOverhaul(state, ship);
       const t = Math.max(ship.readyHour, T0);
       if (t >= T1 || ship.overhaulUntil) return;
-      const home = state.company.home;
       let next;
-      if (ship.condition < ship.overhaulAt || ship.overhaulNow) {
-        if (ship.location === home) { startOverhaul(state, ship, t); continue; }
-        next = { to: home, ferry: true };
+      const shed = ship.condition < ship.overhaulAt || ship.overhaulNow ? U.facilities.nearestShed(state, ship) : null;
+      if (shed) {
+        if (ship.location === shed) { startOverhaul(state, ship, t); continue; }
+        next = { to: shed, ferry: true };
       } else {
+        if (ship.condition < ship.overhaulAt || ship.overhaulNow) {
+          const month = Math.floor(t / 720);
+          if (ship.noShedWarned !== month) {
+            ship.noShedWarned = month;
+            telegram(state, t, `${ship.name} due for overhaul stop no shed big enough within range stop build or enlarge a shed stop`, false, { type: "ship", id: ship.id });
+          }
+        }
         const route = routeOf(state, ship);
         if (!route) { ship.readyHour = t; return; }
         next = nextStop(state, ship, route);
@@ -353,7 +381,7 @@ window.UpShip = window.UpShip || {};
   function fly(state, ship, next, t) {
     const c = Object.assign({ price: cls(ship).price }, U.research.stats(state, ship)), route = routeOf(state, ship);
     const km = distanceKm(ship.location, next.to);
-    const hours = km / c.speedKmh;
+    let hours = km / c.speedKmh;
     const from = ship.location;
     // Minor incidents, more likely in poor condition.
     const p = (E().incidentBase + E().incidentWear * (1 - ship.condition) ** 2) * c.incidents;
@@ -373,6 +401,9 @@ window.UpShip = window.UpShip || {};
     const load = next.ferry || !route ? { pax: 0, tons: 0, revenue: 0 } : board(state, ship, route, mail);
     if (!next.ferry && route) U.contracts.recordGrantFlight(state, from, ahead);
     const fuel = Math.round(km * c.fuelPerKm * E().costFactor);
+    const berth = U.facilities.dock(state, next.to, t + hours, c.turnaround);
+    hours += berth.delay;                               // circling while waiting for a berth
+    addCost(state, ship, berth.fee + (load.fee || 0));
     ship.legs.push({ from, to: next.to, start: t, hours, km: Math.round(km), ferry: next.ferry, mail: mail > 0,
       pax: load.pax, tons: load.tons, seats: c.passengers, hold: c.cargoTons, revenue: load.revenue });
     state.day.revenue += load.revenue; state.totals.revenue += load.revenue;
@@ -413,6 +444,7 @@ window.UpShip = window.UpShip || {};
       addCost(state, ship, Math.round(c.dailyCost * E().costFactor * (1 + E().lowConditionCostRise * (1 - ship.condition))));
     }
     U.research.daily(state);
+    U.facilities.daily(state);
     state.money += state.day.revenue - state.day.costs;
     state.year.revenue += state.day.revenue; state.year.costs += state.day.costs;
     state.history.push(state.day);
@@ -501,10 +533,10 @@ window.UpShip = window.UpShip || {};
   }
   function clearSave() {
     saving = false;
-    try { for (const k of ["upship.save.v1", "upship.save.v2", "upship.save.v3", "upship.save.v4", SAVE_KEY]) localStorage.removeItem(k); } catch (e) {}
+    try { for (const k of ["upship.save.v1", "upship.save.v2", "upship.save.v3", "upship.save.v4", "upship.save.v5", SAVE_KEY]) localStorage.removeItem(k); } catch (e) {}
   }
 
   U.sim = { telegram, addGeneral, addIncome, nearestCity, distanceKm, fare, freightRate, dailyPassengers, dailyFreight, start, advance, beginTurn, dateOf, dateAtHour, H,
-    routeSummary, save, load, clearSave, routeOf, routeName, routeLegs, createRoute, deleteRoute, canAssign, assign,
+    routeSummary, save, load, clearSave, editRoute, routeOf, routeName, routeLegs, createRoute, deleteRoute, canAssign, assign,
     order, rename, suggestName, longestLeg, catalog, orderTerms, saleValue, canSell, sell, positionAt, ageYears, roman };
 })(window.UpShip);

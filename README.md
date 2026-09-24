@@ -9,7 +9,7 @@ A tycoon game about running an airship passenger and cargo line in a golden age 
 
 Your game saves automatically in the browser.
 
-## Current state: milestone 5
+## Current state: milestone 6 (phase 1 complete)
 
 - New-game setup on the map: country, home city, company name, director, and emblem
 - 45 cities from Lisbon to Moscow and down to Cairo, with about 1924 borders
@@ -25,6 +25,8 @@ Your game saves automatically in the browser.
 - A tutorial built around the first mail contract, which can be skipped
 - Research: twelve Era I technologies in three branches, funding levels, repeatable refinements, and per-ship refits
 - Three research-unlocked ship classes for each country
+- Facilities: masts, terminals, and sheds in three sizes, with public ones at larger cities
+- Map layers for passengers, freight, and facilities; route editing; fleet-wide refits
 
 ## Project layout
 
@@ -35,6 +37,7 @@ Your game saves automatically in the browser.
 - `js/setup.js`: the new-game setup screens
 - `js/shipart.js`: the ship drawings
 - `js/research.js`: research, its effects on ships, and refits
+- `js/facilities.js`: masts, terminals, and sheds
 - `js/contracts.js`: mail contracts, grants, and loans
 - `js/tutorial.js`: the first-contract tutorial
 - `js/sim.js`: game clock and economy

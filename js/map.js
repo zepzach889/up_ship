@@ -75,8 +75,10 @@ window.UpShip = window.UpShip || {};
     layers.land = el("g", {}, world);
     layers.countries = el("g", { class: "countries" }, world);
     layers.countryLabels = el("g", { class: "country-labels" }, world);
+    layers.overlay = el("g", { class: "overlay" }, world);
     layers.routes = el("g", { class: "routes" }, world);
     layers.cities = el("g", { class: "cities" }, world);
+    layers.fac = el("g", { class: "fac-layer" }, world);
     layers.ships = el("g", { class: "ships" }, world);
 
     drawGraticule();
@@ -175,6 +177,7 @@ window.UpShip = window.UpShip || {};
   }
 
   function syncRoutes(state) {
+    syncExtras(state);
     const live = new Set(state.routes.map(r => r.id));
     for (const id in routeNodes) if (!live.has(id)) { routeNodes[id].g.remove(); delete routeNodes[id]; }
     for (const route of state.routes) {
@@ -200,6 +203,7 @@ window.UpShip = window.UpShip || {};
   // The route being drawn, before it is confirmed.
   let draftNode = null;
   function drawDraft(stops, circuit) {
+    draftDemand(stops);
     if (!draftNode) draftNode = el("path", { class: "route-draft" }, layers.routes);
     draftNode.setAttribute("d", stops && stops.length > 1 ? routePathD(stops, circuit) : "");
     const only = stops && U.tutorial && U.tutorial.draftCities ? U.tutorial.draftCities() : null;
@@ -254,12 +258,16 @@ window.UpShip = window.UpShip || {};
       n.g.setAttribute("transform", `translate(${p.x + dx},${p.y + dy}) rotate(${angle}) scale(${s})`);
       n.g.classList.toggle("is-moored", !p.flying);
       n.g.classList.toggle("is-idle", !ship.routeId);
+      const out = !p.flying && ((ship.overhaulUntil && p.hour < ship.overhaulUntil) || (ship.readyHour > p.hour + 12 && ship.routeId));
+      n.g.classList.toggle("is-out", !!out);
+      if (out && !n.badge) { n.badge = el("g", { class: "out-badge" }, n.g); n.badge.innerHTML = '<circle cx="0" cy="-26" r="9"/><path d="M-4,-22 L3,-29 M1,-31 C5,-33 7,-29 5,-27 C3,-25 0,-27 1,-31 Z"/>'; }
     }
     for (const id in shipNodes) if (!live.has(id)) { shipNodes[id].g.remove(); delete shipNodes[id]; }
   }
 
   // Zoom and pan ------------------------------------------------------------
   function applyView() {
+    setTimeout(() => syncExtras(U.state), 0);
     svg.setAttribute("viewBox", `${view.x} ${view.y} ${view.w} ${view.h}`);
     // zoom = screen pixels per map unit, so labels and icons keep a fixed on-screen size.
     const r = svg.getBoundingClientRect();
@@ -361,5 +369,64 @@ window.UpShip = window.UpShip || {};
     for (const cid in cityNodes) cityNodes[cid].g.classList.toggle("is-home", cid === id);
   }
 
-  U.map = { init, syncRoutes, drawShips, drawDraft, zoomBy, highlight, shipPosition, project, setSetup, setHome };
+  // Map layers ------------------------------------------------------------------------
+  let layerMode = "normal", draftStops = null;
+  function setLayer(mode) { layerMode = mode; syncExtras(U.state); }
+
+  // Facility symbols beside each city: own in the company color, public in slate.
+  const GLYPH = {
+    mast: '<path d="M0,-4.5 L0,3.5 M-2.2,3.5 L2.2,3.5"/><path class="fill" d="M0,-5 L2.4,-2.6 L0,-1.8 Z"/>',
+    terminal: '<rect class="fill" x="-2.8" y="-2.4" width="5.6" height="5"/><path d="M-3.4,-2.4 L0,-4.6 L3.4,-2.4"/>',
+    shed: '<path class="fill" d="M-3.4,3 L-3.4,-0.6 C-3.4,-4.4 3.4,-4.4 3.4,-0.6 L3.4,3 Z"/>',
+    public: '<path class="fill" d="M-3,3 L-3,-1 L0,-3.4 L3,-1 L3,3 Z"/><path d="M-1.2,3 L-1.2,0.6 L1.2,0.6 L1.2,3"/>'
+  };
+  function syncExtras(state) {
+    if (!svg || !state || !state.facilities) return;
+    layers.fac.innerHTML = ""; layers.overlay.innerHTML = "";
+    const z = zoom, F = U.facilities, hour = U.sim.H(state.tick);
+    svg.classList.toggle("layer-facilities", layerMode === "facilities");
+    // Demand circles: by city in the Passengers and Freight layers, or relative to the last stop while drawing.
+    const origin = draftStops && draftStops.length ? draftStops[draftStops.length - 1] : null;
+    if (origin || layerMode === "passengers" || layerMode === "freight") {
+      for (const c of U.CITIES) {
+        let pax, tons;
+        if (origin) {
+          if (c.id === origin) continue;
+          const only = U.tutorial && U.tutorial.draftCities ? U.tutorial.draftCities() : null;
+          if (only && !only.includes(c.id)) continue;
+          pax = U.sim.dailyPassengers(origin, c.id); tons = U.sim.dailyFreight(origin, c.id);
+          if (pax < 2 && tons < 1) continue;
+        }
+        else { pax = U.TIERS[c.tier].demand * U.SPECIALTIES[c.specialty].passengerBoost; tons = U.TIERS[c.tier].demand / 6 * U.SPECIALTIES[c.specialty].freightBoost; }
+        if (origin || layerMode === "passengers") {
+          const r = Math.sqrt(pax) * 2.2 / z;
+          const circ = el("circle", { cx: c.x, cy: c.y, r, class: "demand-pax" }, layers.overlay);
+          el("title", {}, circ).textContent = origin ? `${c.name}: about ${Math.round(pax)} passengers and ${Math.round(tons)} tons a day each way with ${U.cityById[origin].name}` : `${c.name}: passenger demand`;
+        }
+        if (origin || layerMode === "freight") {
+          const r = Math.sqrt(tons) * (origin ? 3.6 : 5.2) / z;
+          el("circle", { cx: c.x, cy: c.y, r, class: origin ? "demand-freight ring" : "demand-freight" }, layers.overlay);
+        }
+      }
+    }
+    // Facility symbols.
+    for (const c of U.CITIES) {
+      const own = state.facilities[c.id] || {}, pub = F.hasPublic(c.id);
+      // Own facilities get a symbol each; the public set shows as one slate symbol.
+      const items = ["mast", "terminal", "shed"].filter(t => own[t]).map(t => ({ t, own: true, level: own[t] }));
+      if (pub && items.length < 3) items.push({ t: "public", own: false, level: 2 });
+      const warn = F.congested(state, c.id, hour);
+      if (!items.length && !warn) continue;
+      const g = el("g", { class: "fac", transform: `translate(${c.x - 5 / z},${c.y - 10 / z}) scale(${1.25 / z})` }, layers.fac);
+      items.forEach((it, i) => {
+        const s1 = el("g", { class: "fac-icon " + (it.own ? "own" : "public"), transform: `translate(${-i * 7.5},0)` }, g);
+        s1.innerHTML = GLYPH[it.t];
+        if (layerMode === "facilities") { const tx = el("text", { x: 0, y: 9.5, class: "fac-size" }, s1); tx.textContent = "SML"[it.level - 1]; }
+      });
+      if (warn) { const w = el("g", { class: "fac-warn", transform: `translate(${8},${-1})` }, g); w.innerHTML = '<circle r="3.4"/><text y="2.3">!</text>'; }
+    }
+  }
+  function draftDemand(stops) { draftStops = stops && stops.length ? stops : null; syncExtras(U.state); }
+
+  U.map = { init, syncRoutes, drawShips, drawDraft, zoomBy, highlight, shipPosition, project, setSetup, setHome, setLayer, syncExtras, draftDemand };
 })(window.UpShip);

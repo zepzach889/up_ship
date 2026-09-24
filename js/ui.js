@@ -21,12 +21,16 @@ window.UpShip = window.UpShip || {};
   const dateLine = d => `${DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
   const shortDate = d => `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 
-  let selection = null, h = null, draft = null, editing = null, picking = null;
+  let selection = null, h = null, draft = null, editing = null, picking = null, fleetFilter = "all";
 
   function init(handlers) {
     h = handlers;
     document.querySelectorAll("[data-auto]").forEach(b => b.addEventListener("click", () => h.setAuto(+b.dataset.auto)));
     $("#next-turn").addEventListener("click", h.nextTurn);
+    document.querySelectorAll("[data-layer]").forEach(b => b.addEventListener("click", () => {
+      document.querySelectorAll("[data-layer]").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+      U.map.setLayer(b.dataset.layer);
+    }));
     $("#zoom-in").addEventListener("click", () => U.map.zoomBy(1.4));
     $("#zoom-out").addEventListener("click", () => U.map.zoomBy(1 / 1.4));
     $("#panel-close").addEventListener("click", () => select(null));
@@ -38,7 +42,13 @@ window.UpShip = window.UpShip || {};
     $("#draft-cancel").addEventListener("click", () => endDraft());
     $("#draft-circuit").addEventListener("change", () => updateDraft());
     $("#draft-create").addEventListener("click", () => {
-      const route = U.sim.createRoute(U.state, draft, $("#draft-circuit").checked);
+      const st = U.state, circuit = $("#draft-circuit").checked;
+      // Build any masts the route needs first.
+      const need = U.facilities.mastsNeeded(st, draft), cost = need.length * U.facilities.TYPES.mast.costs[0];
+      if (st.money < cost) { notify(`Not enough funds for the masts this route needs (${money(cost)}).`); return; }
+      for (const id of need) U.facilities.build(st, id, "mast");
+      const route = draftRoute ? U.sim.editRoute(st, draftRoute, draft, circuit) : U.sim.createRoute(st, draft, circuit);
+      if (need.length) notify(`Built ${need.length === 1 ? "a mast" : need.length + " masts"} at ${need.map(id => city(id).name).join(" and ")} for ${money(cost)}.`);
       endDraft();
       h.changed();
       select({ type: "route", id: route.id });
@@ -51,14 +61,17 @@ window.UpShip = window.UpShip || {};
       const n = e.target.closest("g[data-research]");
       if (n && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); e.stopPropagation(); n.dispatchEvent(new MouseEvent("click", { bubbles: true })); }
     });
-    document.addEventListener("keydown", e => {
-      if (e.target.closest("input, textarea, select")) return;
-      const onControl = e.target.closest("button, [role=button]");
-      if (e.key === " " && !onControl) { e.preventDefault(); h.toggleAuto(); }
-      else if ((e.key === "n" || e.key === "N" || (e.key === "Enter" && !onControl))) h.nextTurn();
-      else if (["0", "1", "2", "3"].includes(e.key)) h.setAuto(+e.key);
+    // Master hotkeys. Caught before buttons see them, so Space never re-presses a focused button.
+    window.addEventListener("keydown", e => {
+      if (e.target.closest("input[type=text], input:not([type]), input[type=number], textarea, select")) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const onControl = e.target.closest("button, [role=button], input[type=checkbox]");
+      if (e.key === " ") { e.preventDefault(); e.stopPropagation(); h.toggleAuto(); }
+      else if (e.key === "n" || e.key === "N") { e.preventDefault(); h.nextTurn(); }
+      else if (e.key === "Enter" && !onControl) h.nextTurn();
+      else if (["0", "1", "2", "3"].includes(e.key)) { e.preventDefault(); h.setAuto(+e.key); }
       else if (e.key === "Escape") { if (draft) endDraft(); else select(null); }
-    });
+    }, true);
   }
 
   // Top bar ----------------------------------------------------------------------
@@ -136,7 +149,27 @@ window.UpShip = window.UpShip || {};
         ${row("Passenger demand", demand)}
         ${row("Your routes", routes.length ? routes.map(routeLink).join("<br>") : "None")}
         ${row("Moored here now", here.length ? here.map(shipLink).join(", ") : "None")}
-      </dl>`;
+      </dl>
+      ${facilitiesBlock(state, c.id)}`;
+  }
+
+  function facilitiesBlock(state, id) {
+    const F = U.facilities, pub = F.hasPublic(id), hasMast = F.canLand(state, id);
+    const lim = F.terminalLimits(state, id), used = state.cityDay[id] || { pax: 0, tons: 0 };
+    const rows = ["mast", "terminal", "shed"].map(type => {
+      const T = F.TYPES[type], lvl = F.ownLevel(state, id, type), cost = F.nextCost(state, id, type);
+      const needsMast = type !== "mast" && !hasMast;
+      const yours = lvl ? `${F.SIZE_NAMES[lvl]}: ${T.about[lvl - 1]}` : "None";
+      const button = cost == null ? "" : `<button class="btn-quiet" data-build="${id}:${type}" ${state.money < cost || needsMast ? "disabled" : ""}>
+        ${lvl ? "Enlarge" : "Build"} to ${F.SIZE_NAMES[lvl + 1].toLowerCase()}, ${money(cost)}</button>
+        <small class="fac-next">${T.about[lvl]}${needsMast ? ". Needs a mast here first." : ""}</small>`;
+      return `<li><div class="fac-head"><b>${T.name}</b><span>${yours}</span></div>${button}</li>`;
+    }).join("");
+    return `<h3>Facilities</h3>
+      <p class="small">${pub ? "A public mast, terminal, and shed (medium size) are open to any company here, for a fee. Your own avoid the fees." : "No public facilities here. You need your own mast to land."}</p>
+      <ul class="facilities">${rows}</ul>
+      <dl>${row("Boarded today", `${Math.round(used.pax)} of ${lim.pax === Infinity ? "any number of" : lim.pax} passengers, ${Math.round(used.tons)} of ${lim.tons === Infinity ? "any" : lim.tons} tons`)}</dl>
+      ${F.ownLevel(state, id, "mast") && !F.ownLevel(state, id, "terminal") ? `<p class="note">Your mast's waiting room handles about ${F.BASIC_ROOM.pax} passengers and ${F.BASIC_ROOM.tons} tons a day${pub ? " (the public terminal is used when it is larger)" : ""}.</p>` : ""}`;
   }
 
   function shipStatus(state, ship, progress) {
@@ -289,7 +322,8 @@ window.UpShip = window.UpShip || {};
         ${row("Costs", money(sum.costs))}
         ${row("Profit", `<span class="${sum.profit < 0 ? "neg" : "pos"}">${money(sum.profit)}</span>`)}
       </dl>` : `<p class="note">Results appear after the first full day of service.</p>`}
-      <button class="btn-danger" data-act="delete-route">Delete route</button>`;
+      <div class="btn-row"><button class="btn-quiet" data-act="edit-route">Edit stops</button>
+      <button class="btn-danger" data-act="delete-route">Delete route</button></div>`;
   }
 
   function lockedClassCards(state) {
@@ -316,7 +350,8 @@ window.UpShip = window.UpShip || {};
         t.price -= grant;
         const weeks = t.days < 45 ? `${Math.round(t.days / 7)} weeks` : `${Math.round(t.days / 30 * 2) / 2} months`;
         const surplus = c.kind === "surplus", left = state.surplusLeft[id] || 0;
-        const blocked = state.money < t.price || (surplus && !left);
+        const deliverAt = U.facilities.deliveryCity(state, id);
+        const blocked = state.money < t.price || (surplus && !left) || !deliverAt;
         return `<section class="card">
           <h4>${c.name}</h4>
           ${U.shipArt.illustration(c.art || c.kind, c.liner ? 290 : 270)}
@@ -333,7 +368,9 @@ window.UpShip = window.UpShip || {};
           </dl>
           <div class="card-foot"><span class="price">${money(t.price)}${grant ? ` <small class="was">${money(t.price + grant)}</small>` : ""}</span>
             <button class="btn" data-order="${id}" ${blocked ? "disabled" : ""}>Order</button></div>
-          ${surplus && !left ? `<p class="note">Every surplus hull has been sold.</p>` : state.money < t.price ? `<p class="note">Not enough funds.</p>` : ""}
+          ${!deliverAt ? `<p class="note">Needs a ${U.facilities.SIZE_NAMES[U.facilities.shipSize(id)].toLowerCase()} shed or larger to be built in: build or enlarge your own shed${U.facilities.hasPublic(state.company.home) ? " (public sheds are medium)" : ""}.</p>`
+            : surplus && !left ? `<p class="note">Every surplus hull has been sold.</p>` : state.money < t.price ? `<p class="note">Not enough funds.</p>`
+            : deliverAt !== state.company.home ? `<p class="note">Delivered at ${city(deliverAt).name}, where your shed is big enough.</p>` : ""}
         </section>`;
       }).join("")}
       ${U.research.builtWith(state).length ? `<p class="note">New ships are built with: ${U.research.builtWith(state).map(id => U.research.techById[id].name).join(", ")}.</p>` : ""}
@@ -407,21 +444,47 @@ window.UpShip = window.UpShip || {};
       ${branches}`;
   }
 
+  // Which group a ship falls in for the Fleet panel's filters.
+  function shipGroup(state, s) {
+    if (s.deliveryTick > state.tick) return "building";
+    const pos = U.map.shipPosition(s, U.progress || 0);
+    if (pos.flying) return "flying";
+    if ((s.overhaulUntil && pos.hour < s.overhaulUntil) || (s.readyHour > pos.hour + 12 && s.routeId)) return "out";
+    return "moored";
+  }
+
   function fleetPanel(state) {
-    const counts = {};
-    for (const sh of state.ships) counts[sh.classId] = (counts[sh.classId] || 0) + 1;
+    const counts = {}, groups = { all: 0, flying: 0, moored: 0, out: 0, building: 0 };
+    const list = state.ships.map(s => ({ s, g: shipGroup(state, s) }));
+    for (const { s, g } of list) { counts[s.classId] = (counts[s.classId] || 0) + 1; groups[g]++; groups.all++; }
+    const names = { all: "All", flying: "Flying", moored: "Moored", out: "Out of service", building: "Being built" };
+    const shown = list.filter(x => fleetFilter === "all" || x.g === fleetFilter);
+    // Refits across the fleet, one row per researched improvement.
+    const refitRows = U.research.TECHS.filter(t => t.fit === "ship" && U.research.has(state, t.id)).map(t => {
+      const lacking = state.ships.filter(sh => U.research.refitOptions(state, sh).some(o => o.id === t.id));
+      if (!lacking.length) return "";
+      const cost = sh => U.research.refitOptions(state, sh).find(o => o.id === t.id).cost;
+      const planned = lacking.filter(sh => (sh.refitPlan || []).includes(t.id));
+      const total = lacking.reduce((a, sh) => a + cost(sh), 0);
+      return `<li><details><summary><label><input type="checkbox" data-refit-all="${t.id}" ${planned.length === lacking.length ? "checked" : ""}>
+          <span><b>${t.name}</b> for all ${lacking.length} ship${lacking.length > 1 ? "s" : ""} lacking it, ${money(total)}</span></label>
+          <small>${planned.length} of ${lacking.length} planned. ${t.effect}.</small></summary>
+        <ul class="refits">${lacking.map(sh => `<li><label><input type="checkbox" data-refit-ship="${sh.id}:${t.id}" ${(sh.refitPlan || []).includes(t.id) ? "checked" : ""}>
+          <span>${esc(sh.name)}, ${money(cost(sh))}</span></label></li>`).join("")}</ul></details></li>`;
+    }).join("");
+    const committed = state.ships.reduce((a, sh) => a + U.research.refitOptions(state, sh).filter(o => (sh.refitPlan || []).includes(o.id)).reduce((x, o) => x + o.cost, 0), 0);
     return `
       <h2>Fleet</h2>
       <p class="sub">${state.ships.length} ship${state.ships.length === 1 ? "" : "s"}</p>
       <dl>${Object.keys(counts).map(id => row(U.SHIP_CLASSES[id].name, counts[id])).join("")}</dl>
-      <ul class="ledger spaced">${state.ships.map(s => {
-        const r = U.sim.routeOf(state, s);
-        const status = s.deliveryTick > state.tick ? "Delivery " + shortDate(U.sim.dateOf(s.deliveryTick)) + (r ? ", then " + U.sim.routeName(r.stops, r.circuit) : "")
-          : (r ? U.sim.routeName(r.stops, r.circuit) : "No route") + `, condition ${Math.round(s.condition * 100)}%`;
-        return `<li><button class="ledger-item" data-go="ship:${s.id}"><span>${esc(s.name)}</span>
-          <small>${U.SHIP_CLASSES[s.classId].name}. ${esc(status)}</small></button></li>`;
-      }).join("")}</ul>
-      <button class="btn" data-open-panel="shipyard">Order a ship</button>`;
+      <div class="filters">${Object.keys(names).map(k => `<button class="${fleetFilter === k ? "btn" : "btn-quiet"}" data-filter="${k}">${names[k]} ${groups[k]}</button>`).join("")}</div>
+      <ul class="ledger">${shown.map(({ s, g }) => `<li><button class="ledger-item group-${g}" data-go="ship:${s.id}"><span>${esc(s.name)}</span>
+          <small>${U.SHIP_CLASSES[s.classId].name}, condition ${Math.round(s.condition * 100)}%. ${esc(shipStatus(state, s, U.progress || 0))}.</small></button></li>`).join("")
+        || `<li class="note">No ships in this group.</li>`}</ul>
+      <button class="btn" data-open-panel="shipyard">Order a ship</button>
+      ${refitRows ? `<h3>Refits</h3>
+        <p class="small">Tick improvements to fit at each ship's next overhaul. ${committed ? `Planned so far: ${money(committed)}.` : ""}</p>
+        <ul class="fleet-refits">${refitRows}</ul>` : ""}`;
   }
 
   function companyPanel(state) {
@@ -466,7 +529,7 @@ window.UpShip = window.UpShip || {};
       <div class="btn-row"><button class="btn-quiet" data-decline="${o.id}">Decline</button><button class="btn" data-accept="${o.id}">Accept</button></div></section>`).join("");
     const mail = state.contracts.map(k => {
       const rel = k.required ? Math.round(k.made / k.required * 100) + "%" : "New";
-      const has = state.routes.some(r => U.sim.routeLegs(r).some(([x, y]) => (x === k.a && y === k.b) || (x === k.b && y === k.a)));
+      const has = state.routes.some(r => r.stops.includes(k.a) && r.stops.includes(k.b));
       return `<section class="card"><h4>Mail: ${city(k.a).name} to ${city(k.b).name}</h4>
         <dl>
           ${row("Required", `${k.perWeek === 7 ? "Daily" : k.perWeek + " a week"} each way`)}
@@ -476,8 +539,9 @@ window.UpShip = window.UpShip || {};
           ${row("Penalties so far", money(k.penalties))}
           ${row("Ends", shortDate(U.sim.dateAtHour(k.endHour)))}
         </dl>
-        ${has ? "" : `<p class="note">No route of yours flies between these cities yet. Any ship with half a ton of cargo space flying directly between them carries the mail.</p>
-          <button class="btn" data-draw="${k.a}:${k.b}">Draw this route</button>`}</section>`;
+        ${has ? "" : `<p class="note">No route of yours carries between these cities yet. Any route with both cities as stops counts, including through stops in between.</p>
+          <button class="btn" data-draw="${k.a}:${k.b}">Draw this route</button>`}
+        ${k.tutorial && state.tutorial ? "" : `<button class="btn-danger" data-drop="${k.id}">Drop contract (${money(k.monthly)} penalty)</button>`}</section>`;
     }).join("");
     const grants = state.grants.map(g => `<section class="card"><h4>Grant: ${city(g.a).name} to ${city(g.b).name}</h4>
       <dl>
@@ -485,7 +549,7 @@ window.UpShip = window.UpShip || {};
           : row("Open by", shortDate(U.sim.dateAtHour(g.openBy))) + row("On opening", money(g.upfront))}
         ${row("Monthly", money(g.monthly))}
       </dl>
-      ${g.opened || state.routes.some(r => U.sim.routeLegs(r).some(([x, y]) => (x === g.a && y === g.b) || (x === g.b && y === g.a))) ? "" : `<button class="btn" data-draw="${g.a}:${g.b}">Draw this route</button>`}</section>`).join("");
+      ${g.opened || state.routes.some(r => r.stops.includes(g.a) && r.stops.includes(g.b)) ? "" : `<button class="btn" data-draw="${g.a}:${g.b}">Draw this route</button>`}</section>`).join("");
     return `
       <h2>Contracts</h2>
       <p class="sub">Mail contracts and government grants</p>
@@ -598,6 +662,19 @@ window.UpShip = window.UpShip || {};
       picking = null; h.changed(); render(); return;
     }
     if (b.dataset.accept) { U.contracts.accept(s, b.dataset.accept); h.changed(); render(); return; }
+    if (b.dataset.drop) {
+      const k = s.contracts.find(x => x.id === b.dataset.drop);
+      if (k && confirm(`Drop the ${city(k.a).name}–${city(k.b).name} mail contract? The penalty is ${money(k.monthly)}, and ${k.authority === U.NATIONS[s.company.nation].name ? "your postal ministry" : "the " + k.authority + " postal authority"} will make no new offers for about six months.`)) {
+        U.contracts.dropContract(s, k.id); notify("Contract dropped."); h.changed(); render();
+      }
+      return;
+    }
+    if (b.dataset.build) {
+      const [cid, type] = b.dataset.build.split(":");
+      if (U.facilities.build(s, cid, type)) { notify(`${U.facilities.TYPES[type].name} at ${city(cid).name} is now ${U.facilities.SIZE_NAMES[U.facilities.ownLevel(s, cid, type)].toLowerCase()}.`); h.changed(); render(); U.tutorial.check(selection); }
+      return;
+    }
+    if (b.dataset.filter) { fleetFilter = b.dataset.filter; render(); return; }
     if (b.dataset.decline) { U.contracts.decline(s, b.dataset.decline); h.changed(); render(); return; }
     if (b.dataset.draw) { startDraft(b.dataset.draw.split(":")); return; }
     if (b.dataset.loan) {
@@ -608,7 +685,7 @@ window.UpShip = window.UpShip || {};
       else if (act === "stop-installment") U.contracts.setInstallment(s, 0);
       h.changed(); render(); return;
     }
-    if (b.dataset.research) { U.research.choose(s, b.dataset.research); h.changed(); render(); return; }
+    if (b.dataset.research) { U.research.choose(s, b.dataset.research); h.changed(); render(); U.tutorial.check(selection); return; }
     if (b.dataset.funding) { U.research.setFunding(s, b.dataset.funding); h.changed(); render(); return; }
     if (b.dataset.unassign) { U.sim.assign(s, b.dataset.unassign, null); h.changed(); render(); return; }
     switch (b.dataset.act) {
@@ -617,6 +694,7 @@ window.UpShip = window.UpShip || {};
       case "pick": picking = selection.id; render(); break;
       case "cancel-pick": picking = null; render(); break;
       case "new-route": startDraft(); break;
+      case "edit-route": { const r = s.routes.find(x => x.id === selection.id); startDraft(r.stops, r.id, r.circuit); break; }
       case "overhaul-now": { const ship = s.ships.find(x => x.id === selection.id); ship.overhaulNow = true; h.changed(); render(); break; }
       case "sell": {
         const ship = s.ships.find(x => x.id === selection.id);
@@ -653,6 +731,25 @@ window.UpShip = window.UpShip || {};
   }
   // Refit checkboxes in a ship's panel.
   function onPanelChange(e) {
+    const all = e.target.closest("[data-refit-all]");
+    if (all) {
+      const tech = all.dataset.refitAll;
+      for (const sh of U.state.ships) {
+        if (!U.research.refitOptions(U.state, sh).some(o => o.id === tech)) continue;
+        const plan = new Set(sh.refitPlan || []);
+        if (all.checked) plan.add(tech); else plan.delete(tech);
+        sh.refitPlan = [...plan];
+      }
+      h.changed(); render(); return;
+    }
+    const one = e.target.closest("[data-refit-ship]");
+    if (one) {
+      const [shipId, tech] = one.dataset.refitShip.split(":");
+      const sh = U.state.ships.find(x => x.id === shipId), plan = new Set(sh.refitPlan || []);
+      if (one.checked) plan.add(tech); else plan.delete(tech);
+      sh.refitPlan = [...plan];
+      h.changed(); render(); return;
+    }
     const box = e.target.closest("[data-refit]");
     if (!box || !selection || selection.type !== "ship") return;
     const ship = U.state.ships.find(x => x.id === selection.id);
@@ -663,22 +760,28 @@ window.UpShip = window.UpShip || {};
   }
 
   // Drawing a route ---------------------------------------------------------------------
-  function startDraft(stops) {
+  let draftRoute = null;     // the route being edited, or null for a new one
+  function startDraft(stops, routeId, circuit) {
     draft = Array.isArray(stops) ? stops.slice() : [];
-    $("#draft-circuit").checked = false;
+    draftRoute = routeId || null;
+    $("#draft-circuit").checked = !!circuit;
+    $("#draft .draft-title").textContent = draftRoute ? "Edit route" : "New route";
+    $("#draft-create").textContent = draftRoute ? "Save route" : "Create route";
     select(null);
     $("#draft").hidden = false;
     updateDraft();
   }
   function endDraft() {
-    draft = null;
+    draft = null; draftRoute = null;
     $("#draft").hidden = true;
     U.map.drawDraft(null);
   }
   function addDraftStop(id) {
     const only = U.tutorial.draftCities && U.tutorial.draftCities();
     if (only && !only.includes(id)) return;
-    if (draft.includes(id) || draft.length >= U.ECONOMY.maxStops) return;
+    // Clicking a city already on the route takes it off.
+    if (draft.includes(id)) { draft = draft.filter(x => x !== id); updateDraft(); return; }
+    if (draft.length >= U.ECONOMY.maxStops) return;
     draft.push(id);
     updateDraft();
   }
@@ -696,6 +799,11 @@ window.UpShip = window.UpShip || {};
       text = `${U.sim.routeName(draft, circuit)}. Longest leg ${km(longest)}. ` +
         (fits.length === cat.length ? "Every ship class can fly it." : fits.length ? `Only the ${fits.join(" and ")} can fly it.` : "No ship class has the range for it.");
       if (n < max) text += ` Up to ${max - n} more.`;
+    }
+    if (n) {
+      const need = U.facilities.mastsNeeded(U.state, draft);
+      if (need.length) text += ` Needs ${need.length === 1 ? "a mast" : need.length + " masts"} at ${need.map(id => city(id).name).join(", ")}: ${money(need.length * U.facilities.TYPES.mast.costs[0])}, built when you save.`;
+      if (n === 1 || n > 1) text += " Click a stop again to remove it.";
     }
     $("#draft-text").textContent = text;
     $("#draft-undo").disabled = !n;

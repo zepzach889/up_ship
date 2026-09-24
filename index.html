@@ -96,6 +96,13 @@
       <button class="tg-all btn-quiet" hidden>Dismiss all</button>
     </div>
 
+    <div class="layers" role="group" aria-label="Map layer">
+      <button data-layer="normal" aria-pressed="true">Normal</button>
+      <button data-layer="passengers" aria-pressed="false">Passengers</button>
+      <button data-layer="freight" aria-pressed="false">Freight</button>
+      <button data-layer="facilities" aria-pressed="false">Facilities</button>
+    </div>
+
     <div class="zoom" role="group" aria-label="Zoom">
       <button id="zoom-in" aria-label="Zoom in">+</button>
       <button id="zoom-out" aria-label="Zoom out">−</button>
@@ -109,6 +116,7 @@
   <script src="js/data/ships.js"></script>
   <script src="js/data/nations.js"></script>
   <script src="js/research.js"></script>
+  <script src="js/facilities.js"></script>
   <script src="js/emblem.js"></script>
   <script src="js/shipart.js"></script>
   <script src="js/sim.js"></script>
