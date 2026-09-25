@@ -54,7 +54,9 @@ window.UpShip = window.UpShip || {};
     "Egypt": { lon: 29.5, lat: 28.5, size: 12 }
   };
 
-  let svg, world, layers = {}, view = { x: 0, y: 0, w: M.width, h: M.height }, zoom = 1;
+  let svg, world, layers = {}, view = { x: 0, y: 0, w: M.width, h: M.height }, zoom = 1, zoom0 = null;
+  // Symbols, ships, and city dots grow partway as you zoom in: at half the map's rate, up to a ceiling.
+  const grow = () => 1.15 * Math.min(2.4, Math.sqrt(zoom / (zoom0 || zoom)));
   const cityNodes = {}, shipNodes = {}, routeNodes = {}, countryNodes = {};
   let setupMode = null;
   let onSelect = () => {};
@@ -66,7 +68,7 @@ window.UpShip = window.UpShip || {};
     // All countries together form the land; used for the water lining and the coastline.
     const landShape = el("g", { id: "land-shape" }, defs);
     for (const c of M.countries) el("path", { d: c.path }, landShape);
-    defs.insertAdjacentHTML("beforeend", U.shipArt.DEFS);
+    defs.insertAdjacentHTML("beforeend", U.shipArt.DEFS + U.facArt.DEFS);
 
     world = el("g", {}, svg);
     el("rect", { x: -M.width, y: -M.height, width: M.width * 3, height: M.height * 3, class: "sea" }, world);
@@ -77,8 +79,8 @@ window.UpShip = window.UpShip || {};
     layers.countryLabels = el("g", { class: "country-labels" }, world);
     layers.overlay = el("g", { class: "overlay" }, world);
     layers.routes = el("g", { class: "routes" }, world);
+    layers.fac = el("g", { class: "fac-layer" }, world);      // under the cities, so labels stay readable
     layers.cities = el("g", { class: "cities" }, world);
-    layers.fac = el("g", { class: "fac-layer" }, world);
     layers.ships = el("g", { class: "ships" }, world);
 
     drawGraticule();
@@ -151,7 +153,7 @@ window.UpShip = window.UpShip || {};
   function layoutCities() {
     const z = zoom;
     for (const id in cityNodes) {
-      const n = cityNodes[id], c = n.city, r = U.TIERS[c.tier].r / z;
+      const n = cityNodes[id], c = n.city, r = U.TIERS[c.tier].r * grow() / z;
       n.dot.setAttribute("r", r);
       n.hit.setAttribute("r", Math.max(r * 2.2, 11 / z));
       if (n.ring) n.ring.setAttribute("r", r + 2.6 / z);
@@ -239,22 +241,30 @@ window.UpShip = window.UpShip || {};
       if (!n) {
         const g = el("g", { class: "ship", tabindex: 0, role: "button" }, layers.ships);
         el("ellipse", { rx: 58, ry: 22, class: "ship-hit" }, g);
-        const c0 = U.SHIP_CLASSES[ship.classId];
-        const body = el("use", { href: "#art-" + (c0.art || c0.kind) }, g);
+        const c0 = U.SHIP_CLASSES[ship.classId], art = c0.art || c0.kind, [srx, sry] = U.shipArt.SHADOW[art];
+        // In flight: a shadow on the ground and the top view. At a mast: the side view.
+        const shadow = el("ellipse", { rx: srx, ry: sry, class: "ship-shadow" }, g);
+        const top = el("use", { href: "#art-top-" + art, class: "ship-top" }, g);
+        const body = el("use", { href: "#art-" + art, class: "ship-side" }, g);
         g.addEventListener("click", e => { e.stopPropagation(); onSelect({ type: "ship", id: ship.id }); });
         g.addEventListener("keydown", e => { if (e.key === "Enter") onSelect({ type: "ship", id: ship.id }); });
-        n = shipNodes[ship.id] = { g, body };
+        n = shipNodes[ship.id] = { g, body, top, shadow };
       }
       n.g.setAttribute("aria-label", "Ship " + ship.name);
       const p = shipPosition(ship, progress);
-      const s = 0.36 / zoom;
+      const s = 0.36 * grow() / zoom;
       let dx = 0, dy = 0, angle = p.flying ? p.angle : 0;
       if (!p.flying) {
         // Moored ships stack above their city so the city stays clickable.
         const k = moored[p.at] = (moored[p.at] || 0) + 1;
-        dy = -(4 + 11 * k) / zoom;
+        dy = -(4 + 11 * k) * grow() / zoom;
       }
-      if (angle > 90 || angle < -90) n.body.setAttribute("transform", "scale(1,-1)"); else n.body.removeAttribute("transform");
+      if (p.flying) {
+        // The shadow falls the same way whatever the heading: undo the ship's rotation for its offset.
+        const off = 7 / (s * zoom), a = -angle * Math.PI / 180;
+        const ox = off * (Math.cos(a) * 0.8 - Math.sin(a) * 1), oy = off * (Math.sin(a) * 0.8 + Math.cos(a) * 1);
+        n.shadow.setAttribute("cx", ox.toFixed(2)); n.shadow.setAttribute("cy", oy.toFixed(2));
+      }
       n.g.setAttribute("transform", `translate(${p.x + dx},${p.y + dy}) rotate(${angle}) scale(${s})`);
       n.g.classList.toggle("is-moored", !p.flying);
       n.g.classList.toggle("is-idle", !ship.routeId);
@@ -272,6 +282,7 @@ window.UpShip = window.UpShip || {};
     // zoom = screen pixels per map unit, so labels and icons keep a fixed on-screen size.
     const r = svg.getBoundingClientRect();
     zoom = (r.width || M.width) / view.w;
+    if (!zoom0 || view.w >= M.width * 0.98) zoom0 = zoom0 ? Math.min(zoom0, zoom) : zoom;
     layoutCities();
     if (U.state) drawShips(U.state, U.progress || 0);
   }
@@ -371,10 +382,10 @@ window.UpShip = window.UpShip || {};
 
   // Map layers ------------------------------------------------------------------------
   let layerMode = "normal", draftStops = null;
-  function setLayer(mode) { layerMode = mode; syncExtras(U.state); }
+  function setLayer(mode) { layerMode = mode; svg.classList.toggle("layer-dim", mode !== "normal"); syncExtras(U.state); }
 
   // Facility symbols beside each city: own in the company color, public in slate.
-  const GLYPH = {
+  const GLYPH_UNUSED = {
     mast: '<path d="M0,-4.5 L0,3.5 M-2.2,3.5 L2.2,3.5"/><path class="fill" d="M0,-5 L2.4,-2.6 L0,-1.8 Z"/>',
     terminal: '<rect class="fill" x="-2.8" y="-2.4" width="5.6" height="5"/><path d="M-3.4,-2.4 L0,-4.6 L3.4,-2.4"/>',
     shed: '<path class="fill" d="M-3.4,3 L-3.4,-0.6 C-3.4,-4.4 3.4,-4.4 3.4,-0.6 L3.4,3 Z"/>',
@@ -404,26 +415,32 @@ window.UpShip = window.UpShip || {};
           el("title", {}, circ).textContent = origin ? `${c.name}: about ${Math.round(pax)} passengers and ${Math.round(tons)} tons a day each way with ${U.cityById[origin].name}` : `${c.name}: passenger demand`;
         }
         if (origin || layerMode === "freight") {
-          const r = Math.sqrt(tons) * (origin ? 3.6 : 5.2) / z;
-          el("circle", { cx: c.x, cy: c.y, r, class: origin ? "demand-freight ring" : "demand-freight" }, layers.overlay);
+          const r = Math.sqrt(tons) * (origin ? 3.2 : 4.6) / z;
+          el("rect", { x: c.x - r, y: c.y - r, width: 2 * r, height: 2 * r, class: origin ? "demand-freight ring" : "demand-freight" }, layers.overlay);
         }
       }
     }
-    // Facility symbols.
+    // Facility symbols: own in the company color, public in slate, on the side away from the city's label.
+    const big = layerMode === "facilities" ? 1.6 : 1;
+    const sc = 0.72 * grow() * big / z;
     for (const c of U.CITIES) {
       const own = state.facilities[c.id] || {}, pub = F.hasPublic(c.id);
-      // Own facilities get a symbol each; the public set shows as one slate symbol.
-      const items = ["mast", "terminal", "shed"].filter(t => own[t]).map(t => ({ t, own: true, level: own[t] }));
-      if (pub && items.length < 3) items.push({ t: "public", own: false, level: 2 });
+      const items = ["mast", "terminal", "shed"].map(t => own[t] ? { t, own: true, level: own[t] } : pub ? { t, own: false, level: 2 } : null).filter(Boolean);
       const warn = F.congested(state, c.id, hour);
       if (!items.length && !warn) continue;
-      const g = el("g", { class: "fac", transform: `translate(${c.x - 5 / z},${c.y - 10 / z}) scale(${1.25 / z})` }, layers.fac);
-      items.forEach((it, i) => {
-        const s1 = el("g", { class: "fac-icon " + (it.own ? "own" : "public"), transform: `translate(${-i * 7.5},0)` }, g);
-        s1.innerHTML = GLYPH[it.t];
-        if (layerMode === "facilities") { const tx = el("text", { x: 0, y: 9.5, class: "fac-size" }, s1); tx.textContent = "SML"[it.level - 1]; }
-      });
-      if (warn) { const w = el("g", { class: "fac-warn", transform: `translate(${8},${-1})` }, g); w.innerHTML = '<circle r="3.4"/><text y="2.3">!</text>'; }
+      const toLeft = c.label !== "l";                        // label on the right, so symbols go left
+      const dotR = U.TIERS[c.tier].r * grow() / z;
+      const g = el("g", { class: "fac", transform: `translate(${c.x + (toLeft ? -1 : 1) * (dotR + 2 / z)},${c.y - 4 * sc}) scale(${sc})` }, layers.fac);
+      let x = 0;
+      const list = toLeft ? items.slice().reverse() : items;
+      if (warn) list[toLeft ? "unshift" : "push"]({ t: "warn" });
+      for (const it of list) {
+        const half = it.t === "warn" ? 7.5 : U.facArt.WIDTH[it.t][it.level];
+        x += (toLeft ? -1 : 1) * half;
+        el("use", { href: it.t === "warn" ? "#fac-warn" : `#fac-${it.t}-${it.level}`, x, y: it.t === "warn" ? 2 : 0,
+          class: it.t === "warn" ? "" : it.own ? "fac-own" : "fac-pub" }, g);
+        x += (toLeft ? -1 : 1) * (half + 2);
+      }
     }
   }
   function draftDemand(stops) { draftStops = stops && stops.length ? stops : null; syncExtras(U.state); }

@@ -30,7 +30,12 @@ window.UpShip = window.UpShip || {};
     document.querySelectorAll("[data-layer]").forEach(b => b.addEventListener("click", () => {
       document.querySelectorAll("[data-layer]").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
       U.map.setLayer(b.dataset.layer);
+      renderLegend(b.dataset.layer);
     }));
+    $("#legend").addEventListener("click", e => {
+      if (e.target.closest("[data-legend-toggle]")) { legendCollapsed = !legendCollapsed; renderLegend(currentLayer); }
+    });
+    renderLegend("normal");
     $("#zoom-in").addEventListener("click", () => U.map.zoomBy(1.4));
     $("#zoom-out").addEventListener("click", () => U.map.zoomBy(1 / 1.4));
     $("#panel-close").addEventListener("click", () => select(null));
@@ -159,11 +164,13 @@ window.UpShip = window.UpShip || {};
     const rows = ["mast", "terminal", "shed"].map(type => {
       const T = F.TYPES[type], lvl = F.ownLevel(state, id, type), cost = F.nextCost(state, id, type);
       const needsMast = type !== "mast" && !hasMast;
-      const yours = lvl ? `${F.SIZE_NAMES[lvl]}: ${T.about[lvl - 1]}` : "None";
-      const button = cost == null ? "" : `<button class="btn-quiet" data-build="${id}:${type}" ${state.money < cost || needsMast ? "disabled" : ""}>
+      const yours = lvl ? `${F.SIZE_NAMES[lvl]}: ${T.about[lvl - 1]}` : pub ? "Using the public one" : "None";
+      const now = lvl ? U.facArt.icon(type, lvl, true, 40) : pub ? U.facArt.icon(type, 2, false, 40) : "";
+      const button = cost == null ? "" : `<div class="fac-buy">${U.facArt.icon(type, lvl + 1, true, 46)}<div>
+        <button class="btn-quiet" data-build="${id}:${type}" ${state.money < cost || needsMast ? "disabled" : ""}>
         ${lvl ? "Enlarge" : "Build"} to ${F.SIZE_NAMES[lvl + 1].toLowerCase()}, ${money(cost)}</button>
-        <small class="fac-next">${T.about[lvl]}${needsMast ? ". Needs a mast here first." : ""}</small>`;
-      return `<li><div class="fac-head"><b>${T.name}</b><span>${yours}</span></div>${button}</li>`;
+        <small class="fac-next">${T.about[lvl]}${needsMast ? ". Needs a mast here first." : ""}</small></div></div>`;
+      return `<li><div class="fac-head">${now}<b>${T.name}</b><span>${yours}</span></div>${button}</li>`;
     }).join("");
     return `<h3>Facilities</h3>
       <p class="small">${pub ? "A public mast, terminal, and shed (medium size) are open to any company here, for a fee. Your own avoid the fees." : "No public facilities here. You need your own mast to land."}</p>
@@ -809,6 +816,29 @@ window.UpShip = window.UpShip || {};
     $("#draft-undo").disabled = !n;
     $("#draft-create").disabled = n < 2;
     $("#draft-circuit").disabled = n < 3;
+  }
+
+  // The map key: shows only what the current layer draws.
+  let legendCollapsed = false, currentLayer = "normal";
+  function renderLegend(layer) {
+    currentLayer = layer;
+    const A = U.facArt, it = (sw, text) => `<li><span class="sw">${sw}</span><span>${text}</span></li>`;
+    const warn = `<svg viewBox="-9 -9 18 18" width="16" height="16" aria-hidden="true"><use href="#fac-warn"/></svg>`;
+    const circle = cls => `<svg viewBox="-8 -8 16 16" width="16" height="16" aria-hidden="true"><circle r="6.5" class="${cls}"/></svg>`;
+    const square = cls => `<svg viewBox="-8 -8 16 16" width="16" height="16" aria-hidden="true"><rect x="-6" y="-6" width="12" height="12" class="${cls}"/></svg>`;
+    const facItems = [
+      it(A.icon("mast", 2, true, 24), "Your mast"), it(A.icon("terminal", 2, true, 24), "Your terminal"), it(A.icon("shed", 2, true, 24), "Your shed"),
+      it(A.icon("mast", 2, false, 24), "Public facilities, in slate"), it(warn, "Mast or terminal running full")];
+    const rows = {
+      normal: facItems,
+      passengers: [it(circle("demand-pax"), "Passenger demand: bigger circle, more travelers")],
+      freight: [it(square("demand-freight"), "Freight demand: bigger square, more cargo")],
+      facilities: [it(`${A.icon("mast", 1, true, 20)}`, "Small"), it(`${A.icon("mast", 2, true, 24)}`, "Medium"), it(`${A.icon("mast", 3, true, 28)}`, "Large"),
+        it(A.icon("terminal", 2, false, 24), "Public facilities are medium"), it(warn, "Running full")]
+    }[layer];
+    const title = { normal: "Key", passengers: "Key: passengers", freight: "Key: freight", facilities: "Key: facility sizes" }[layer];
+    $("#legend").innerHTML = `<p class="legend-head"><span>${title}</span><button data-legend-toggle>${legendCollapsed ? "Show" : "Hide"}</button></p><ul>${rows.join("")}</ul>`;
+    $("#legend").classList.toggle("is-collapsed", legendCollapsed);
   }
 
   // Company name and emblem in the top bar, and the company color on the map.

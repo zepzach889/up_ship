@@ -102,7 +102,65 @@ window.UpShip = window.UpShip || {};
     <use href="#art-engine" transform="translate(-24 11.4) scale(1.1)"/><use href="#art-engine" transform="translate(-50 9.4)"/>
   </g>`;
 
-  const DEFS = ENGINE + PASSENGER + CARGO + SURPLUS + MEDIUM + FREIGHTER + LINER;
+
+  // Top views, for ships in flight. Nose points right; the map rotates them to their heading.
+  const POD = `<g id="art-pod"><path class="a-dark" d="M5,0 C5,-1.7 3,-2.3 0,-2.3 L-4.4,-2 C-5.6,-1.5 -5.6,1.5 -4.4,2 L0,2.3 C3,2.3 5,1.7 5,0 Z"/><line class="a-proptop" x1="-6.2" y1="-3.4" x2="-6.2" y2="3.4"/></g>`;
+  const HATCH = `<g id="art-hatch"><rect class="a-lo" x="-4.5" y="-3.6" width="9" height="7.2" rx="0.6"/><path class="a-seamtop" d="M-4.5,0 L4.5,0"/><rect class="a-hatchline" x="-4.5" y="-3.6" width="9" height="7.2" rx="0.6"/></g>`;
+  const pods = list => list.map(([x, y, sc]) => `<use href="#art-pod" transform="translate(${x} ${-y})${sc ? ` scale(${sc})` : ""}"/><use href="#art-pod" transform="translate(${x} ${y})${sc ? ` scale(${sc})` : ""}"/>`).join("");
+  const mirror = d => d.replace(/(-?\d+(\.\d+)?),(-?\d+(\.\d+)?)/g, (m, x, _a, y) => `${x},${(-parseFloat(y)).toString()}`);
+  // A top view shares the side view's hull outline, with the upper-side shading mirrored below.
+  function topView(id, o) {
+    return `<g id="art-top-${id}">
+      <path class="a-fin" d="${o.fin}"/><path class="a-fin" d="${mirror(o.fin)}"/>
+      <path class="a-rudder" d="${o.rud}"/><path class="a-rudder" d="${mirror(o.rud)}"/>
+      ${pods(o.pods)}
+      <path class="a-hull" d="${o.hull}"/><path class="a-hi" d="${o.hi}"/><path class="a-lo" d="${mirror(o.hi)}"/>
+      ${RINGS(o.rings, o.ringH)}
+      <path class="a-spine" d="M${o.len - 2},0 L${-o.len + 2},0"/>
+      <path class="a-dark" d="${o.tail}"/>
+      ${o.extra || ""}
+    </g>`;
+  }
+  const TOPS = topView("passenger", {
+      len: 50, fin: "M-24,-6.6 L-41,-15 L-49.5,-15 L-49.5,-0.6 Z", rud: "M-44,-15 L-49.5,-15 L-49.5,-2 L-45,-3 Z",
+      pods: [[-12, 10.4]], hull: "M50,0 C50,-5.5 43,-8.8 30,-9 C10,-9.3 -10,-8.7 -26,-6.6 C-38,-5 -46,-2.4 -50,-0.4 L-50,0.4 C-46,2.4 -38,5 -26,6.6 C-10,8.7 10,9.3 30,9 C43,8.8 50,5.5 50,0 Z",
+      hi: "M49,-2.6 C47,-6.4 41,-8.4 30,-8.6 C10,-8.9 -10,-8.3 -26,-6.3 C-36,-5 -43,-3.2 -47,-1.6 C-40,-3.4 -30,-4.6 -20,-5.2 C0,-6.2 20,-6.4 34,-6 C42,-5.6 47,-4.4 49,-2.6 Z",
+      rings: [38, 26, 14, 2, -10, -22, -34], ringH: x => x > 30 ? 8.4 : x > -15 ? 9 : x > -30 ? 7.2 : 5.2, tail: "M-24,-0.7 L-50,-0.9 L-50,0.9 L-24,0.7 Z",
+      extra: `<rect class="a-band" x="29" y="-8.9" width="1.4" height="17.8"/><rect class="a-band" x="32.4" y="-8.8" width="1.4" height="17.6"/>` })
+    + topView("cargo", {
+      len: 45, fin: "M-18,-9 L-35,-17 L-44.5,-17 L-44.5,-0.8 Z", rud: "M-39,-17 L-44.5,-17 L-44.5,-2 L-40,-3.4 Z",
+      pods: [[-22, 12.4], [30, 12.6]], hull: "M45,0 C45,-7.5 39,-11.6 26,-11.8 C6,-12 -8,-11.6 -20,-9.4 C-33,-7 -41,-3.4 -45,-0.5 L-45,0.5 C-41,3.4 -33,7 -20,9.4 C-8,11.6 6,12 26,11.8 C39,11.6 45,7.5 45,0 Z",
+      hi: "M44,-3.4 C42,-8.6 36,-11.2 26,-11.4 C6,-11.6 -8,-11.2 -20,-9 C-30,-7.2 -37,-4.6 -42,-2 C-34,-5 -24,-7 -12,-7.8 C6,-8.8 22,-8.8 32,-8.2 C39,-7.6 42.5,-6 44,-3.4 Z",
+      rings: [34, 22, 10, -2, -14, -26], ringH: x => x > 30 ? 11 : x > -5 ? 11.8 : x > -20 ? 10.4 : 8, tail: "M-18,-0.8 L-45,-1 L-45,1 L-18,0.8 Z",
+      extra: `<use href="#art-hatch" transform="translate(-6 0) scale(0.85)"/><use href="#art-hatch" transform="translate(4.5 0) scale(0.85)"/><use href="#art-hatch" transform="translate(15 0) scale(0.85)"/>` })
+    + topView("surplus", {
+      len: 57, fin: "M-34,-5 L-47,-12.5 L-56.5,-12.5 L-56.5,-0.5 Z", rud: "M-51,-12.5 L-56.5,-12.5 L-56.5,-1.6 L-52,-2.4 Z",
+      pods: [[20, 8.6, 0.9], [0, 8.6, 0.9], [-20, 8.6, 0.9], [-40, 7.4, 0.8]], hull: "M57,0 C57,-4.4 52,-7 42,-7.1 L-30,-7.1 C-44,-6.4 -52,-3 -57,-0.3 L-57,0.3 C-52,3 -44,6.4 -30,7.1 L42,7.1 C52,7 57,4.4 57,0 Z",
+      hi: "M56,-2 C54.6,-5.2 50,-6.8 42,-6.8 L-30,-6.8 C-42,-6.2 -49,-3.8 -53,-1.8 C-46,-3.6 -38,-4.4 -28,-4.6 L42,-4.6 C49,-4.5 53.8,-3.6 56,-2 Z",
+      rings: [46, 36, 26, 16, 6, -4, -14, -24, -36], ringH: x => x > -30 ? 7 : 5.8, tail: "M-32,-0.6 L-57,-0.8 L-57,0.8 L-32,0.6 Z",
+      extra: `<circle class="a-dark" cx="44" cy="0" r="2.6"/><circle class="a-hiline" cx="44" cy="0" r="1.6"/>` })
+    + topView("medium", {
+      len: 65, fin: "M-35,-8.5 L-54,-19 L-63.5,-19 L-63.5,-0.8 Z", rud: "M-58,-19 L-63.5,-19 L-63.5,-2 L-59,-3.4 Z",
+      pods: [[-6, 12.8], [-28, 12.2]], hull: "M65,0 C65,-6.6 45.5,-11 32.5,-11 L-13,-11 C-39,-11 -57.2,-3.85 -65,-0.44 L-65,0.44 C-57.2,3.85 -39,11 -13,11 L32.5,11 C45.5,11 65,6.6 65,0 Z",
+      hi: "M64,-3 C62,-8 48,-10.4 32.5,-10.4 L-13,-10.4 C-36,-10.4 -52,-5 -60,-2 C-50,-4.6 -36,-6.6 -13,-7 L32.5,-7 C46,-7 58,-5.6 64,-3 Z",
+      rings: [52, 40, 28, 16, 4, -8, -20, -32, -44], ringH: x => ({ 52: 8.6, 40: 10.6, "-20": 10.5, "-32": 9, "-44": 6.8 }[x] || 11), tail: "M-32,-0.8 L-65,-1 L-65,1 L-32,0.8 Z",
+      extra: `<rect class="a-band" x="44" y="-10" width="1.6" height="20"/><rect class="a-band" x="47.6" y="-9.6" width="1.6" height="19.2"/>` })
+    + topView("freighter", {
+      len: 65, fin: "M-30,-11.5 L-50,-23 L-63.5,-23 L-63.5,-1 Z", rud: "M-57,-23 L-63.5,-23 L-63.5,-2.5 L-58,-4.4 Z",
+      pods: [[-40, 14.6], [-4, 16.4], [30, 16.2]], hull: "M65,0 C65,-9 48,-15 32,-15 L-10,-15 C-38,-15 -56,-5.2 -65,-0.6 L-65,0.6 C-56,5.2 -38,15 -10,15 L32,15 C48,15 65,9 65,0 Z",
+      hi: "M64,-4 C61,-11 48,-14.3 32,-14.3 L-10,-14.3 C-34,-14.3 -50,-7.6 -59,-3 C-48,-6.6 -32,-9.6 -10,-10 L32,-10 C46,-10 58,-7.6 64,-4 Z",
+      rings: [54, 42, 30, 18, 6, -6, -18, -30, -42], ringH: x => ({ 54: 10.8, 42: 14, "-18": 13.8, "-30": 11.4, "-42": 8.4 }[x] || 15), tail: "M-28,-1 L-65,-1.2 L-65,1.2 L-28,1 Z",
+      extra: [-19, -8, 3, 14, 25].map(x => `<use href="#art-hatch" transform="translate(${x} 0)"/>`).join("") })
+    + topView("liner", {
+      len: 85, fin: "M-46,-11 L-68,-24 L-83.5,-24 L-83.5,-0.8 Z", rud: "M-76,-24 L-83.5,-24 L-83.5,-2 L-77,-3.8 Z",
+      pods: [[30, 15.8, 1.1], [4, 15.8, 1.1], [-24, 15.6, 1.1], [-50, 13.4]], hull: "M85,0 C85,-8.4 64,-14 44,-14 L-20,-14 C-52,-14 -74,-4.9 -85,-0.5 L-85,0.5 C-74,4.9 -52,14 -20,14 L44,14 C64,14 85,8.4 85,0 Z",
+      hi: "M84,-3.6 C81,-10.4 62,-13.3 44,-13.3 L-20,-13.3 C-48,-13.3 -66,-7 -78,-2.6 C-64,-6 -46,-8.8 -20,-9.2 L44,-9.2 C60,-9.2 76,-7.2 84,-3.6 Z",
+      rings: [72, 60, 48, 36, 24, 12, 0, -12, -24, -36, -48, -60, -70], ringH: x => ({ 72: 10.4, 60: 12.8, 48: 13.8, "-24": 13.8, "-36": 13, "-48": 11.6, "-60": 9.4, "-70": 6.8 }[x] || 14), tail: "M-44,-1 L-85,-1.2 L-85,1.2 L-44,1 Z",
+      extra: `<circle class="a-band" cx="56" cy="0" r="6.4"/><circle class="a-hull" cx="56" cy="0" r="4.4"/><circle class="a-band" cx="56" cy="0" r="2"/>` });
+  // Shadow sizes cast on the map by each top view.
+  const SHADOW = { passenger: [46, 11], cargo: [42, 14], surplus: [54, 9], medium: [60, 12], freighter: [60, 16], liner: [80, 14] };
+
+  const DEFS = ENGINE + PASSENGER + CARGO + SURPLUS + MEDIUM + FREIGHTER + LINER + POD + HATCH + TOPS;
 
   // Each drawing's extent, for panel illustrations.
   const VIEW = { passenger: "-60 -20 120 42", cargo: "-60 -20 120 42", surplus: "-60 -20 120 42",
@@ -114,5 +172,5 @@ window.UpShip = window.UpShip || {};
     return `<svg class="ship-art" viewBox="${VIEW[art]}" width="${width}" height="${Math.round(width * h / w)}" aria-hidden="true"><use href="#art-${art}"/></svg>`;
   }
 
-  U.shipArt = { DEFS, illustration };
+  U.shipArt = { DEFS, illustration, SHADOW };
 })(window.UpShip);
