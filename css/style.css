@@ -577,3 +577,26 @@ body.is-setup .panel { width: 360px; }
 .a-hatchline { fill: none; stroke: color-mix(in srgb, var(--company) 35%, black); stroke-width: 0.5; }
 .a-hiline { fill: none; stroke: color-mix(in srgb, var(--company) 72%, white); stroke-width: 0.5; }
 .ship.is-selected .ship-top { filter: drop-shadow(0 0 1.5px #f3d58f) drop-shadow(0 0 1.5px #f3d58f); }
+
+/* Passenger classes and reputation -------------------------------------------------- */
+.layouts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin: 8px 0 4px; }
+.layout { background: var(--ink); border: 1px solid var(--ink-3); color: var(--ivory); padding: 6px 6px 5px; text-align: left; cursor: pointer; font-family: var(--ui); display: flex; flex-direction: column; gap: 1px; }
+.layout b { font-size: 12px; font-weight: 600; }
+.layout span { font-size: 11px; color: var(--ivory-dim); }
+.layout[aria-pressed="true"] { border-color: var(--brass); box-shadow: inset 0 -2px 0 var(--brass); background: var(--ink-3); }
+.reconfig .btn-row .btn, .reconfig .btn-row .btn-quiet { font-size: 12px; padding: 5px 8px 3px; }
+.own-fares { margin-top: 6px; font-size: 13px; }
+.own-fares summary { cursor: pointer; color: var(--brass); }
+.own-fares form { display: grid; gap: 6px; margin-top: 8px; }
+.own-fares label { display: flex; justify-content: space-between; align-items: center; gap: 10px; color: var(--ivory-dim); }
+.own-fares input { width: 76px; font: inherit; background: var(--ink); color: var(--ivory); border: 1px solid var(--ink-3); padding: 4px 6px; }
+.co-head { display: flex; gap: 12px; align-items: center; }
+.co-head h2 { margin: 0; }
+.rep-bar { height: 10px; background: var(--ink); border: 1px solid var(--ink-3); }
+.rep-bar span { display: block; height: 100%; background: linear-gradient(90deg, var(--brass-dim), var(--brass-hi)); }
+.rep-word { margin: 5px 0 2px; font-size: 15px; color: var(--ivory); }
+.rep-hist { width: 100%; height: 40px; margin: 4px 0; background: var(--ink); border: 1px solid var(--ink-3); }
+.rep-notes { margin: 6px 0 4px; padding-left: 18px; font-size: 13px; color: var(--ivory-dim); }
+.char-scale { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ivory-dim); }
+.char-track { position: relative; flex: 1; height: 8px; background: linear-gradient(90deg, #4f7a86, var(--ink-3) 50%, #b07aa0); border: 1px solid var(--ink-3); }
+.char-track i { position: absolute; top: -4px; width: 4px; height: 16px; margin-left: -2px; background: var(--brass-hi); }

@@ -233,6 +233,7 @@ window.UpShip = window.UpShip || {};
       if (k.startHour > now - 7 * 24 + 1) { k.week = { ab: 0, ba: 0 }; continue; }  // no charge for a partial first week
       const missed = Math.max(0, k.perWeek - k.week.ab) + Math.max(0, k.perWeek - k.week.ba);
       k.required += k.perWeek * 2; k.made += k.perWeek * 2 - missed; k.weeks++;
+      U.passengers.recordMail(state, k.perWeek * 2, missed);
       if (missed) {
         const fine = Math.round(k.monthly / (k.perWeek * 2 * 4.3) * E().missedFlightPenalty * missed);
         S().addGeneral(state, fine); k.penalties += fine;

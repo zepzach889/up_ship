@@ -1,8 +1,8 @@
 // Game state, turns, routes, ships, wear, incidents, telegrams, and the economy.
 window.UpShip = window.UpShip || {};
 (function (U) {
-  const SAVE_KEY = "upship.save.v6";
-  const VERSION = 6;
+  const SAVE_KEY = "upship.save.v7";
+  const VERSION = 7;
   const E = () => U.ECONOMY;
   const TH = () => U.TIME.tickHours;
   const H = tick => tick * TH();                 // hours since 7 am, 1 January 1919
@@ -45,14 +45,19 @@ window.UpShip = window.UpShip || {};
   // Travelers arrive through the day; a half-day turn brings half a day's worth.
   function refillDemand(state, first, share = 0.5) {
     const swing = () => 1 + (Math.random() * 2 - 1) * E().demandSwing;
-    const next = {};
+    const next = {}, pulls = U.passengers.pairPulls(state);
     for (const key of servedPairs(state)) {
       const [a, b] = key.split(">");
       const boost = state.facilities ? U.facilities.demandBoost(state, a) * U.facilities.demandBoost(state, b) : 1;
-      const p = dailyPassengers(a, b) * boost, f = dailyFreight(a, b);
+      // Comfort and fares on the routes serving this pair decide how many travelers it generates.
+      const pull = pulls[key] || { first: 1, second: 1 };
+      const raw = U.passengers.demandSplit(state, a, b, dailyPassengers(a, b) * boost), f = dailyFreight(a, b);
+      const split = { first: raw.first * pull.first, second: raw.second * pull.second };
       const w = state.waiting[key];
-      next[key] = !w ? (first ? { pax: p, tons: f } : { pax: 0, tons: 0 })
-        : { pax: Math.min(w.pax + p * share * swing(), p * E().passengerWaitDays), tons: Math.min(w.tons + f * share * swing(), f * E().freightWaitDays) };
+      next[key] = !w ? (first ? { p1: split.first, p2: split.second, tons: f } : { p1: 0, p2: 0, tons: 0 })
+        : { p1: Math.min(w.p1 + split.first * share * swing(), split.first * E().passengerWaitDays),
+            p2: Math.min(w.p2 + split.second * share * swing(), split.second * E().passengerWaitDays),
+            tons: Math.min(w.tons + f * share * swing(), f * E().freightWaitDays) };
     }
     state.waiting = next;
   }
@@ -85,7 +90,7 @@ window.UpShip = window.UpShip || {};
   function blankDay() { return { revenue: 0, costs: 0, byRoute: {} }; }
   function blankStats() { return { flights: 0, passengers: 0, tons: 0, revenue: 0, costs: 0 }; }
 
-  function newShip(state, classId, name, location, deliveryTick) {
+  function newShip(state, classId, name, location, deliveryTick, config = "two") {
     const c = U.SHIP_CLASSES[classId], surplus = c.kind === "surplus";
     const ship = {
       id: "s" + state.nextId++, name, classId,
@@ -95,6 +100,7 @@ window.UpShip = window.UpShip || {};
       lifeYears: surplus ? E().lifeYears.surplus : E().lifeYears.built,
       overhaulAt: E().defaultOverhaulAt, overhaulUntil: null, endWarned: false,
       fitted: state.research ? U.research.builtWith(state) : [], refitPlan: [],
+      config: c.passengers ? config : null, reconfigTo: null,
       stats: blankStats()
     };
     if (ship.fitted.includes("structures3")) ship.lifeYears += 3;
@@ -121,6 +127,7 @@ window.UpShip = window.UpShip || {};
     };
     U.research.init(state);
     U.facilities.init(state);
+    U.passengers.init(state);
     for (const id of catalog(state)) if (U.SHIP_CLASSES[id].kind === "surplus") state.surplusLeft[id] = E().surplusStock;
     const first = catalog(state)[0];
     newShip(state, first, suggestName(state, first), config.home, 0);
@@ -157,7 +164,7 @@ window.UpShip = window.UpShip || {};
     return m;
   }
   function createRoute(state, stops, circuit) {
-    const route = { id: "r" + state.nextId++, stops: stops.slice(), circuit: !!circuit && stops.length > 2 };
+    const route = { id: "r" + state.nextId++, stops: stops.slice(), circuit: !!circuit && stops.length > 2, fare: "standard", custom: null };
     state.routes.push(route);
     refillDemand(state, true);
     return route;
@@ -196,7 +203,7 @@ window.UpShip = window.UpShip || {};
   function routeOf(state, ship) { return state.routes.find(r => r.id === ship.routeId) || null; }
 
   // Buying, selling, renaming --------------------------------------------------------
-  function order(state, classId, name) {
+  function order(state, classId, name, config) {
     const c = U.SHIP_CLASSES[classId], t = orderTerms(state, classId);
     const grant = U.contracts.buildGrantFor(state, classId, t.price);
     t.price -= grant;
@@ -209,7 +216,7 @@ window.UpShip = window.UpShip || {};
     state.money -= t.price;
     state.year.purchases += t.price;
     const clean = (name || "").trim() || suggestName(state, classId);
-    return newShip(state, classId, clean, deliverAt, state.tick + t.days * 2);
+    return newShip(state, classId, clean, deliverAt, state.tick + t.days * 2, config || "two");
   }
   function rename(state, shipId, name) {
     const clean = name.trim();
@@ -278,19 +285,23 @@ window.UpShip = window.UpShip || {};
     const c = U.research.stats(state, ship);
     const from = route.stops[ship.stop];
     const room = U.facilities.roomToday(state, from);
-    let seats = Math.min(c.passengers, room.pax), hold = Math.min(c.cargoTons - reserved, room.tons), revenue = 0, pax = 0, tons = 0;
+    // Berths by class, cut back if the terminal can't board everyone today.
+    const b = U.passengers.berths(state, ship), cut = b.total ? Math.min(1, room.pax / b.total) : 0;
+    let seats1 = Math.floor(b.first * cut), seats2 = Math.floor(b.second * cut);
+    let hold = Math.min(c.cargoTons - reserved, room.tons), revenue = 0, tons = 0, p1 = 0, p2 = 0;
     for (const to of downstream(route, ship)) {
       const w = state.waiting[pairKey(from, to)];
       if (!w) continue;
-      const km = distanceKm(from, to);
-      const p = Math.min(seats, Math.floor(w.pax));
+      const km = distanceKm(from, to), fr = U.passengers.fares(state, route, km, c.fare);
+      const a = Math.min(seats1, Math.floor(w.p1)), s2 = Math.min(seats2, Math.floor(w.p2));
       const t = Math.min(hold, Math.floor(w.tons * 10) / 10);
-      w.pax -= p; w.tons -= t; seats -= p; hold -= t;
-      pax += p; tons += t;
-      revenue += p * fare(km) * c.fare + t * freightRate(km);
+      w.p1 = Math.max(0, w.p1 - a); w.p2 = Math.max(0, w.p2 - s2); w.tons -= t;
+      seats1 -= a; seats2 -= s2; hold -= t; p1 += a; p2 += s2; tons += t;
+      revenue += a * fr.first + s2 * fr.second + t * freightRate(km);
     }
+    const pax = p1 + p2;
     const fee = U.facilities.recordBoarding(state, from, pax, tons);
-    return { pax, tons: Math.round(tons * 10) / 10, revenue: Math.round(revenue), fee: Math.round(fee) };
+    return { pax, p1, p2, tons: Math.round(tons * 10) / 10, revenue: Math.round(revenue), fee: Math.round(fee) };
   }
 
   function routeDay(state, routeId) {
@@ -321,6 +332,12 @@ window.UpShip = window.UpShip || {};
     const publicShed = !U.facilities.effective(state, ship.location, "shed").own;
     const cost = Math.round(cls(ship).price * E().overhaulCostShare * (frac > 0.8 ? 1.5 : 1) * (publicShed ? 1 + U.facilities.FEES.shed : 1) / 100) * 100;
     const refit = U.research.applyRefits(state, ship);
+    if (ship.reconfigTo && ship.reconfigTo !== ship.config) {
+      const rc = Math.round(cls(ship).price * U.passengers.RECONFIG_SHARE / 100) * 100;
+      refit.cost += rc; refit.done.push(`new cabins, ${U.passengers.CONFIGS[ship.reconfigTo].name.toLowerCase()}`);
+      ship.config = ship.reconfigTo;
+    }
+    ship.reconfigTo = null;
     addCost(state, ship, cost + refit.cost);
     ship.overhaulNow = false;
     ship.overhaulUntil = t + E().overhaulDays * 24;
@@ -372,9 +389,10 @@ window.UpShip = window.UpShip || {};
     let pax = 0, tons = 0;
     for (const to of downstream(route, ship)) {
       const w = state.waiting[pairKey(from, to)];
-      if (w) { pax += w.pax; tons += w.tons; }
+      if (w) { pax += w.p1 + w.p2; tons += w.tons; }
     }
-    const fill = (c.passengers ? Math.min(1, pax / c.passengers) * 0.8 : 0) + Math.min(1, tons / c.cargoTons) * (c.passengers ? 0.2 : 1);
+    const seats = U.passengers.berths(state, ship).total;
+    const fill = (seats ? Math.min(1, pax / seats) * 0.8 : 0) + Math.min(1, tons / c.cargoTons) * (seats ? 0.2 : 1);
     return fill >= E().minLoadToLeave;
   }
 
@@ -387,6 +405,7 @@ window.UpShip = window.UpShip || {};
     const p = (E().incidentBase + E().incidentWear * (1 - ship.condition) ** 2) * c.incidents;
     let incident = Math.random() < p ? (Math.random() < 0.6 ? "forced" : "cancelled") : null;
     if (incident === "forced" && Math.random() > c.engineFailure) incident = null;
+    if (incident) U.passengers.recordIncident(state, incident);
     if (incident === "cancelled") {
       const days = 2;
       const fine = Math.round(c.passengers * fare(km) * 0.3 + 300);
@@ -404,13 +423,15 @@ window.UpShip = window.UpShip || {};
     const berth = U.facilities.dock(state, next.to, t + hours, c.turnaround);
     hours += berth.delay;                               // circling while waiting for a berth
     addCost(state, ship, berth.fee + (load.fee || 0));
+    const seats = U.passengers.berths(state, ship).total;
     ship.legs.push({ from, to: next.to, start: t, hours, km: Math.round(km), ferry: next.ferry, mail: mail > 0,
-      pax: load.pax, tons: load.tons, seats: c.passengers, hold: c.cargoTons, revenue: load.revenue });
+      pax: load.pax, p1: load.p1 || 0, p2: load.p2 || 0, tons: load.tons, seats, hold: c.cargoTons, revenue: load.revenue });
+    if (!next.ferry && route) U.passengers.recordFlight(state, ship, route, load);
     state.day.revenue += load.revenue; state.totals.revenue += load.revenue;
     addCost(state, ship, fuel);
     const rd = routeDay(state, ship.routeId);
     rd.revenue += load.revenue;
-    if (!next.ferry) { rd.seats += c.passengers; rd.pax += load.pax; rd.hold += c.cargoTons; rd.tons += load.tons; }
+    if (!next.ferry) { rd.seats += seats; rd.pax += load.pax; rd.hold += c.cargoTons; rd.tons += load.tons; }
     ship.stats.flights += 1; ship.stats.passengers += load.pax; ship.stats.tons += load.tons; ship.stats.revenue += load.revenue;
     state.totals.flights += 1; state.totals.passengers += load.pax; state.totals.tons += load.tons;
     ship.condition = Math.max(0, ship.condition - hours * E().wearPerFlightHour * wearFactor(state, ship));
@@ -476,6 +497,7 @@ window.UpShip = window.UpShip || {};
     const month = d.getUTCFullYear() * 12 + d.getUTCMonth();
     if (state.month && month !== state.month) {
       U.contracts.monthly(state);
+      U.passengers.monthly(state);
       for (const r of state.routes) {
         const s = routeSummary(state, r.id);
         if (s.days >= 30 && s.profit < 0)
@@ -533,7 +555,7 @@ window.UpShip = window.UpShip || {};
   }
   function clearSave() {
     saving = false;
-    try { for (const k of ["upship.save.v1", "upship.save.v2", "upship.save.v3", "upship.save.v4", "upship.save.v5", SAVE_KEY]) localStorage.removeItem(k); } catch (e) {}
+    try { for (const k of ["upship.save.v1", "upship.save.v2", "upship.save.v3", "upship.save.v4", "upship.save.v5", "upship.save.v6", SAVE_KEY]) localStorage.removeItem(k); } catch (e) {}
   }
 
   U.sim = { telegram, addGeneral, addIncome, nearestCity, distanceKm, fare, freightRate, dailyPassengers, dailyFreight, start, advance, beginTurn, dateOf, dateAtHour, H,

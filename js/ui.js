@@ -22,6 +22,7 @@ window.UpShip = window.UpShip || {};
   const shortDate = d => `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 
   let selection = null, h = null, draft = null, editing = null, picking = null, fleetFilter = "all";
+  const yardConfig = {};      // layout chosen on each Shipyard card
 
   function init(handlers) {
     h = handlers;
@@ -152,6 +153,7 @@ window.UpShip = window.UpShip || {};
         ${row("Size", tier.name)}
         ${row("Specialty", `${sp.name}. ${sp.note}.`)}
         ${row("Passenger demand", demand)}
+        ${row("First-class travelers", Math.round(U.passengers.FIRST_SHARE[c.specialty] * 100) + "%")}
         ${row("Your routes", routes.length ? routes.map(routeLink).join("<br>") : "None")}
         ${row("Moored here now", here.length ? here.map(shipLink).join(", ") : "None")}
       </dl>
@@ -192,6 +194,19 @@ window.UpShip = window.UpShip || {};
     if (ship.readyHour > pos.hour + 12 && ship.routeId) return `Grounded for repairs at ${c(pos.at)} until ${shortDate(U.sim.dateAtHour(ship.readyHour))}`;
     if (!ship.routeId) return `Waiting at ${c(pos.at)} with no route`;
     return `Moored at ${c(pos.at)}`;
+  }
+
+  // Cabin layout, comfort, and changing the layout at the next overhaul.
+  function cabinRows(state, ship) {
+    const P = U.passengers, b = P.berths(state, ship), now = P.comfort(ship), fresh = P.comfortNew(ship);
+    const cost = Math.round(U.SHIP_CLASSES[ship.classId].price * P.RECONFIG_SHARE / 100) * 100;
+    return `${row("Layout", P.configOf(ship).name)}
+      ${row("Berths", b.first && b.second ? `${b.total}: ${b.first} first, ${b.second} second` : `${b.total}`)}
+      ${row("Comfort", `${now} of 100${now < fresh ? ` (${fresh} when overhauled)` : ""}`)}
+      </dl><div class="reconfig"><p class="small">Change the layout at the next overhaul, ${money(cost)}:</p><div class="btn-row">${P.CONFIG_ORDER.map(k => {
+        const on = (ship.reconfigTo || ship.config) === k;
+        return `<button class="${on ? "btn" : "btn-quiet"}" data-reconfig="${ship.id}:${k}">${P.CONFIGS[k].name}</button>`;
+      }).join("")}</div>${ship.reconfigTo ? `<p class="small">Planned: ${P.CONFIGS[ship.reconfigTo].name.toLowerCase()} at the next overhaul.</p>` : ""}</div><dl>`;
   }
 
   // Improvements a ship carries, and the refits the player can choose for its next overhaul.
@@ -250,7 +265,7 @@ window.UpShip = window.UpShip || {};
       <p class="status" id="live-status">${shipStatus(state, ship, U.progress || 0)}</p>
       ${routeBlock}
       ${leg && !leg.ferry ? `<dl class="spaced">
-        ${rs.passengers ? row("Passengers aboard", `${leg.pax} of ${rs.passengers}`) : ""}
+        ${rs.passengers ? row("Passengers aboard", `${leg.pax} of ${leg.seats || U.passengers.berths(state, ship).total}${leg.p1 ? ` (${leg.p1} first)` : ""}`) : ""}
         ${row("Cargo aboard", `${leg.tons} of ${rs.cargoTons} ${rs.cargoTons === 1 ? "ton" : "tons"}`)}
       </dl>` : ""}
       ${building ? "" : `<h3>Condition</h3>
@@ -264,7 +279,7 @@ window.UpShip = window.UpShip || {};
       ${ship.overhaulUntil || ship.overhaulNow ? "" : `<button class="btn-quiet" data-act="overhaul-now">Overhaul at next chance</button>`}`}
       <h3>Ship</h3>
       <dl>
-        ${row("Passengers", rs.passengers || "None")}
+        ${rs.passengers ? cabinRows(state, ship) : row("Passengers", "None")}
         ${row("Cargo", rs.cargoTons + (rs.cargoTons === 1 ? " ton" : " tons"))}
         ${row("Cruising speed", rs.speedKmh + " km/h")}
         ${row("Range", km(rs.rangeKm))}
@@ -288,6 +303,23 @@ window.UpShip = window.UpShip || {};
       <button class="btn-danger" data-act="sell" ${sellWhy ? "disabled" : ""}>Sell ${esc(ship.name)}</button>
       ${sellWhy ? `<p class="note">${sellWhy}; it can be sold once moored.</p>` : ""}`}
       <p class="note">${cls.basis}.${cls.note ? " " + cls.note : ""}</p>`;
+  }
+
+  function faresBlock(state, route) {
+    const P = U.passengers, first = route.stops[0], last = route.stops[route.stops.length - 1];
+    const fr = P.fares(state, route, U.sim.distanceKm(first, last), 1);
+    const levels = Object.entries(P.FARE_LEVELS).map(([k, l]) => `<button class="${!route.custom && (route.fare || "standard") === k ? "btn" : "btn-quiet"}" data-fare="${k}">${l.name}</button>`).join("");
+    const cu = route.custom || { first: 100, second: 100 };
+    return `<h3>Fares</h3>
+      <div class="btn-row">${levels}</div>
+      <p class="small">${route.custom ? "Your own fares are set." : { cheap: "25% below standard: fills seats and leans your name toward affordable.", standard: "The usual fares for the distance.", premium: "25% above standard: fewer second-class travelers, and leans your name toward luxury." }[route.fare || "standard"]}</p>
+      <dl>${route.circuit ? "" : row(`${city(first).name} to ${city(last).name}`, `first ${lsd(fr.first)}, second ${lsd(fr.second)}`)}</dl>
+      <details class="own-fares" ${route.custom ? "open" : ""}><summary>Set fares yourself</summary>
+        <form data-own-fares="${route.id}">
+          <label>First class, % of standard <input name="first" type="number" min="40" max="250" step="5" value="${cu.first}"></label>
+          <label>Second class, % of standard <input name="second" type="number" min="40" max="250" step="5" value="${cu.second}"></label>
+          <div class="btn-row"><button class="btn-quiet" type="submit">Use these fares</button>${route.custom ? `<button class="btn-quiet" type="button" data-fare="standard">Back to standard</button>` : ""}</div>
+        </form></details>`;
   }
 
   function routePanel(state, id) {
@@ -315,8 +347,8 @@ window.UpShip = window.UpShip || {};
       <p class="sub">${route.circuit ? "Circuit" : "Out and back"}. Ships leave as soon as they are ready.</p>
       <dl>
         ${legs.map(([a, b]) => row(`${city(a).name} to ${city(b).name}`, km(U.sim.distanceKm(a, b)))).join("")}
-        ${route.circuit ? "" : row(`Fare, ${city(first).name} to ${city(last).name}`, lsd(U.sim.fare(U.sim.distanceKm(first, last))))}
       </dl>
+      ${faresBlock(state, route)}
       <h3>Ships</h3>
       ${ships.length ? `<ul class="plain-list">${ships.map(s => `<li>${shipLink(s)} <button class="btn-quiet" data-unassign="${s.id}">Remove</button></li>`).join("")}</ul>`
         : `<p class="note">No ships on this route yet.</p>`}
@@ -345,6 +377,17 @@ window.UpShip = window.UpShip || {};
     }).join("");
   }
 
+  // The three cabin layouts for a class, with berths and comfort for each.
+  function layoutPicker(state, id) {
+    const P = U.passengers, cfg = yardConfig[id] || "two", c = U.SHIP_CLASSES[id];
+    const probe = cf => ({ classId: id, config: cf, condition: 1 });
+    return `<div class="layouts" role="group" aria-label="Cabin layout">${P.CONFIG_ORDER.map(k => {
+      const b = Math.max(1, Math.floor(c.passengers * P.CONFIGS[k].berths)), f = Math.round(b * P.CONFIGS[k].firstShare);
+      return `<button class="layout" data-config="${id}:${k}" aria-pressed="${cfg === k}"><b>${P.CONFIGS[k].name}</b>
+        <span>${b} berths${f && f < b ? `, ${f} first` : ""}</span><span>Comfort ${P.comfortNew(probe(k))}</span></button>`;
+    }).join("")}</div>`;
+  }
+
   function shipyardPanel(state) {
     const home = city(state.company.home), nation = U.NATIONS[state.company.nation];
     return `
@@ -363,8 +406,9 @@ window.UpShip = window.UpShip || {};
           <h4>${c.name}</h4>
           ${U.shipArt.illustration(c.art || c.kind, c.liner ? 290 : 270)}
           <p class="card-role">${c.role}. ${c.basis}.</p>
+          ${c.passengers ? layoutPicker(state, id) : ""}
           <dl>
-            ${row("Passengers", c.passengers || "None")}
+            ${c.passengers ? "" : row("Passengers", "None")}
             ${row("Cargo", c.cargoTons + (c.cargoTons === 1 ? " ton" : " tons"))}
             ${row("Speed", c.speedKmh + " km/h")}
             ${row("Range", km(c.rangeKm))}
@@ -382,6 +426,26 @@ window.UpShip = window.UpShip || {};
       }).join("")}
       ${U.research.builtWith(state).length ? `<p class="note">New ships are built with: ${U.research.builtWith(state).map(id => U.research.techById[id].name).join(", ")}.</p>` : ""}
       ${lockedClassCards(state)}`;
+  }
+
+  // Company standing and character, shown in the Company panel.
+  function reputationBlock(state) {
+    const P = U.passengers, r = state.rep, co = state.company;
+    const pos = (r.character + 100) / 2;
+    const hist = r.history.length > 1 ? `<svg class="rep-hist" viewBox="0 0 200 40" preserveAspectRatio="none" aria-hidden="true">
+      <polyline points="${r.history.map((h, i) => `${i / (r.history.length - 1) * 200},${40 - h.standing * 0.4}`).join(" ")}" fill="none" stroke="var(--brass)" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>` : "";
+    return `
+      <h3>Standing</h3>
+      <div class="rep-bar"><span style="width:${r.standing}%"></span></div>
+      <p class="rep-word">${P.standingWord(r.standing)}, ${Math.round(r.standing)} of 100</p>
+      <p class="small">How good travelers think you are: comfort, reliability, and safety. Higher standing brings more travelers everywhere. It rises slowly and falls fast.</p>
+      ${hist}
+      <ul class="rep-notes">${(r.notes.standing.length ? r.notes.standing : ["Updated at the end of each month."]).map(n => `<li>${esc(n)}</li>`).join("")}</ul>
+      <h3>Character</h3>
+      <div class="char-scale"><span>Affordable</span><div class="char-track"><i style="left:${pos}%"></i></div><span>Luxury</span></div>
+      <p class="rep-word">${P.characterWord(r.character)}</p>
+      <p class="small">What you are known for, set by your cabin layouts and fares. A luxury name draws more first-class travelers and fewer second-class; an affordable name the reverse. It changes over years, not months.</p>
+      <ul class="rep-notes">${(r.notes.character.length ? r.notes.character : ["Updated at the end of each month."]).map(n => `<li>${esc(n)}</li>`).join("")}</ul>`;
   }
 
   // Research ---------------------------------------------------------------------------
@@ -502,6 +566,7 @@ window.UpShip = window.UpShip || {};
     return `
       <div class="company-head">${U.emblem.svg(c.emblem, 64)}<div><h2>${esc(c.name)}</h2>
         <p class="sub">${U.NATIONS[c.nation].name}, based at ${city(c.home).name}. Director ${esc(c.director)}.</p></div></div>
+      ${reputationBlock(state)}
       <h3>Since founding, 1 January 1919</h3>
       <dl>
         ${row("Flights", T.flights.toLocaleString("en-GB"))}
@@ -659,7 +724,7 @@ window.UpShip = window.UpShip || {};
     }
     if (b.dataset.openPanel) { select({ type: b.dataset.openPanel }); return; }
     if (b.dataset.order) {
-      const ship = U.sim.order(s, b.dataset.order);
+      const ship = U.sim.order(s, b.dataset.order, undefined, yardConfig[b.dataset.order] || "two");
       if (ship) { notify(`Ordered ${ship.name}, ${U.SHIP_CLASSES[ship.classId].name}. Delivery ${shortDate(U.sim.dateOf(ship.deliveryTick))}.`); h.changed(); render(); }
       return;
     }
@@ -682,6 +747,9 @@ window.UpShip = window.UpShip || {};
       return;
     }
     if (b.dataset.filter) { fleetFilter = b.dataset.filter; render(); return; }
+    if (b.dataset.config) { const [cid, cfg] = b.dataset.config.split(":"); yardConfig[cid] = cfg; render(); return; }
+    if (b.dataset.fare) { const r = s.routes.find(x => x.id === selection.id); r.fare = b.dataset.fare; r.custom = null; h.changed(); render(); return; }
+    if (b.dataset.reconfig) { const [sid, cfg] = b.dataset.reconfig.split(":"); const sh = s.ships.find(x => x.id === sid); sh.reconfigTo = cfg === sh.config ? null : cfg; h.changed(); render(); return; }
     if (b.dataset.decline) { U.contracts.decline(s, b.dataset.decline); h.changed(); render(); return; }
     if (b.dataset.draw) { startDraft(b.dataset.draw.split(":")); return; }
     if (b.dataset.loan) {
@@ -725,6 +793,12 @@ window.UpShip = window.UpShip || {};
     const f = e.target;
     if (f.dataset.rename) {
       if (U.sim.rename(U.state, f.dataset.rename, f.elements.name.value)) { editing = null; h.changed(); render(); }
+    }
+    if (f.dataset.ownFares) {
+      const r = U.state.routes.find(x => x.id === f.dataset.ownFares);
+      const clamp = v => Math.max(40, Math.min(250, Math.round(+v || 100)));
+      r.custom = { first: clamp(f.elements.first.value), second: clamp(f.elements.second.value) };
+      h.changed(); render(); return;
     }
     if (f.dataset.loanForm) {
       const amount = +f.elements.amount.value;
