@@ -1,8 +1,8 @@
 // Game state, turns, routes, ships, wear, incidents, telegrams, and the economy.
 window.UpShip = window.UpShip || {};
 (function (U) {
-  const SAVE_KEY = "upship.save.v7";
-  const VERSION = 7;
+  const SAVE_KEY = "upship.save.v8";
+  const VERSION = 8;
   const E = () => U.ECONOMY;
   const TH = () => U.TIME.tickHours;
   const H = tick => tick * TH();                 // hours since 7 am, 1 January 1919
@@ -90,7 +90,7 @@ window.UpShip = window.UpShip || {};
   function blankDay() { return { revenue: 0, costs: 0, byRoute: {} }; }
   function blankStats() { return { flights: 0, passengers: 0, tons: 0, revenue: 0, costs: 0 }; }
 
-  function newShip(state, classId, name, location, deliveryTick, config = "two") {
+  function newShip(state, classId, name, location, deliveryTick, config = "two", gas = "hydrogen") {
     const c = U.SHIP_CLASSES[classId], surplus = c.kind === "surplus";
     const ship = {
       id: "s" + state.nextId++, name, classId,
@@ -101,6 +101,7 @@ window.UpShip = window.UpShip || {};
       overhaulAt: E().defaultOverhaulAt, overhaulUntil: null, endWarned: false,
       fitted: state.research ? U.research.builtWith(state) : [], refitPlan: [],
       config: c.passengers ? config : null, reconfigTo: null,
+      gas, gasTo: null, gasLeft: U.facilities.GAS[gas].range, sinceTopUp: 0,
       stats: blankStats()
     };
     if (ship.fitted.includes("structures3")) ship.lifeYears += 3;
@@ -203,10 +204,16 @@ window.UpShip = window.UpShip || {};
   function routeOf(state, ship) { return state.routes.find(r => r.id === ship.routeId) || null; }
 
   // Buying, selling, renaming --------------------------------------------------------
-  function order(state, classId, name, config) {
+  const HELIUM_FILL = 0.15;
+  const heliumFill = (state, classId, gas) => gas === "helium" ? Math.round(U.SHIP_CLASSES[classId].price * HELIUM_FILL / 1000) * 1000 : 0;
+  // The gas a new ship must use under the company's policy, if any.
+  function policyGas(state, classId) { const p = state.gasPolicy || {}; return p.byClass && p.byClass[classId] || p.all || null; }
+  function order(state, classId, name, config, gas) {
+    gas = policyGas(state, classId) || gas || "hydrogen";
     const c = U.SHIP_CLASSES[classId], t = orderTerms(state, classId);
     const grant = U.contracts.buildGrantFor(state, classId, t.price);
     t.price -= grant;
+    t.price += heliumFill(state, classId, gas);             // the first fill of helium is costly
     if (state.money < t.price) return null;
     if (grant) U.contracts.useBuildGrant(state, grant);
     if (c.kind === "surplus" && !(state.surplusLeft[classId] > 0)) return null;
@@ -216,7 +223,7 @@ window.UpShip = window.UpShip || {};
     state.money -= t.price;
     state.year.purchases += t.price;
     const clean = (name || "").trim() || suggestName(state, classId);
-    return newShip(state, classId, clean, deliverAt, state.tick + t.days * 2, config || "two");
+    return newShip(state, classId, clean, deliverAt, state.tick + t.days * 2, config || "two", gas);
   }
   function rename(state, shipId, name) {
     const clean = name.trim();
@@ -338,6 +345,12 @@ window.UpShip = window.UpShip || {};
       ship.config = ship.reconfigTo;
     }
     ship.reconfigTo = null;
+    if (ship.gasTo && ship.gasTo !== ship.gas) {
+      refit.cost += ship.gasTo === "helium" ? heliumFill(state, ship.classId, "helium") : Math.round(cls(ship).price * 0.01 / 100) * 100;
+      refit.done.push(`refilled with ${ship.gasTo}`);
+      ship.gas = ship.gasTo;
+    }
+    ship.gasTo = null; ship.gasLeft = U.facilities.GAS[ship.gas].range; ship.sinceTopUp = 0;
     addCost(state, ship, cost + refit.cost);
     ship.overhaulNow = false;
     ship.overhaulUntil = t + E().overhaulDays * 24;
@@ -415,6 +428,12 @@ window.UpShip = window.UpShip || {};
       telegram(state, t, `${ship.name} flight to ${U.cityById[next.to].name} cancelled stop gas cell damage found at ${U.cityById[from].name} stop repairs two days stop compensation £${fine.toLocaleString("en-GB")} stop`, true, { type: "ship", id: ship.id });
       return;
     }
+    // Not enough gas to reach the next stop: valve down to fly light for this leg.
+    if (ship.gasLeft > 0 && ship.gasLeft < km && !U.facilities.canTopUp(state, from, ship.gas)) {
+      ship.gasLeft = 0;
+      const month = Math.floor(t / 720);
+      if (ship.gasWarned !== month) ship.gasWarned = month, telegram(state, t, `${ship.name} short of ${ship.gas} leaving ${U.cityById[from].name} stop flying light with reduced payload stop needs a gas stop on route ${route ? routeName(route.stops, route.circuit) : ""} stop`, false, { type: "ship", id: ship.id });
+    }
     const ahead = next.ferry || !route ? [] : downstream(route, ship);
     const mail = next.ferry || !route ? 0 : U.contracts.loadMail(state, ship, from, ahead, c.cargoTons);
     const load = next.ferry || !route ? { pax: 0, tons: 0, revenue: 0 } : board(state, ship, route, mail);
@@ -435,6 +454,14 @@ window.UpShip = window.UpShip || {};
     ship.stats.flights += 1; ship.stats.passengers += load.pax; ship.stats.tons += load.tons; ship.stats.revenue += load.revenue;
     state.totals.flights += 1; state.totals.passengers += load.pax; state.totals.tons += load.tons;
     ship.condition = Math.max(0, ship.condition - hours * E().wearPerFlightHour * wearFactor(state, ship));
+    // Gas: used with distance, topped up wherever a supply allows.
+    ship.gasLeft -= km; ship.sinceTopUp += km;
+    if (U.facilities.canTopUp(state, next.to, ship.gas)) {
+      const G = U.facilities.GAS[ship.gas];
+      const price = ship.gas === "helium" ? U.facilities.heliumPrice(state, next.to) : 1;
+      addCost(state, ship, Math.round(ship.sinceTopUp * G.perKm * price * cls(ship).price / 90000));
+      ship.gasLeft = G.range; ship.sinceTopUp = 0;
+    } else if (ship.gasLeft < 0) ship.gasLeft = 0;
     ship.location = next.to;
     ship.arrivedHour = t + hours;
     ship.readyHour = t + hours + c.turnaround;
@@ -555,10 +582,10 @@ window.UpShip = window.UpShip || {};
   }
   function clearSave() {
     saving = false;
-    try { for (const k of ["upship.save.v1", "upship.save.v2", "upship.save.v3", "upship.save.v4", "upship.save.v5", "upship.save.v6", SAVE_KEY]) localStorage.removeItem(k); } catch (e) {}
+    try { for (const k of ["upship.save.v1", "upship.save.v2", "upship.save.v3", "upship.save.v4", "upship.save.v5", "upship.save.v6", "upship.save.v7", SAVE_KEY]) localStorage.removeItem(k); } catch (e) {}
   }
 
   U.sim = { telegram, addGeneral, addIncome, nearestCity, distanceKm, fare, freightRate, dailyPassengers, dailyFreight, start, advance, beginTurn, dateOf, dateAtHour, H,
     routeSummary, save, load, clearSave, editRoute, routeOf, routeName, routeLegs, createRoute, deleteRoute, canAssign, assign,
-    order, rename, suggestName, longestLeg, catalog, orderTerms, saleValue, canSell, sell, positionAt, ageYears, roman };
+    order, policyGas, heliumFill, rename, suggestName, longestLeg, catalog, orderTerms, saleValue, canSell, sell, positionAt, ageYears, roman };
 })(window.UpShip);

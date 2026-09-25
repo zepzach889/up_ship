@@ -23,6 +23,7 @@ window.UpShip = window.UpShip || {};
 
   let selection = null, h = null, draft = null, editing = null, picking = null, fleetFilter = "all";
   const yardConfig = {};      // layout chosen on each Shipyard card
+  const yardGas = {};         // gas chosen on each Shipyard card
 
   function init(handlers) {
     h = handlers;
@@ -163,8 +164,15 @@ window.UpShip = window.UpShip || {};
   function facilitiesBlock(state, id) {
     const F = U.facilities, pub = F.hasPublic(id), hasMast = F.canLand(state, id);
     const lim = F.terminalLimits(state, id), used = state.cityDay[id] || { pax: 0, tons: 0 };
-    const rows = ["mast", "terminal", "shed"].map(type => {
-      const T = F.TYPES[type], lvl = F.ownLevel(state, id, type), cost = F.nextCost(state, id, type);
+    const rows = ["mast", "terminal", "shed", "gasplant", "hestore"].map(type => {
+      const T = F.TYPES[type], lvl = F.ownLevel(state, id, type), cost = F.nextCost(state, id, type), single = T.costs.length === 1;
+      if (single) {
+        const needsMast = !hasMast;
+        return `<li><div class="fac-head">${lvl ? U.facArt.icon(type, 1, true, 40) : type === "gasplant" && F.publicGas(id) ? U.facArt.icon(type, 1, false, 40) : ""}<b>${T.name}</b>
+          <span>${lvl ? "Built" : type === "gasplant" && F.publicGas(id) ? "Public supply here" : "None"}</span></div>
+          ${lvl ? "" : `<div class="fac-buy">${U.facArt.icon(type, 1, true, 46)}<div><button class="btn-quiet" data-build="${id}:${type}" ${state.money < cost || needsMast ? "disabled" : ""}>Build, ${money(cost)}</button>
+          <small class="fac-next">${T.about[0]}${needsMast ? ". Needs a mast here first." : ""}</small></div></div>`}</li>`;
+      }
       const needsMast = type !== "mast" && !hasMast;
       const yours = lvl ? `${F.SIZE_NAMES[lvl]}: ${T.about[lvl - 1]}` : pub ? "Using the public one" : "None";
       const now = lvl ? U.facArt.icon(type, lvl, true, 40) : pub ? U.facArt.icon(type, 2, false, 40) : "";
@@ -177,7 +185,9 @@ window.UpShip = window.UpShip || {};
     return `<h3>Facilities</h3>
       <p class="small">${pub ? "A public mast, terminal, and shed (medium size) are open to any company here, for a fee. Your own avoid the fees." : "No public facilities here. You need your own mast to land."}</p>
       <ul class="facilities">${rows}</ul>
-      <dl>${row("Boarded today", `${Math.round(used.pax)} of ${lim.pax === Infinity ? "any number of" : lim.pax} passengers, ${Math.round(used.tons)} of ${lim.tons === Infinity ? "any" : lim.tons} tons`)}</dl>
+      <dl>${row("Gas supply", F.publicGas(id) ? "Public hydrogen and helium" : F.canTopUp(state, id, "hydrogen") ? "Your own" : "None")}
+        ${row("Helium price", `${Math.round(F.heliumPrice(state, id) * 100)}% of the port price`)}
+        ${row("Boarded today", `${Math.round(used.pax)} of ${lim.pax === Infinity ? "any number of" : lim.pax} passengers, ${Math.round(used.tons)} of ${lim.tons === Infinity ? "any" : lim.tons} tons`)}</dl>
       ${F.ownLevel(state, id, "mast") && !F.ownLevel(state, id, "terminal") ? `<p class="note">Your mast's waiting room handles about ${F.BASIC_ROOM.pax} passengers and ${F.BASIC_ROOM.tons} tons a day${pub ? " (the public terminal is used when it is larger)" : ""}.</p>` : ""}`;
   }
 
@@ -194,6 +204,16 @@ window.UpShip = window.UpShip || {};
     if (ship.readyHour > pos.hour + 12 && ship.routeId) return `Grounded for repairs at ${c(pos.at)} until ${shortDate(U.sim.dateAtHour(ship.readyHour))}`;
     if (!ship.routeId) return `Waiting at ${c(pos.at)} with no route`;
     return `Moored at ${c(pos.at)}`;
+  }
+
+  // Lifting gas, range left, and switching at the next overhaul.
+  function gasRows(state, ship) {
+    const G = U.facilities.GAS[ship.gas], other = ship.gas === "helium" ? "hydrogen" : "helium";
+    const forced = U.sim.policyGas(state, ship.classId);
+    return `${row("Lifting gas", G.name)}
+      ${row("Gas range left", ship.gasLeft > 0 ? `${km(Math.round(ship.gasLeft))} of ${km(G.range)}` : "Out: flying light, less payload")}
+      </dl><div class="reconfig">${forced && forced !== ship.gas ? `<p class="small">Switching to ${forced} at the next overhaul, under your gas policy.</p>`
+        : forced ? "" : `<button class="${ship.gasTo ? "btn" : "btn-quiet"}" data-gas-switch="${ship.id}">${ship.gasTo ? `Switching to ${ship.gasTo} at the next overhaul (undo)` : `Switch to ${other} at the next overhaul`}</button>`}</div><dl>`;
   }
 
   // Cabin layout, comfort, and changing the layout at the next overhaul.
@@ -280,6 +300,7 @@ window.UpShip = window.UpShip || {};
       <h3>Ship</h3>
       <dl>
         ${rs.passengers ? cabinRows(state, ship) : row("Passengers", "None")}
+        ${gasRows(state, ship)}
         ${row("Cargo", rs.cargoTons + (rs.cargoTons === 1 ? " ton" : " tons"))}
         ${row("Cruising speed", rs.speedKmh + " km/h")}
         ${row("Range", km(rs.rangeKm))}
@@ -388,6 +409,13 @@ window.UpShip = window.UpShip || {};
     }).join("")}</div>`;
   }
 
+  function gasPicker(state, id) {
+    const forced = U.sim.policyGas(state, id), g = forced || yardGas[id] || "hydrogen";
+    if (forced) return `<p class="small">${forced === "helium" ? "Helium" : "Hydrogen"}, under your gas policy.</p>`;
+    return `<div class="gas-pick" role="group" aria-label="Lifting gas">${["hydrogen", "helium"].map(k => `<button data-gas="${id}:${k}" aria-pressed="${g === k}">
+      <b>${k === "hydrogen" ? "Hydrogen" : "Helium"}</b><span>${k === "hydrogen" ? "Full payload, cheap to top up" : `Safe; 8% less cargo; +${money(U.sim.heliumFill(state, id, "helium"))}`}</span></button>`).join("")}</div>`;
+  }
+
   function shipyardPanel(state) {
     const home = city(state.company.home), nation = U.NATIONS[state.company.nation];
     return `
@@ -398,6 +426,7 @@ window.UpShip = window.UpShip || {};
         const c = U.SHIP_CLASSES[id], t = Object.assign({}, U.sim.orderTerms(state, id));
         const grant = U.contracts.buildGrantFor(state, id, t.price);
         t.price -= grant;
+        t.price += U.sim.heliumFill(state, id, U.sim.policyGas(state, id) || yardGas[id] || "hydrogen");
         const weeks = t.days < 45 ? `${Math.round(t.days / 7)} weeks` : `${Math.round(t.days / 30 * 2) / 2} months`;
         const surplus = c.kind === "surplus", left = state.surplusLeft[id] || 0;
         const deliverAt = U.facilities.deliveryCity(state, id);
@@ -407,6 +436,7 @@ window.UpShip = window.UpShip || {};
           ${U.shipArt.illustration(c.art || c.kind, c.liner ? 290 : 270)}
           <p class="card-role">${c.role}. ${c.basis}.</p>
           ${c.passengers ? layoutPicker(state, id) : ""}
+          ${gasPicker(state, id)}
           <dl>
             ${c.passengers ? "" : row("Passengers", "None")}
             ${row("Cargo", c.cargoTons + (c.cargoTons === 1 ? " ton" : " tons"))}
@@ -515,6 +545,17 @@ window.UpShip = window.UpShip || {};
       ${branches}`;
   }
 
+  function gasPolicyBlock(state) {
+    const P = state.gasPolicy || { all: null, byClass: {} };
+    const btns = (scope, cur) => ["none", "hydrogen", "helium"].map(g => `<button class="${(cur || "none") === g ? "btn" : "btn-quiet"}" data-policy="${scope}:${g}">${{ none: "Ship by ship", hydrogen: "Hydrogen", helium: "Helium" }[g]}</button>`).join("");
+    const classes = [...new Set(state.ships.map(s => s.classId))];
+    const gasCount = g => state.ships.filter(s => s.gas === g).length;
+    return `<h3>Gas policy</h3>
+      <p class="small">${gasCount("hydrogen")} on hydrogen, ${gasCount("helium")} on helium. A policy applies to new orders, and switches other ships at their next overhaul.</p>
+      <p class="field-label">Whole company</p><div class="btn-row">${btns("all", P.all)}</div>
+      ${classes.length > 1 || classes.length === 1 ? `<details class="own-fares"><summary>By ship class</summary>${classes.map(id => `<p class="field-label">${U.SHIP_CLASSES[id].name}</p><div class="btn-row">${btns(id, P.byClass[id])}</div>`).join("")}</details>` : ""}`;
+  }
+
   // Which group a ship falls in for the Fleet panel's filters.
   function shipGroup(state, s) {
     if (s.deliveryTick > state.tick) return "building";
@@ -553,6 +594,7 @@ window.UpShip = window.UpShip || {};
           <small>${U.SHIP_CLASSES[s.classId].name}, condition ${Math.round(s.condition * 100)}%. ${esc(shipStatus(state, s, U.progress || 0))}.</small></button></li>`).join("")
         || `<li class="note">No ships in this group.</li>`}</ul>
       <button class="btn" data-open-panel="shipyard">Order a ship</button>
+      ${gasPolicyBlock(state)}
       ${refitRows ? `<h3>Refits</h3>
         <p class="small">Tick improvements to fit at each ship's next overhaul. ${committed ? `Planned so far: ${money(committed)}.` : ""}</p>
         <ul class="fleet-refits">${refitRows}</ul>` : ""}`;
@@ -724,7 +766,7 @@ window.UpShip = window.UpShip || {};
     }
     if (b.dataset.openPanel) { select({ type: b.dataset.openPanel }); return; }
     if (b.dataset.order) {
-      const ship = U.sim.order(s, b.dataset.order, undefined, yardConfig[b.dataset.order] || "two");
+      const ship = U.sim.order(s, b.dataset.order, undefined, yardConfig[b.dataset.order] || "two", yardGas[b.dataset.order] || "hydrogen");
       if (ship) { notify(`Ordered ${ship.name}, ${U.SHIP_CLASSES[ship.classId].name}. Delivery ${shortDate(U.sim.dateOf(ship.deliveryTick))}.`); h.changed(); render(); }
       return;
     }
@@ -743,10 +785,20 @@ window.UpShip = window.UpShip || {};
     }
     if (b.dataset.build) {
       const [cid, type] = b.dataset.build.split(":");
-      if (U.facilities.build(s, cid, type)) { notify(`${U.facilities.TYPES[type].name} at ${city(cid).name} is now ${U.facilities.SIZE_NAMES[U.facilities.ownLevel(s, cid, type)].toLowerCase()}.`); h.changed(); render(); U.tutorial.check(selection); }
+      if (U.facilities.build(s, cid, type)) { notify(U.facilities.TYPES[type].costs.length === 1 ? `${U.facilities.TYPES[type].name} built at ${city(cid).name}.` : `${U.facilities.TYPES[type].name} at ${city(cid).name} is now ${U.facilities.SIZE_NAMES[U.facilities.ownLevel(s, cid, type)].toLowerCase()}.`); h.changed(); render(); U.tutorial.check(selection); }
       return;
     }
     if (b.dataset.filter) { fleetFilter = b.dataset.filter; render(); return; }
+    if (b.dataset.gas) { const [cid, g] = b.dataset.gas.split(":"); yardGas[cid] = g; render(); return; }
+    if (b.dataset.gasSwitch) { const sh = s.ships.find(x => x.id === b.dataset.gasSwitch); sh.gasTo = sh.gasTo ? null : (sh.gas === "helium" ? "hydrogen" : "helium"); h.changed(); render(); return; }
+    if (b.dataset.policy) {
+      const [scope, g] = b.dataset.policy.split(":"), P = s.gasPolicy = s.gasPolicy || { all: null, byClass: {} };
+      const val = g === "none" ? null : g;
+      if (scope === "all") P.all = val; else P.byClass[scope] = val;
+      // Ships that don't match switch at their next overhaul.
+      for (const sh of s.ships) { const want = U.sim.policyGas(s, sh.classId); sh.gasTo = want && want !== sh.gas ? want : (want ? null : sh.gasTo); }
+      h.changed(); render(); return;
+    }
     if (b.dataset.config) { const [cid, cfg] = b.dataset.config.split(":"); yardConfig[cid] = cfg; render(); return; }
     if (b.dataset.fare) { const r = s.routes.find(x => x.id === selection.id); r.fare = b.dataset.fare; r.custom = null; h.changed(); render(); return; }
     if (b.dataset.reconfig) { const [sid, cfg] = b.dataset.reconfig.split(":"); const sh = s.ships.find(x => x.id === sid); sh.reconfigTo = cfg === sh.config ? null : cfg; h.changed(); render(); return; }
@@ -883,6 +935,10 @@ window.UpShip = window.UpShip || {};
     }
     if (n) {
       const need = U.facilities.mastsNeeded(U.state, draft);
+      if (n > 1) for (const g of ["hydrogen", "helium"]) {
+        const gap = U.facilities.gasGap(U.state, draft, $("#draft-circuit").checked, g), G = U.facilities.GAS[g];
+        if (gap.km > G.range) text += ` A ${g} ship could not top up between ${city(gap.from).name} and ${city(gap.to).name} (${km(Math.round(gap.km))}).`;
+      }
       if (need.length) text += ` Needs ${need.length === 1 ? "a mast" : need.length + " masts"} at ${need.map(id => city(id).name).join(", ")}: ${money(need.length * U.facilities.TYPES.mast.costs[0])}, built when you save.`;
       if (n === 1 || n > 1) text += " Click a stop again to remove it.";
     }
@@ -900,15 +956,17 @@ window.UpShip = window.UpShip || {};
     const warn = `<svg viewBox="-9 -9 18 18" width="16" height="16" aria-hidden="true"><use href="#fac-warn"/></svg>`;
     const circle = cls => `<svg viewBox="-8 -8 16 16" width="16" height="16" aria-hidden="true"><circle r="6.5" class="${cls}"/></svg>`;
     const square = cls => `<svg viewBox="-8 -8 16 16" width="16" height="16" aria-hidden="true"><rect x="-6" y="-6" width="12" height="12" class="${cls}"/></svg>`;
+    const ring = `<svg viewBox="-8 -8 16 16" width="16" height="16" aria-hidden="true"><circle r="6" fill="none" stroke="#5b7a80" stroke-width="1.6"/><circle r="3.5" fill="#2d2418"/></svg>`;
     const facItems = [
       it(A.icon("mast", 2, true, 24), "Your mast"), it(A.icon("terminal", 2, true, 24), "Your terminal"), it(A.icon("shed", 2, true, 24), "Your shed"),
-      it(A.icon("mast", 2, false, 24), "Public facilities, in slate"), it(warn, "Mast or terminal running full")];
+      it(A.icon("gasplant", 1, true, 24), "Your gas plant"), it(A.icon("hestore", 1, true, 24), "Your helium store"),
+      it(ring, "Public facilities here"), it(warn, "Mast or terminal running full")];
     const rows = {
       normal: facItems,
       passengers: [it(circle("demand-pax"), "Passenger demand: bigger circle, more travelers")],
       freight: [it(square("demand-freight"), "Freight demand: bigger square, more cargo")],
       facilities: [it(`${A.icon("mast", 1, true, 20)}`, "Small"), it(`${A.icon("mast", 2, true, 24)}`, "Medium"), it(`${A.icon("mast", 3, true, 28)}`, "Large"),
-        it(A.icon("terminal", 2, false, 24), "Public facilities are medium"), it(warn, "Running full")]
+        it(A.icon("terminal", 2, false, 24), "Public facilities, in slate"), it(A.icon("gasplant", 1, false, 24), "Public gas supply"), it(warn, "Running full")]
     }[layer];
     const title = { normal: "Key", passengers: "Key: passengers", freight: "Key: freight", facilities: "Key: facility sizes" }[layer];
     $("#legend").innerHTML = `<p class="legend-head"><span>${title}</span><button data-legend-toggle>${legendCollapsed ? "Show" : "Hide"}</button></p><ul>${rows.join("")}</ul>`;

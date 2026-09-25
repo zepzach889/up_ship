@@ -49,11 +49,34 @@ window.UpShip = window.UpShip || {};
   };
   const SHED = { 1: shed(5, -3.6, 3.4, -0.6, [0, -1.7, 1.7], 2.6), 2: shed(7, -6.6, 4.8, -3, [0, -2.4, 2.4], 1.6), 3: shed(9.5, -10, 6.6, -5.6, [0, -2.2, 2.2, -4.4, 4.4], 0.6) };
 
+  // Gasholder in its guide frame, and a helium depot with a railway wagon. Cylinders stay steel grey.
+  const GASPLANT = { 1: `<rect x="-10" y="10" width="20" height="1.4" class="fd"/>
+      <rect x="-7.4" y="1.6" width="14.8" height="8.4" class="fb"/><rect x="-7.4" y="1.6" width="3" height="8.4" class="fh"/><rect x="4.6" y="1.6" width="2.8" height="8.4" class="fl"/>
+      <rect x="-7.8" y="1.2" width="15.6" height="0.9" class="fd"/>
+      <rect x="-6.6" y="-5.2" width="13.2" height="6.4" class="fb"/><rect x="-6.6" y="-5.2" width="2.7" height="6.4" class="fh"/><rect x="4.1" y="-5.2" width="2.5" height="6.4" class="fl"/>
+      <rect x="-7" y="-5.6" width="14" height="0.9" class="fd"/><path d="M-6.6,-5.6 C-5,-7.6 5,-7.6 6.6,-5.6 Z" class="fh"/>
+      <path d="M-8.6,10 L-8.6,-9.6 M8.6,10 L8.6,-9.6 M-8.9,-9.6 L8.9,-9.6 M-8.9,-2.2 L8.9,-2.2" class="col"/>
+      <path d="M-3,10 L-3,-9.6 M3,10 L3,-9.6" class="br"/>
+      <path d="M-8.6,-9.6 L-3,-2.2 M-3,-9.6 L-8.6,-2.2 M-3,-9.6 L3,-2.2 M3,-9.6 L-3,-2.2 M3,-9.6 L8.6,-2.2 M8.6,-9.6 L3,-2.2 M-8.6,-2.2 L-3,5 M-3,-2.2 L-8.6,5 M3,-2.2 L8.6,5 M8.6,-2.2 L3,5" class="br"/>
+      <circle cx="-8.6" cy="-9.9" r="0.6" class="fd"/><circle cx="8.6" cy="-9.9" r="0.6" class="fd"/>` };
+  const cyl = x => `<rect x="${x}" y="2.6" width="1.3" height="5.9" rx="0.6" class="cyl"/><rect x="${x}" y="2.6" width="0.45" height="5.9" class="cylhi"/><rect x="${x + 0.1}" y="2.3" width="1.1" height="0.7" rx="0.2" class="cap"/>`;
+  const HESTORE = { 1: `<rect x="-11" y="10" width="22.5" height="1.4" class="fd"/>
+      <path d="M-10.2,-0.5 L-4,-6.4 L2.2,-0.5 Z" class="fb"/><path d="M-10.2,-0.5 L-4,-6.4 L-4,-5 L-8.6,-0.5 Z" class="fh"/>
+      <rect x="-10.6" y="-0.9" width="13.2" height="0.9" class="fd"/>
+      <rect x="-9.8" y="0" width="11.6" height="10" class="fb"/><rect x="-9.8" y="0" width="11.6" height="0.9" class="fh"/><rect x="-9.8" y="9.1" width="11.6" height="0.9" class="fl"/>
+      <rect x="-8.2" y="1.9" width="8.4" height="7.2" class="door"/>${[-7.6, -6, -4.4, -2.8, -1.2].map(cyl).join("")}
+      <path d="M-8.2,9.1 L-8.2,1.9 L0.2,1.9 L0.2,9.1" class="trim"/>
+      <rect x="3.2" y="6.8" width="8" height="1.3" class="fl"/>
+      <rect x="3.6" y="4.9" width="7.2" height="1.25" rx="0.6" class="cyl"/><rect x="3.6" y="3.5" width="7.2" height="1.25" rx="0.6" class="cyl"/>
+      <rect x="3.6" y="4.9" width="7.2" height="0.4" class="cylhi"/><rect x="3.6" y="3.5" width="7.2" height="0.4" class="cylhi"/>
+      <rect x="3.3" y="3.3" width="0.8" height="3" rx="0.2" class="cap"/><rect x="10.3" y="3.3" width="0.8" height="3" rx="0.2" class="cap"/>
+      <circle cx="5" cy="9.1" r="1.25" class="fd"/><circle cx="9.4" cy="9.1" r="1.25" class="fd"/><circle cx="5" cy="9.1" r="0.45" fill="#8a8f93"/><circle cx="9.4" cy="9.1" r="0.45" fill="#8a8f93"/>` };
+
   // Half-widths, for spacing symbols side by side.
-  const WIDTH = { mast: { 1: 5, 2: 5.6, 3: 6.2 }, terminal: { 1: 6.4, 2: 8.4, 3: 11.4 }, shed: { 1: 5.4, 2: 7.4, 3: 9.9 } };
-  const DRAW = { mast: MAST, terminal: TERMINAL, shed: SHED };
+  const WIDTH = { mast: { 1: 5, 2: 5.6, 3: 6.2 }, terminal: { 1: 6.4, 2: 8.4, 3: 11.4 }, shed: { 1: 5.4, 2: 7.4, 3: 9.9 }, gasplant: { 1: 9.4 }, hestore: { 1: 11 } };
+  const DRAW = { mast: MAST, terminal: TERMINAL, shed: SHED, gasplant: GASPLANT, hestore: HESTORE };
   let DEFS = "";
-  for (const t in DRAW) for (const l of [1, 2, 3]) DEFS += `<g id="fac-${t}-${l}">${DRAW[t][l]}</g>`;
+  for (const t in DRAW) for (const l in DRAW[t]) DEFS += `<g id="fac-${t}-${l}">${DRAW[t][l]}</g>`;
   DEFS += `<g id="fac-warn"><path d="M0,-7.5 L7.5,6.5 L-7.5,6.5 Z" fill="#b0342a" stroke="#f0e7d1" stroke-width="1" stroke-linejoin="round"/>
     <rect x="-0.8" y="-2.8" width="1.6" height="5" fill="#f0e7d1"/><circle cx="0" cy="4.3" r="0.9" fill="#f0e7d1"/></g>`;
 

@@ -174,11 +174,14 @@ window.UpShip = window.UpShip || {};
   // A ship's working figures after research.
   function stats(state, ship) {
     const c = U.SHIP_CLASSES[ship.classId], f = new Set(ship.fitted || []), r = R(state);
-    const payload = (f.has("structures1") ? 1.1 : 1) * (f.has("structures2") ? 1.05 : 1) * (1 + 0.02 * r.refinements.structures);
+    // Helium lifts about 8% less: it comes out of cargo, since passenger ships fill their cabins before their lift.
+    // A ship out of gas flies light, losing a fifth of everything it can carry.
+    const light = ship.gasLeft != null && ship.gasLeft <= 0 ? 0.8 : 1, heCargo = ship.gas === "helium" ? 0.92 : 1;
+    const payload = (f.has("structures1") ? 1.1 : 1) * (f.has("structures2") ? 1.05 : 1) * (1 + 0.02 * r.refinements.structures) * light;
     const speed = c.speedKmh * (f.has("engines1") ? 1.08 : 1) * (f.has("structures4") ? 1.1 : 1) * (1 + 0.02 * r.refinements.engines);
     return {
       passengers: Math.floor(c.passengers * payload),
-      cargoTons: Math.round(c.cargoTons * payload * 10) / 10,
+      cargoTons: Math.round(c.cargoTons * payload * heCargo * 10) / 10,
       speedKmh: Math.round(speed),
       rangeKm: Math.round(c.rangeKm * (f.has("engines3") ? 1.2 : 1) * (f.has("structures4") ? 1.1 : 1) / 100) * 100,
       fuelPerKm: c.fuelPerKm * (f.has("engines3") ? 0.9 : 1) * (f.has("engines4") ? 0.75 : 1),

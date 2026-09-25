@@ -9,7 +9,7 @@ A tycoon game about running an airship passenger and cargo line in a golden age 
 
 Your game saves automatically in the browser.
 
-## Current state: milestone 7 (phase 2 begun)
+## Current state: milestone 8
 
 - New-game setup on the map: country, home city, company name, director, and emblem
 - 45 cities from Lisbon to Moscow and down to Cairo, with about 1924 borders
@@ -28,6 +28,7 @@ Your game saves automatically in the browser.
 - Facilities: masts, terminals, and sheds in three sizes, with public ones at larger cities
 - Map layers for passengers, freight, and facilities; route editing; fleet-wide refits
 - Passenger classes: cabin layouts, comfort, fare levels, and company standing and character
+- Lifting gases: hydrogen and helium, gas range and top-ups, gas plants and helium stores, gas policies
 
 ## Project layout
 

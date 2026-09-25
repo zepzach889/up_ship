@@ -12,8 +12,11 @@ window.UpShip = window.UpShip || {};
     terminal: { name: "Terminal", costs: [5000, 12000, 27000], pax: [120, 300, Infinity], tons: [40, 100, Infinity],
       about: ["120 passengers and 40 tons a day", "300 passengers and 100 tons a day", "No limit, and 10% more demand"] },
     shed: { name: "Shed", costs: [15000, 24000, 48000],
-      about: ["Overhauls and builds small ships", "Overhauls and builds medium ships", "Overhauls and builds every ship"] }
+      about: ["Overhauls and builds small ships", "Overhauls and builds medium ships", "Overhauls and builds every ship"] },
+    gasplant: { name: "Gas plant", costs: [4000], about: ["Hydrogen for your ships here, without the public supply"] },
+    hestore: { name: "Helium store", costs: [6000], about: ["Helium bought by the trainload: much cheaper here inland"] }
   };
+  const GAS_TYPES = ["gasplant", "hestore"];
   const SIZE_NAMES = ["None", "Small", "Medium", "Large"];
   const PUBLIC_LEVEL = 2;
   const BASIC_ROOM = { pax: 40, tons: 15 };            // the waiting room that comes with an own mast
@@ -43,7 +46,11 @@ window.UpShip = window.UpShip || {};
     if (hc.works) own(state, home).shed = 3;
     else if (!hasPublic(home)) own(state, home).shed = 1;
   }
-  function own(state, id) { return state.facilities[id] = state.facilities[id] || { mast: 0, terminal: 0, shed: 0 }; }
+  function own(state, id) {
+    const f = state.facilities[id] = state.facilities[id] || { mast: 0, terminal: 0, shed: 0 };
+    f.gasplant = f.gasplant || 0; f.hestore = f.hestore || 0;
+    return f;
+  }
   const ownLevel = (state, id, type) => (state.facilities[id] || {})[type] || 0;
 
   // What a company can use at a city: its own facility, or the public one.
@@ -66,7 +73,7 @@ window.UpShip = window.UpShip || {};
   // Building ---------------------------------------------------------------------------
   function nextCost(state, id, type) {
     const lvl = ownLevel(state, id, type);
-    return lvl >= 3 ? null : TYPES[type].costs[lvl];
+    return lvl >= TYPES[type].costs.length ? null : TYPES[type].costs[lvl];
   }
   function build(state, id, type) {
     const cost = nextCost(state, id, type);
@@ -150,6 +157,36 @@ window.UpShip = window.UpShip || {};
     return ownSheds[0] || null;
   }
 
-  U.facilities = { TYPES, SIZE_NAMES, FEES, BASIC_ROOM, hasPublic, shipSize, init, ownLevel, effective, canLand, terminalLimits,
+  // Lifting gas --------------------------------------------------------------------------
+  const GAS = {
+    hydrogen: { name: "Hydrogen", range: 1500, perKm: 0.0006 },
+    helium: { name: "Helium", range: 2500, perKm: 0.0045 }
+  };
+  const HELIUM_PORTS = ["hamburg", "amsterdam", "london", "marseille", "genoa"];
+  // Public gas supplies stand in industrial cities and in major and large cities and capitals.
+  const publicGas = id => { const c = U.cityById[id]; return c.specialty === "industrial" || hasPublic(id); };
+  function canTopUp(state, id, gas) {
+    if (publicGas(id)) return true;
+    return gas === "helium" ? ownLevel(state, id, "hestore") > 0 : ownLevel(state, id, "gasplant") > 0 || ownLevel(state, id, "hestore") > 0;
+  }
+  // Helium arrives by rail from the ports: dearer the farther inland, much less so with your own store.
+  function heliumPrice(state, id) {
+    const km = Math.min(...HELIUM_PORTS.map(p => S().distanceKm(id, p)));
+    const factor = Math.min(2.5, 1 + 0.35 * km / 500);
+    return ownLevel(state, id, "hestore") ? 1 + (factor - 1) * 0.25 : factor;
+  }
+  // The longest stretch of a route with nowhere to top up, for warnings when drawing routes.
+  function gasGap(state, stops, circuit, gas) {
+    const seq = circuit ? stops.concat(stops) : stops.concat(stops.slice(0, -1).reverse(), stops.slice(1));
+    let run = 0, worst = { km: 0, from: null, to: null }, from = seq[0];
+    for (let i = 1; i < seq.length; i++) {
+      run += S().distanceKm(seq[i - 1], seq[i]);
+      if (run > worst.km) worst = { km: run, from, to: seq[i] };
+      if (canTopUp(state, seq[i], gas)) { run = 0; from = seq[i]; }
+    }
+    return worst;
+  }
+
+  U.facilities = { TYPES, GAS_TYPES, GAS, HELIUM_PORTS, publicGas, canTopUp, heliumPrice, gasGap, SIZE_NAMES, FEES, BASIC_ROOM, hasPublic, shipSize, init, ownLevel, effective, canLand, terminalLimits,
     demandBoost, nextCost, build, mastsNeeded, daily, roomToday, recordBoarding, dock, congested, shedFits, nearestShed, deliveryCity };
 })(window.UpShip);

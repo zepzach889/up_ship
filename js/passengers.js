@@ -95,12 +95,12 @@ window.UpShip = window.UpShip || {};
     state.rep = { standing: 50, character: 0, notes: { standing: [], character: [] }, history: [] };
     state.repMonth = blankMonth();
   }
-  function blankMonth() { return { flights: 0, forced: 0, cancelled: 0, pax: 0, comfortSum: 0, mailMissed: 0, mailFlights: 0, premium: 0, cheap: 0 }; }
+  function blankMonth() { return { flights: 0, forced: 0, cancelled: 0, pax: 0, comfortSum: 0, mailMissed: 0, mailFlights: 0, premium: 0, cheap: 0, helium: 0, paxFlights: 0 }; }
   const rm = state => state.repMonth = state.repMonth || blankMonth();
   function recordFlight(state, ship, route, load) {
     const m = rm(state);
     m.flights++;
-    if (load.pax) { m.pax += load.pax; m.comfortSum += load.pax * comfort(ship); }
+    if (load.pax) { m.pax += load.pax; m.comfortSum += load.pax * comfort(ship); m.paxFlights++; if (ship.gas === "helium") m.helium++; }
     const lvl = route && !route.custom ? route.fare || "standard" : null;
     if (route && route.custom) { const avg = (route.custom.first + route.custom.second) / 200; if (avg < 0.9) m.cheap++; else if (avg > 1.1) m.premium++; }
     else if (lvl === "cheap") m.cheap++; else if (lvl === "premium") m.premium++;
@@ -115,7 +115,8 @@ window.UpShip = window.UpShip || {};
     const incidents = m.forced + m.cancelled * 0.5;
     const reliability = Math.max(0, 1 - (m.flights ? incidents / m.flights * 4 : 0) - (m.mailFlights ? m.mailMissed / m.mailFlights : 0));
     if (m.flights) {
-      const target = Math.max(0, Math.min(100, 0.45 * (avgComfort == null ? 50 : avgComfort) + 42 * reliability - 6 * Math.min(3, m.forced)));
+      const heliumShare = m.paxFlights ? m.helium / m.paxFlights : 0;
+      const target = Math.max(0, Math.min(100, 0.45 * (avgComfort == null ? 50 : avgComfort) + 42 * reliability - 6 * Math.min(3, m.forced) + 5 * heliumShare));
       const gap = target - r.standing;
       r.standing = Math.max(0, Math.min(100, r.standing + gap * (gap > 0 ? 0.12 : 0.35)));
       if (avgComfort != null) notes.standing.push(`Passengers rated the comfort ${Math.round(avgComfort)} of 100 on average.`);
@@ -123,6 +124,7 @@ window.UpShip = window.UpShip || {};
       if (m.cancelled) notes.standing.push(`${m.cancelled} flight${m.cancelled > 1 ? "s" : ""} cancelled.`);
       if (m.mailFlights) notes.standing.push(m.mailMissed ? `${m.mailMissed} of ${m.mailFlights} required mail flights missed.` : "Every required mail flight flown.");
       if (!m.forced && !m.cancelled) notes.standing.push("No incidents.");
+      if (heliumShare > 0.05) notes.standing.push(`${Math.round(heliumShare * 100)}% of passenger flights on helium: travelers feel safer.`);
     } else notes.standing.push("No flights this month.");
     // Character: the fleet's layout and the fares charged.
     let firstB = 0, allB = 0;

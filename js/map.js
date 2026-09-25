@@ -153,7 +153,7 @@ window.UpShip = window.UpShip || {};
   function layoutCities() {
     const z = zoom;
     for (const id in cityNodes) {
-      const n = cityNodes[id], c = n.city, r = U.TIERS[c.tier].r * grow() / z;
+      const n = cityNodes[id], c = n.city, r = U.TIERS[c.tier].r * grow() / z * (layerMode === "passengers" || layerMode === "freight" ? 0.45 : 1);
       n.dot.setAttribute("r", r);
       n.hit.setAttribute("r", Math.max(r * 2.2, 11 / z));
       if (n.ring) n.ring.setAttribute("r", r + 2.6 / z);
@@ -382,7 +382,7 @@ window.UpShip = window.UpShip || {};
 
   // Map layers ------------------------------------------------------------------------
   let layerMode = "normal", draftStops = null;
-  function setLayer(mode) { layerMode = mode; svg.classList.toggle("layer-dim", mode !== "normal"); syncExtras(U.state); }
+  function setLayer(mode) { layerMode = mode; svg.classList.toggle("layer-dim", mode !== "normal"); layoutCities(); syncExtras(U.state); }
 
   // Facility symbols beside each city: own in the company color, public in slate.
   const GLYPH_UNUSED = {
@@ -420,27 +420,43 @@ window.UpShip = window.UpShip || {};
         }
       }
     }
-    // Facility symbols: own in the company color, public in slate, on the side away from the city's label.
-    const big = layerMode === "facilities" ? 1.6 : 1;
-    const sc = 0.72 * grow() * big / z;
+    // Facility symbols. Normal layer: your own, stacked in a pyramid above the city (never top-heavy),
+    // with a slate ring round the dot where public facilities stand. Facilities layer: public ones too.
+    if (layerMode === "passengers" || layerMode === "freight") return;
+    const full = layerMode === "facilities";
+    const sc = 0.62 * grow() * (full ? 1.35 : 1) / z;
     for (const c of U.CITIES) {
-      const own = state.facilities[c.id] || {}, pub = F.hasPublic(c.id);
-      const items = ["mast", "terminal", "shed"].map(t => own[t] ? { t, own: true, level: own[t] } : pub ? { t, own: false, level: 2 } : null).filter(Boolean);
-      const warn = F.congested(state, c.id, hour);
-      if (!items.length && !warn) continue;
-      const toLeft = c.label !== "l";                        // label on the right, so symbols go left
-      const dotR = U.TIERS[c.tier].r * grow() / z;
-      const g = el("g", { class: "fac", transform: `translate(${c.x + (toLeft ? -1 : 1) * (dotR + 2 / z)},${c.y - 4 * sc}) scale(${sc})` }, layers.fac);
-      let x = 0;
-      const list = toLeft ? items.slice().reverse() : items;
-      if (warn) list[toLeft ? "unshift" : "push"]({ t: "warn" });
-      for (const it of list) {
-        const half = it.t === "warn" ? 7.5 : U.facArt.WIDTH[it.t][it.level];
-        x += (toLeft ? -1 : 1) * half;
-        el("use", { href: it.t === "warn" ? "#fac-warn" : `#fac-${it.t}-${it.level}`, x, y: it.t === "warn" ? 2 : 0,
-          class: it.t === "warn" ? "" : it.own ? "fac-own" : "fac-pub" }, g);
-        x += (toLeft ? -1 : 1) * (half + 2);
+      const own = state.facilities[c.id] || {}, pub = F.hasPublic(c.id), dotR = U.TIERS[c.tier].r * grow() / z;
+      const items = [];
+      for (const t of ["mast", "terminal", "shed", "gasplant", "hestore"]) {
+        if (own[t]) items.push({ t, own: true, level: own[t] });
+        else if (full && (t === "gasplant" ? F.publicGas(c.id) : t !== "hestore" && pub)) items.push({ t, own: false, level: t === "gasplant" ? 1 : 2 });
       }
+      const warn = F.congested(state, c.id, hour);
+      if (pub && !full) el("circle", { cx: c.x, cy: c.y, r: dotR + 2.6 / z * grow(), class: "pub-ring" }, layers.fac);
+      if (warn) el("use", { href: "#fac-warn", transform: `translate(${c.x - dotR - 6 * sc},${c.y}) scale(${sc})` }, layers.fac);
+      if (!items.length) continue;
+      // Rows of at most three, the lower rows holding more.
+      // Up to two sit side by side; three or more split into rows, e.g. 1 over 2, 2 over 2, 2 over 3.
+      const n = items.length, rowCount = n <= 2 ? 1 : Math.max(2, Math.ceil(n / 3)), rows = [];
+      let left = n;
+      for (let r = 0; r < rowCount; r++) { const take = Math.ceil(left / (rowCount - r)); rows.push(take); left -= take; }
+      rows.sort((a, b) => a - b);                           // top to bottom, fullest row at the bottom
+      const below = c.label === "t";                        // label above the dot: stack below it instead
+      const g = el("g", { class: "fac", transform: `translate(${c.x},${below ? c.y + dotR + 1 / z : c.y - dotR - 1 / z}) scale(${sc})` }, layers.fac);
+      const rowH = 23, gap = 1.5;
+      let k = 0;
+      rows.forEach((count, ri) => {
+        const row = items.slice(k, k + count); k += count;
+        const width = row.reduce((a, it) => a + 2 * U.facArt.WIDTH[it.t][it.level], 0) + gap * (count - 1);
+        let x = -width / 2;
+        const y = below ? 12 + ri * rowH : -11.5 - (rows.length - 1 - ri) * rowH;
+        for (const it of row) {
+          const half = U.facArt.WIDTH[it.t][it.level];
+          el("use", { href: `#fac-${it.t}-${it.level}`, x: x + half, y, class: it.own ? "fac-own" : "fac-pub" }, g);
+          x += 2 * half + gap;
+        }
+      });
     }
   }
   function draftDemand(stops) { draftStops = stops && stops.length ? stops : null; syncExtras(U.state); }
