@@ -37,7 +37,11 @@ window.UpShip = window.UpShip || {};
     if (c.liner) v += 10; else if (c.art === "medium") v += 5;
     return Math.max(5, Math.min(100, v));
   }
-  const comfort = ship => Math.round(comfortNew(ship) * (0.85 + 0.15 * ship.condition));
+  // Comfort as passengers find it: the layout, worn by condition, then the captain and crew.
+  const comfort = (ship, state) => {
+    const st = state || U.state, extra = st && st.crew && U.crew ? U.crew.mods(st, ship).comfort : 0;
+    return Math.max(0, Math.min(100, Math.round(comfortNew(ship) * (0.85 + 0.15 * ship.condition) + extra)));
+  };
 
   // Fares and how travelers respond -------------------------------------------------
   // Fare multipliers for a route's two classes, from its level or the player's own settings.
@@ -50,7 +54,7 @@ window.UpShip = window.UpShip || {};
   const priceResponse = (m, firstClass) => firstClass ? Math.pow(m, -0.4) : Math.pow(m, m < 1 ? -1.4 : -1.5);
   // How much of the waiting travelers will choose this ship, by class.
   function draw(state, ship, route) {
-    const cmf = comfort(ship), f = fareMults(route);
+    const cmf = comfort(ship, state), f = fareMults(route);
     return {
       first: (0.4 + 1.2 * cmf / 100) * priceResponse(f.first, true),
       second: (0.7 + 0.6 * cmf / 100) * priceResponse(f.second, false)
@@ -100,7 +104,7 @@ window.UpShip = window.UpShip || {};
   function recordFlight(state, ship, route, load) {
     const m = rm(state);
     m.flights++;
-    if (load.pax) { m.pax += load.pax; m.comfortSum += load.pax * comfort(ship); m.paxFlights++; if (ship.gas === "helium") m.helium++; }
+    if (load.pax) { m.pax += load.pax; m.comfortSum += load.pax * comfort(ship, state); m.paxFlights++; if (ship.gas === "helium") m.helium++; }
     const lvl = route && !route.custom ? route.fare || "standard" : null;
     if (route && route.custom) { const avg = (route.custom.first + route.custom.second) / 200; if (avg < 0.9) m.cheap++; else if (avg > 1.1) m.premium++; }
     else if (lvl === "cheap") m.cheap++; else if (lvl === "premium") m.premium++;

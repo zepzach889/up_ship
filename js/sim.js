@@ -1,8 +1,8 @@
 // Game state, turns, routes, ships, wear, incidents, telegrams, and the economy.
 window.UpShip = window.UpShip || {};
 (function (U) {
-  const SAVE_KEY = "upship.save.v9";
-  const VERSION = 9;
+  const SAVE_KEY = "upship.save.v10";
+  const VERSION = 10;
   const E = () => U.ECONOMY;
   const TH = () => U.TIME.tickHours;
   const H = tick => tick * TH();                 // hours since 7 am, 1 January 1919
@@ -133,6 +133,7 @@ window.UpShip = window.UpShip || {};
     for (const id of catalog(state)) if (U.SHIP_CLASSES[id].kind === "surplus") state.surplusLeft[id] = E().surplusStock;
     const first = catalog(state)[0];
     newShip(state, first, suggestName(state, first), config.home, 0);
+    U.crew.init(state);
     U.contracts.init(state);
     state.tutorial = config.tutorial ? { step: 1 } : null;
     return state;
@@ -389,6 +390,7 @@ window.UpShip = window.UpShip || {};
         }
         const route = routeOf(state, ship);
         if (!route) { ship.readyHour = t; return; }
+        if (!ship.captainId) { ship.readyHour = T1; return; }        // no captain, no flight
         next = nextStop(state, ship, route);
         // A ship won't leave nearly empty: it waits for a fair load, but never more than about half a day.
         if (!next.ferry && !worthLeaving(state, ship, route, next, t)) { ship.readyHour = T1; return; }
@@ -398,6 +400,7 @@ window.UpShip = window.UpShip || {};
   }
 
   function worthLeaving(state, ship, route, next, t) {
+    if (U.crew.mods(state, ship).punctual) return true;              // a punctual captain leaves on time, full or not
     if (t - (ship.arrivedHour ?? -1e9) >= E().maxWaitHours) return true;
     const c = U.research.stats(state, ship), from = route.stops[ship.stop];
     let pax = 0, tons = 0;
@@ -419,7 +422,8 @@ window.UpShip = window.UpShip || {};
     if (wx.mode === "wait") { ship.readyHour = t + wx.wait; ship.waitNote = `Waiting out ${wx.reason}`; return false; }
     ship.waitNote = null;
     km = wx.km;
-    let hours = km / c.speedKmh * wx.slow;
+    const cm = U.crew.mods(state, ship);
+    let hours = km / c.speedKmh * wx.slow * cm.slow;
     // Minor incidents, more likely in poor condition.
     const p = (E().incidentBase + E().incidentWear * (1 - ship.condition) ** 2) * c.incidents;
     let incident = Math.random() < p ? (Math.random() < 0.6 ? "forced" : "cancelled") : null;
@@ -461,7 +465,7 @@ window.UpShip = window.UpShip || {};
     state.totals.flights += 1; state.totals.passengers += load.pax; state.totals.tons += load.tons;
     ship.condition = Math.max(0, ship.condition - hours * E().wearPerFlightHour * wearFactor(state, ship));
     // Gas: used with distance, topped up wherever a supply allows.
-    ship.gasLeft -= km; ship.sinceTopUp += km;
+    ship.gasLeft -= km * cm.gas; ship.sinceTopUp += km * cm.gas;
     if (U.facilities.canTopUp(state, next.to, ship.gas)) {
       const G = U.facilities.GAS[ship.gas];
       const price = ship.gas === "helium" ? U.facilities.heliumPrice(state, next.to) : 1;
@@ -471,13 +475,14 @@ window.UpShip = window.UpShip || {};
     ship.location = next.to;
     ship.arrivedHour = t + hours;
     ship.readyHour = t + hours + c.turnaround;
+    U.crew.flew(state, ship, hours);
     const leg0 = ship.legs[ship.legs.length - 1];
     if (wx.via) leg0.via = wx.via;
     if (wx.notes.length) leg0.note = wx.notes[0];
     // Serious accidents: rare, likelier in storms, in worn ships, and on hydrogen.
     {
       const kind = U.weather.serious(state, ship, leg0, wx.risk);
-      if (kind) U.weather.consequences(state, ship, leg0, kind, t + hours * 0.6);
+      if (kind) U.weather.consequences(state, ship, leg0, kind, t + hours * 0.6, !!wx.bold);
     }
     if (incident === "forced") {
       const a = U.cityById[from], b = U.cityById[next.to];
@@ -542,6 +547,7 @@ window.UpShip = window.UpShip || {};
       U.contracts.monthly(state);
       U.passengers.monthly(state);
       U.weather.monthly(state);
+      U.crew.monthly(state);
       for (const r of state.routes) {
         const s = routeSummary(state, r.id);
         if (s.days >= 30 && s.profit < 0)
@@ -599,7 +605,7 @@ window.UpShip = window.UpShip || {};
   }
   function clearSave() {
     saving = false;
-    try { for (const k of ["upship.save.v1", "upship.save.v2", "upship.save.v3", "upship.save.v4", "upship.save.v5", "upship.save.v6", "upship.save.v7", "upship.save.v8", SAVE_KEY]) localStorage.removeItem(k); } catch (e) {}
+    try { for (const k of ["upship.save.v1", "upship.save.v2", "upship.save.v3", "upship.save.v4", "upship.save.v5", "upship.save.v6", "upship.save.v7", "upship.save.v8", "upship.save.v9", SAVE_KEY]) localStorage.removeItem(k); } catch (e) {}
   }
 
   U.sim = { telegram, addGeneral, addIncome, nearestCity, distanceKm, fare, freightRate, dailyPassengers, dailyFreight, start, advance, beginTurn, dateOf, dateAtHour, H,

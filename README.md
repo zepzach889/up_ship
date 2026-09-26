@@ -9,7 +9,7 @@ A tycoon game about running an airship passenger and cargo line in a golden age 
 
 Your game saves automatically in the browser.
 
-## Current state: milestone 9
+## Current state: milestone 10
 
 - New-game setup on the map: country, home city, company name, director, and emblem
 - 45 cities from Lisbon to Moscow and down to Cairo, with about 1924 borders
@@ -30,6 +30,7 @@ Your game saves automatically in the browser.
 - Passenger classes: cabin layouts, comfort, fare levels, and company standing and character
 - Lifting gases: hydrogen and helium, gas range and top-ups, gas plants and helium stores, gas policies
 - Weather and accidents: moving weather systems, diversions, serious accidents, insurance, and an accident setting
+- Crews and captains: named captains with traits and experience, a crew pool, staffing levels, and training schools
 
 ## Project layout
 
@@ -43,6 +44,7 @@ Your game saves automatically in the browser.
 - `js/facilities.js`: masts, terminals, and sheds
 - `js/passengers.js`: passenger classes, comfort, fares, and reputation
 - `js/weather.js`: weather systems, flight judgement, serious accidents, and insurance
+- `js/crew.js`: captains, traits, the crew pool, and training schools
 - `js/contracts.js`: mail contracts, grants, and loans
 - `js/tutorial.js`: the first-contract tutorial
 - `js/sim.js`: game clock and economy

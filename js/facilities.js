@@ -13,6 +13,8 @@ window.UpShip = window.UpShip || {};
       about: ["120 passengers and 40 tons a day", "300 passengers and 100 tons a day", "No limit, and 10% more demand"] },
     shed: { name: "Shed", costs: [15000, 24000, 48000],
       about: ["Overhauls and builds small ships", "Overhauls and builds medium ships", "Overhauls and builds every ship"] },
+    school: { name: "Training school", costs: [6000, 10000, 20000],
+      about: ["Trains 3 hands a month, and now and then an officer", "Trains 6 hands a month, officers more often", "Trains 10 hands a month, officers often"] },
     gasplant: { name: "Gas plant", costs: [4000], about: ["Hydrogen for your ships here, without the public supply"] },
     hestore: { name: "Helium store", costs: [6000], about: ["Helium bought by the trainload: much cheaper here inland"] }
   };
@@ -48,7 +50,7 @@ window.UpShip = window.UpShip || {};
   }
   function own(state, id) {
     const f = state.facilities[id] = state.facilities[id] || { mast: 0, terminal: 0, shed: 0 };
-    f.gasplant = f.gasplant || 0; f.hestore = f.hestore || 0;
+    f.gasplant = f.gasplant || 0; f.hestore = f.hestore || 0; f.school = f.school || 0;
     return f;
   }
   const ownLevel = (state, id, type) => (state.facilities[id] || {})[type] || 0;

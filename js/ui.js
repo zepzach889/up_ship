@@ -133,7 +133,7 @@ window.UpShip = window.UpShip || {};
     const body = $("#panel-body");
     if (!selection) { body.innerHTML = ""; return; }
     const s = U.state;
-    const views = { settings: settingsPanel, gasdecision: gasDecisionPanel, research: researchPanel, city: cityPanel, ship: shipPanel, route: routePanel, shipyard: shipyardPanel, fleet: fleetPanel, routes: routesPanel,
+    const views = { crew: crewPanel, settings: settingsPanel, gasdecision: gasDecisionPanel, research: researchPanel, city: cityPanel, ship: shipPanel, route: routePanel, shipyard: shipyardPanel, fleet: fleetPanel, routes: routesPanel,
       finances: financesPanel, company: companyPanel, telegrams: telegramsPanel, contracts: contractsPanel };
     const html = views[selection.type](s, selection.id);
     if (html == null) { select(null); return; }
@@ -164,7 +164,7 @@ window.UpShip = window.UpShip || {};
   function facilitiesBlock(state, id) {
     const F = U.facilities, pub = F.hasPublic(id), hasMast = F.canLand(state, id);
     const lim = F.terminalLimits(state, id), used = state.cityDay[id] || { pax: 0, tons: 0 };
-    const rows = ["mast", "terminal", "shed", "gasplant", "hestore"].map(type => {
+    const rows = ["mast", "terminal", "shed", "school", "gasplant", "hestore"].map(type => {
       const T = F.TYPES[type], lvl = F.ownLevel(state, id, type), cost = F.nextCost(state, id, type), single = T.costs.length === 1;
       if (single) {
         const needsMast = !hasMast;
@@ -173,7 +173,7 @@ window.UpShip = window.UpShip || {};
           ${lvl ? "" : `<div class="fac-buy">${U.facArt.icon(type, 1, true, 46)}<div><button class="btn-quiet" data-build="${id}:${type}" ${state.money < cost || needsMast ? "disabled" : ""}>Build, ${money(cost)}</button>
           <small class="fac-next">${T.about[0]}${needsMast ? ". Needs a mast here first." : ""}</small></div></div>`}</li>`;
       }
-      const needsMast = type !== "mast" && !hasMast;
+      const needsMast = type !== "mast" && type !== "school" && !hasMast;
       const yours = lvl ? `${F.SIZE_NAMES[lvl]}: ${T.about[lvl - 1]}` : pub ? "Using the public one" : "None";
       const now = lvl ? U.facArt.icon(type, lvl, true, 40) : pub ? U.facArt.icon(type, 2, false, 40) : "";
       const button = cost == null ? "" : `<div class="fac-buy">${U.facArt.icon(type, lvl + 1, true, 46)}<div>
@@ -203,8 +203,20 @@ window.UpShip = window.UpShip || {};
     if (pos.upcoming) return `Moored at ${c(pos.at)}, departing ${clock(U.sim.dateAtHour(pos.upcoming.start))} for ${c(pos.upcoming.to)}`;
     if (ship.readyHour > pos.hour + 12 && ship.routeId) return `Grounded for repairs at ${c(pos.at)} until ${shortDate(U.sim.dateAtHour(ship.readyHour))}`;
     if (!ship.routeId) return `Waiting at ${c(pos.at)} with no route`;
+    if (!ship.captainId) return `Waiting at ${c(pos.at)} for a captain`;
     if (ship.waitNote && ship.readyHour > pos.hour) return `${ship.waitNote} at ${c(pos.at)}`;
     return `Moored at ${c(pos.at)}`;
+  }
+
+  // The ship's captain and staffing level.
+  function captainRows(state, ship) {
+    const C = U.crew, c = C.captainOf(state, ship), eff = C.effectiveStaffing(state, ship), want = ship.staffing || "full";
+    const spare = state.captains.filter(x => !x.shipId);
+    return `${row("Captain", c ? `${esc(c.name)}, ${C.grade(c).name}` : `<span class="neg">None: cannot fly</span>`)}
+      ${c ? row("Traits", traitChips(c)) : ""}
+      ${row("Crew", `${C.STAFFING[eff].name}, ${C.needFor(state, ship)} hands${eff !== want ? " (pool short-handed)" : ""}`)}
+      </dl><div class="reconfig"><div class="btn-row">${Object.entries(C.STAFFING).map(([k, v]) => `<button class="${want === k ? "btn" : "btn-quiet"}" data-staffing="${ship.id}:${k}">${v.name}</button>`).join("")}</div>
+      ${spare.length ? `<p class="small">${c ? "Replace with" : "Appoint"}:</p><div class="btn-row">${spare.map(x => `<button class="btn-quiet" data-assign="${x.id}:${ship.id}">${esc(x.name)}</button>`).join("")}</div>` : !c ? `<p class="small">Hire a captain in the Crew panel.</p>` : ""}</div><dl>`;
   }
 
   // Lifting gas, range left, and switching at the next overhaul.
@@ -302,6 +314,7 @@ window.UpShip = window.UpShip || {};
       <dl>
         ${rs.passengers ? cabinRows(state, ship) : row("Passengers", "None")}
         ${gasRows(state, ship)}
+        ${captainRows(state, ship)}
         </dl><div class="reconfig"><p class="small">Weather: ${ship.weatherPolicy ? `this ship flies ${ship.weatherPolicy}` : `company policy (${state.weatherPolicy || "cautious"})`}</p><div class="btn-row">
           ${[["", "Company policy"], ["cautious", "Cautious"], ["bold", "Bold"]].map(([k, n]) => `<button class="${(ship.weatherPolicy || "") === k ? "btn" : "btn-quiet"}" data-wxpolicy="${ship.id}:${k}">${n}</button>`).join("")}</div></div><dl>
         ${row("Cargo", rs.cargoTons + (rs.cargoTons === 1 ? " ton" : " tons"))}
@@ -479,6 +492,43 @@ window.UpShip = window.UpShip || {};
       <p class="rep-word">${P.characterWord(r.character)}</p>
       <p class="small">What you are known for, set by your cabin layouts and fares. A luxury name draws more first-class travelers and fewer second-class; an affordable name the reverse. It changes over years, not months.</p>
       <ul class="rep-notes">${(r.notes.character.length ? r.notes.character : ["Updated at the end of each month."]).map(n => `<li>${esc(n)}</li>`).join("")}</ul>`;
+  }
+
+  // Crew: captains, the hiring board, and the pool of hands.
+  function traitChips(c) {
+    return c.traits.map(t => { const T = U.crew.TRAITS[t]; return `<span class="trait" title="${T.good}. ${T.bad}.">${T.name}</span>`; }).join(" ");
+  }
+  function captainCard(state, c, hiring) {
+    const C = U.crew, g = C.grade(c), ship = state.ships.find(x => x.id === c.shipId);
+    const idle = state.ships.filter(x => !x.captainId && x.deliveryTick <= state.tick);
+    const lines = c.traits.map(t => `<small>${C.TRAITS[t].name}: ${C.TRAITS[t].good.toLowerCase()}; ${C.TRAITS[t].bad.toLowerCase()}.</small>`).join("");
+    return `<li class="cap-card"><div class="cap-head"><b>Captain ${esc(c.name)}</b><span>${g.name}, ${money(C.wage(c))} a month</span></div>
+      <p class="small">${C.BACKGROUNDS[c.background].name}. ${Math.round(c.hours).toLocaleString("en-GB")} hours in command${c.blamed ? `. <span class="neg">Blamed by an inquiry${c.blamed > 1 ? ` ${c.blamed} times` : ""}</span>` : ""}${c.cleared ? `. Cleared by ${c.cleared > 1 ? c.cleared + " inquiries" : "an inquiry"}` : ""}.</p>
+      <div class="traits">${traitChips(c)}</div>${lines}
+      ${hiring ? `<div class="btn-row"><button class="btn" data-hire="${c.id}" ${state.money < C.wage(c) * 2 ? "disabled" : ""}>Hire, ${money(C.wage(c) * 2)} to sign</button></div>`
+        : `<p class="small">${ship ? `Commands ${shipLink(ship)}.` : "Without a ship."}</p><div class="btn-row">
+          ${!ship ? idle.map(x => `<button class="btn-quiet" data-assign="${c.id}:${x.id}">Take ${esc(x.name)}</button>`).join("") : ""}
+          <button class="btn-danger" data-dismiss="${c.id}">Dismiss</button></div>`}</li>`;
+  }
+  function crewPanel(state) {
+    const C = U.crew, need = C.needed(state), cr = state.crew;
+    const schools = Object.entries(state.facilities).filter(([, f]) => f.school).map(([id, f]) => `${city(id).name} (${C.SCHOOL_OUTPUT[f.school]} a month)`);
+    const idleShips = state.ships.filter(x => !x.captainId && x.deliveryTick <= state.tick);
+    return `<h2>Crew</h2>
+      <p class="sub">${state.captains.length} captain${state.captains.length === 1 ? "" : "s"}, ${cr.hands} hands.</p>
+      ${idleShips.length ? `<p class="status">${idleShips.map(x => esc(x.name)).join(", ")} ${idleShips.length === 1 ? "has" : "have"} no captain and cannot fly.</p>` : ""}
+      <h3>Hands</h3>
+      <dl>${row("Hands employed", `${cr.hands} for ${need} berths${need > cr.hands ? ` <span class="neg">(short)</span>` : ""}`)}
+        ${row("Skill", C.skillWord(cr.skill))}
+        ${row("Wages", `${money(cr.hands * C.HAND_WAGE)} a month`)}
+        ${row("Training schools", schools.length ? schools.join(", ") : "None: build one in a city's panel")}</dl>
+      <div class="btn-row"><button class="btn-quiet" data-hands="5">Hire 5 hands, ${money(5 * C.HAND_FEE)}</button><button class="btn-quiet" data-hands="-5">Let 5 go</button></div>
+      <p class="small">Hands hired off the street are green: they raise the risk of incidents until they have flown a while. School graduates arrive trained.</p>
+      <h3>Captains</h3>
+      <ul class="cap-list">${state.captains.map(c => captainCard(state, c, false)).join("") || `<li class="note">No captains.</li>`}</ul>
+      <h3>Hiring board</h3>
+      <p class="small">A few candidates each month. Most take other posts if you wait.</p>
+      <ul class="cap-list">${state.board.map(c => captainCard(state, c, true)).join("")}</ul>`;
   }
 
   // Settings: the accident level, changeable at any time.
@@ -842,6 +892,11 @@ window.UpShip = window.UpShip || {};
       for (const sh of s.ships) { const want = U.sim.policyGas(s, sh.classId); sh.gasTo = want && want !== sh.gas ? want : (want ? null : sh.gasTo); }
       h.changed(); render(); return;
     }
+    if (b.dataset.hire) { if (U.crew.hire(s, b.dataset.hire)) notify("Captain hired."); h.changed(); render(); return; }
+    if (b.dataset.assign) { const [cid, sid] = b.dataset.assign.split(":"); U.crew.assign(s, cid, sid); h.changed(); render(); return; }
+    if (b.dataset.dismiss) { const c = s.captains.find(x => x.id === b.dataset.dismiss); if (c && confirm(`Dismiss Captain ${c.name}?`)) { U.crew.dismiss(s, c.id); h.changed(); render(); } return; }
+    if (b.dataset.hands) { const n = +b.dataset.hands; if (n > 0) U.crew.hireHands(s, n); else U.crew.releaseHands(s, -n); h.changed(); render(); return; }
+    if (b.dataset.staffing) { const [sid, k] = b.dataset.staffing.split(":"); s.ships.find(x => x.id === sid).staffing = k; h.changed(); render(); return; }
     if (b.dataset.accidents) { s.settings.accidents = b.dataset.accidents; h.changed(); render(); return; }
     if (b.dataset.cover) { s.insurance.cover = b.dataset.cover; h.changed(); render(); return; }
     if (b.dataset.wxpolicy) {

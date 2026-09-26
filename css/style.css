@@ -614,3 +614,10 @@ body.is-setup .panel { width: 360px; }
 .choice-list { list-style: none; margin: 6px 0; padding: 0; }
 .choice-list li { padding: 7px 0; border-bottom: 1px dotted var(--ink-3); }
 .choice-list small { display: block; color: var(--ivory-dim); font-size: 12px; margin-top: 5px; }
+.cap-list { list-style: none; margin: 0; padding: 0; }
+.cap-card { padding: 9px 0 8px; border-bottom: 1px dotted var(--ink-3); }
+.cap-card > small { display: block; color: var(--ivory-dim); font-size: 12px; margin: 2px 0; }
+.cap-head { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; }
+.cap-head span { color: var(--ivory-dim); font-size: 12px; text-align: right; }
+.traits { margin: 4px 0; }
+.trait { display: inline-block; font-size: 11px; padding: 2px 6px 1px; border: 1px solid var(--brass-dim); color: var(--brass-hi); margin: 0 4px 3px 0; }

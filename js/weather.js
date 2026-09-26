@@ -78,8 +78,10 @@ window.UpShip = window.UpShip || {};
   // Judge a flight at departure: clear, divert round known storms, wait, or fly through.
   function judge(state, ship, from, to, depart, km, speed) {
     const W = state.weather, now = S().H(state.tick);
-    const policy = ship.weatherPolicy || state.weatherPolicy || "cautious";
-    const service = U.research.has(state, "operations1");
+    const cm = state.crew && U.crew ? U.crew.mods(state, ship) : {};
+    let policy = ship.weatherPolicy || state.weatherPolicy || "cautious";
+    if (cm.forceBold) policy = "bold"; else if (cm.forceCautious) policy = "cautious";      // the captain has views of their own
+    const service = U.research.has(state, "operations1") || cm.seesEarly;
     const known = W.systems.filter(s => service || depart - s.born >= 12);          // young systems are surprises without the weather service
     const a = city(from), b = city(to), hours = km / speed;
     const all = crossings(W.systems, a, b, null, depart, hours, now);
@@ -105,13 +107,14 @@ window.UpShip = window.UpShip || {};
       }
       // Anything not yet known, or not avoided, is flown through.
       const actual = out.via ? crossings(W.systems, a, b, out.via, depart, out.km / speed, now) : all;
-      if (actual.storms.length) { out.slow *= 1.15; out.risk *= 4; out.notes.push("caught by a storm"); }
+      if (actual.storms.length) { out.slow *= 1.15; out.risk *= 4 * (cm.weatherRisk || 1); out.notes.push("caught by a storm"); }
       if (actual.winds.length) { out.slow *= 1.1; out.risk *= 1.5; }
       if (actual.fog.length) { out.risk *= 2; }
       return out;
     }
     // Bold: straight through whatever is there.
-    if (all.storms.length) { out.mode = "through"; out.slow *= 1.15; out.risk *= 4; out.notes.push("flying through a storm"); }
+    out.bold = true;
+    if (all.storms.length) { out.mode = "through"; out.slow *= 1.15; out.risk *= 4 * (cm.weatherRisk || 1); out.notes.push("flying through a storm"); }
     if (all.winds.length) { out.slow *= 1.1; out.risk *= 1.5; }
     if (all.fog.length) { out.slow *= 1.05; out.risk *= 2; }
     return out;
@@ -122,7 +125,8 @@ window.UpShip = window.UpShip || {};
   const PER_HOUR = 1 / (25 * 365 * 24 * 0.5);          // about one per 25 years of a ship's flying, if it flies half the time
   function serious(state, ship, leg, risk) {
     const lvl = LEVEL[(state.settings || {}).accidents] || LEVEL.golden;
-    let p = leg.hours * PER_HOUR * risk * lvl.rate * (1 + (1 - ship.condition));
+    const cm = state.crew && U.crew ? U.crew.mods(state, ship) : { risk: 1 };
+    let p = leg.hours * PER_HOUR * risk * cm.risk * lvl.rate * (1 + (1 - ship.condition));
     if (ship.gas === "helium") p *= 0.5;
     if (U.research.has(state, "operations1")) p *= 0.8;
     if (Math.random() > p) return null;
@@ -132,7 +136,7 @@ window.UpShip = window.UpShip || {};
   }
 
   // What happens after a serious accident: the ship, the insurance, the standing, the telegram.
-  function consequences(state, ship, leg, kind, t) {
+  function consequences(state, ship, leg, kind, t, bold) {
     const I = state.insurance, value = S().saleValue(state, ship), where = placeNear(leg);
     const claims = kind === "damage" ? 0 : Math.round((leg.pax || 0) * 300 + (leg.tons || 0) * 200);
     let paid = 0, cost = 0;
@@ -161,6 +165,7 @@ window.UpShip = window.UpShip || {};
       const lost = Math.max(1, Math.round(aboard * rand(0.25, 0.8)));
       text = `${ship.name} lost by fire near ${where} stop ${lost} of ${aboard} aboard did not survive stop an inquiry will follow${cover}${pays} stop`;
     }
+    if (U.crew) text = text.replace(/ stop$/, "") + U.crew.afterAccident(state, ship, kind, bold, t) + " stop";
     S().telegram(state, t, text, true, kind === "disaster" && ship.gas !== "helium" && state.ships.some(s => s !== ship && s.gas !== "helium") ? { type: "gasdecision" } : { type: "finances" });
     if (kind !== "damage") state.ships = state.ships.filter(s => s !== ship);
   }

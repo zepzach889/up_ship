@@ -174,23 +174,25 @@ window.UpShip = window.UpShip || {};
   // A ship's working figures after research.
   function stats(state, ship) {
     const c = U.SHIP_CLASSES[ship.classId], f = new Set(ship.fitted || []), r = R(state);
+    // The captain and crew: speed, turnarounds, fuel, running costs, wear, incidents.
+    const cm = state.crew && U.crew ? U.crew.mods(state, ship) : { speed: 1, turnaround: 0, fuel: 1, cost: 1, wear: 1, incidents: 1 };
     // Helium lifts about 8% less: it comes out of cargo, since passenger ships fill their cabins before their lift.
     // A ship out of gas flies light, losing a fifth of everything it can carry.
     const light = ship.gasLeft != null && ship.gasLeft <= 0 ? 0.8 : 1, heCargo = ship.gas === "helium" ? 0.92 : 1;
     const payload = (f.has("structures1") ? 1.1 : 1) * (f.has("structures2") ? 1.05 : 1) * (1 + 0.02 * r.refinements.structures) * light;
-    const speed = c.speedKmh * (f.has("engines1") ? 1.08 : 1) * (f.has("structures4") ? 1.1 : 1) * (1 + 0.02 * r.refinements.engines);
+    const speed = c.speedKmh * (f.has("engines1") ? 1.08 : 1) * (f.has("structures4") ? 1.1 : 1) * (1 + 0.02 * r.refinements.engines) * cm.speed;
     return {
       passengers: Math.floor(c.passengers * payload),
       cargoTons: Math.round(c.cargoTons * payload * heCargo * 10) / 10,
       speedKmh: Math.round(speed),
       rangeKm: Math.round(c.rangeKm * (f.has("engines3") ? 1.2 : 1) * (f.has("structures4") ? 1.1 : 1) / 100) * 100,
-      fuelPerKm: c.fuelPerKm * (f.has("engines3") ? 0.9 : 1) * (f.has("engines4") ? 0.75 : 1),
-      dailyCost: c.dailyCost * (1 - 0.03 * r.refinements.operations),
-      wear: f.has("structures2") ? 0.8 : 1,
+      fuelPerKm: c.fuelPerKm * (f.has("engines3") ? 0.9 : 1) * (f.has("engines4") ? 0.75 : 1) * cm.fuel,
+      dailyCost: c.dailyCost * (1 - 0.03 * r.refinements.operations) * cm.cost,
+      wear: (f.has("structures2") ? 0.8 : 1) * cm.wear,
       engineFailure: f.has("engines1") ? 0.75 : 1,
-      incidents: has(state, "operations1") ? 0.8 : 1,
+      incidents: (has(state, "operations1") ? 0.8 : 1) * cm.incidents,
       repairDays: has(state, "operations2") ? 0.5 : 1,
-      turnaround: Math.max(1, U.ECONOMY.turnaroundHours - (f.has("engines2") ? 1 : 0) - (has(state, "operations3") ? 1 : 0)),
+      turnaround: Math.max(1, U.ECONOMY.turnaroundHours - (f.has("engines2") ? 1 : 0) - (has(state, "operations3") ? 1 : 0) + cm.turnaround),
       fare: f.has("operations4") ? 1.15 : 1
     };
   }

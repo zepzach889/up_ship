@@ -72,9 +72,43 @@ window.UpShip = window.UpShip || {};
       <rect x="3.3" y="3.3" width="0.8" height="3" rx="0.2" class="cap"/><rect x="10.3" y="3.3" width="0.8" height="3" rx="0.2" class="cap"/>
       <circle cx="5" cy="9.1" r="1.25" class="fd"/><circle cx="9.4" cy="9.1" r="1.25" class="fd"/><circle cx="5" cy="9.1" r="0.45" fill="#8a8f93"/><circle cx="9.4" cy="9.1" r="0.45" fill="#8a8f93"/>` };
 
+
+  // Training schools: a college hall with a practice mast, growing to a campus with a training hangar.
+  const PM = `<path d="M-2.2,10 L-0.7,-3" class="legL"/><path d="M2.2,10 L0.7,-3" class="legR"/>
+    <path d="M-2.2,10 L1.6,5.7 M2.2,10 L-1.6,5.7 M-1.6,5.7 L1.2,1.4 M1.6,5.7 L-1.2,1.4 M-1.2,1.4 L0.7,-3 M1.2,1.4 L-0.7,-3" class="br"/>
+    <rect x="-1.5" y="-4.4" width="3" height="1.4" class="fb"/><path d="M-0.6,-4.4 L0,-6.2 L0.6,-4.4 Z" class="fd"/>`;
+  const AW = (x, y) => `<path d="M${x - 0.9},${y + 4} L${x - 0.9},${y + 0.4} C${x - 0.9},${y - 0.9} ${x + 0.9},${y - 0.9} ${x + 0.9},${y + 0.4} L${x + 0.9},${y + 4} Z" class="fw"/>`;
+  const SCHOOL = {
+    1: `<g transform="translate(-8 0)">${PM}</g><g transform="translate(-1.5 0)">
+      <rect x="-3.5" y="10" width="14" height="1.3" class="fd"/><rect x="-2.8" y="1" width="12.6" height="9" class="fb"/>
+      <rect x="-2.8" y="1" width="12.6" height="0.9" class="fh"/><rect x="-2.8" y="9.1" width="12.6" height="0.9" class="fl"/>
+      <path d="M-3.4,1.1 L3.5,-4.2 L10.4,1.1 Z" class="fl"/><path d="M-3.4,1.1 L3.5,-4.2 L3.5,-2.9 L-1.8,1.1 Z" class="fh"/>
+      <circle cx="3.5" cy="-1.1" r="1.1" class="fw"/>${AW(-0.6, 3.2)}${AW(7.6, 3.2)}
+      <path d="M2.2,10 L2.2,5.6 C2.2,3.6 4.8,3.6 4.8,5.6 L4.8,10 Z" class="door"/><path d="M2.2,10 L2.2,5.6 C2.2,3.6 4.8,3.6 4.8,5.6 L4.8,10" class="trim"/></g>`,
+    2: `<g transform="translate(-10.5 -2) scale(1.2)">${PM}</g><g transform="translate(-3 0)">
+      <rect x="-6" y="10" width="19" height="1.3" class="fd"/>
+      <rect x="-5.4" y="3.2" width="5.6" height="6.8" class="fb"/><rect x="-5.4" y="3.2" width="5.6" height="0.8" class="fh"/><rect x="-5.4" y="9.1" width="5.6" height="0.9" class="fl"/>
+      <path d="M-5.8,3.3 L-2.6,1.2 L0.6,3.3 Z" class="fl"/>${AW(-2.6, 5)}
+      <rect x="0" y="0.6" width="12.4" height="9.4" class="fb"/><rect x="0" y="0.6" width="12.4" height="0.9" class="fh"/><rect x="0" y="9.1" width="12.4" height="0.9" class="fl"/>
+      <path d="M-0.6,0.7 L6.2,-4.4 L13,0.7 Z" class="fl"/><path d="M-0.6,0.7 L6.2,-4.4 L6.2,-3.1 L1,0.7 Z" class="fh"/>
+      <rect x="5" y="-7.6" width="2.4" height="3.4" class="fb"/><rect x="5" y="-7.6" width="2.4" height="0.7" class="fh"/><path d="M4.6,-7.6 L6.2,-9.6 L7.8,-7.6 Z" class="fd"/>
+      <circle cx="6.2" cy="-1.4" r="1.1" class="fw"/>${AW(2.3, 3)}${AW(10.1, 3)}
+      <path d="M4.9,10 L4.9,5.5 C4.9,3.5 7.5,3.5 7.5,5.5 L7.5,10 Z" class="door"/><path d="M4.9,10 L4.9,5.5 C4.9,3.5 7.5,3.5 7.5,5.5 L7.5,10" class="trim"/></g>`,
+    3: `<g transform="translate(-14 -4) scale(1.4)">${PM}</g><g transform="translate(-2 0)">
+      <rect x="-9" y="10" width="26" height="1.4" class="fd"/>
+      <rect x="-8.4" y="3.4" width="5.2" height="6.6" class="fb"/><rect x="-8.4" y="3.4" width="5.2" height="0.8" class="fh"/><rect x="-8.4" y="9.1" width="5.2" height="0.9" class="fl"/>${AW(-5.8, 5.3)}
+      <rect x="-3.4" y="0.8" width="10.8" height="9.2" class="fb"/><rect x="-3.4" y="0.8" width="10.8" height="0.9" class="fh"/><rect x="-3.4" y="9.1" width="10.8" height="0.9" class="fl"/>
+      <path d="M-4,0.9 L2,-3.6 L8,0.9 Z" class="fl"/><path d="M-4,0.9 L2,-3.6 L2,-2.4 L-2.4,0.9 Z" class="fh"/>
+      <rect x="0.9" y="-7.8" width="2.2" height="4.4" class="fb"/><rect x="0.9" y="-7.8" width="2.2" height="0.7" class="fh"/><path d="M0.5,-7.8 L2,-9.8 L3.5,-7.8 Z" class="fd"/>
+      <g class="fw"><rect x="-2.3" y="2.6" width="0.9" height="7.4"/><rect x="0" y="2.6" width="0.9" height="7.4"/><rect x="3.1" y="2.6" width="0.9" height="7.4"/><rect x="5.4" y="2.6" width="0.9" height="7.4"/></g>
+      <path d="M1.1,10 L1.1,6 C1.1,4.4 2.9,4.4 2.9,6 L2.9,10 Z" class="door"/>
+      <rect x="7.4" y="3.4" width="4.4" height="6.6" class="fb"/><rect x="7.4" y="3.4" width="4.4" height="0.8" class="fh"/><rect x="7.4" y="9.1" width="4.4" height="0.9" class="fl"/>${AW(9.6, 5.3)}
+      <path d="M11.6,10 L11.6,4.6 C11.6,0.6 17,0.6 17,4.6 L17,10 Z" class="fl"/><path d="M11.6,4.6 C11.6,0.6 17,0.6 17,4.6 L16.2,4.6 C16.2,1.8 12.4,1.8 12.4,4.6 Z" class="fh"/>
+      <path d="M12.8,10 L12.8,5.2 C12.8,3.2 15.8,3.2 15.8,5.2 L15.8,10 Z" class="door"/><path d="M12.8,10 L12.8,5.2 C12.8,3.2 15.8,3.2 15.8,5.2 L15.8,10" class="trim"/></g>`
+  };
   // Half-widths, for spacing symbols side by side.
-  const WIDTH = { mast: { 1: 5, 2: 5.6, 3: 6.2 }, terminal: { 1: 6.4, 2: 8.4, 3: 11.4 }, shed: { 1: 5.4, 2: 7.4, 3: 9.9 }, gasplant: { 1: 9.4 }, hestore: { 1: 11 } };
-  const DRAW = { mast: MAST, terminal: TERMINAL, shed: SHED, gasplant: GASPLANT, hestore: HESTORE };
+  const WIDTH = { mast: { 1: 5, 2: 5.6, 3: 6.2 }, terminal: { 1: 6.4, 2: 8.4, 3: 11.4 }, shed: { 1: 5.4, 2: 7.4, 3: 9.9 }, gasplant: { 1: 9.4 }, hestore: { 1: 11 }, school: { 1: 10, 2: 12, 3: 15 } };
+  const DRAW = { mast: MAST, terminal: TERMINAL, shed: SHED, gasplant: GASPLANT, hestore: HESTORE, school: SCHOOL };
   let DEFS = "";
   for (const t in DRAW) for (const l in DRAW[t]) DEFS += `<g id="fac-${t}-${l}">${DRAW[t][l]}</g>`;
   DEFS += `<g id="fac-warn"><path d="M0,-7.5 L7.5,6.5 L-7.5,6.5 Z" fill="#b0342a" stroke="#f0e7d1" stroke-width="1" stroke-linejoin="round"/>

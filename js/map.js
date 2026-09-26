@@ -526,9 +526,9 @@ window.UpShip = window.UpShip || {};
     for (const c of U.CITIES) {
       const own = state.facilities[c.id] || {}, pub = F.hasPublic(c.id), dotR = U.TIERS[c.tier].r * grow() / z;
       const items = [];
-      for (const t of ["mast", "terminal", "shed", "gasplant", "hestore"]) {
+      for (const t of ["mast", "terminal", "shed", "gasplant", "hestore", "school"]) {
         if (own[t]) items.push({ t, own: true, level: own[t] });
-        else if (full && (t === "gasplant" ? F.publicGas(c.id) : t !== "hestore" && pub)) items.push({ t, own: false, level: t === "gasplant" ? 1 : 2 });
+        else if (full && (t === "gasplant" ? F.publicGas(c.id) : t !== "hestore" && t !== "school" && pub)) items.push({ t, own: false, level: t === "gasplant" ? 1 : 2 });
       }
       const warn = F.congested(state, c.id, hour);
       if (pub && !full) el("circle", { cx: c.x, cy: c.y, r: dotR + 2.6 / z * grow(), class: "pub-ring" }, layers.fac);
