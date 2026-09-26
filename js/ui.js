@@ -133,7 +133,7 @@ window.UpShip = window.UpShip || {};
     const body = $("#panel-body");
     if (!selection) { body.innerHTML = ""; return; }
     const s = U.state;
-    const views = { crew: crewPanel, settings: settingsPanel, gasdecision: gasDecisionPanel, research: researchPanel, city: cityPanel, ship: shipPanel, route: routePanel, shipyard: shipyardPanel, fleet: fleetPanel, routes: routesPanel,
+    const views = { aetherdecision: aetherDecisionPanel, crew: crewPanel, settings: settingsPanel, gasdecision: gasDecisionPanel, research: researchPanel, city: cityPanel, ship: shipPanel, route: routePanel, shipyard: shipyardPanel, fleet: fleetPanel, routes: routesPanel,
       finances: financesPanel, company: companyPanel, telegrams: telegramsPanel, contracts: contractsPanel };
     const html = views[selection.type](s, selection.id);
     if (html == null) { select(null); return; }
@@ -164,7 +164,7 @@ window.UpShip = window.UpShip || {};
   function facilitiesBlock(state, id) {
     const F = U.facilities, pub = F.hasPublic(id), hasMast = F.canLand(state, id);
     const lim = F.terminalLimits(state, id), used = state.cityDay[id] || { pax: 0, tons: 0 };
-    const rows = ["mast", "terminal", "shed", "school", "gasplant", "hestore"].map(type => {
+    const rows = ["mast", "terminal", "shed", "school", "gasplant", "hestore"].concat(U.aether.discovered(state) ? ["refinery"] : []).map(type => {
       const T = F.TYPES[type], lvl = F.ownLevel(state, id, type), cost = F.nextCost(state, id, type), single = T.costs.length === 1;
       if (single) {
         const needsMast = !hasMast;
@@ -173,7 +173,7 @@ window.UpShip = window.UpShip || {};
           ${lvl ? "" : `<div class="fac-buy">${U.facArt.icon(type, 1, true, 46)}<div><button class="btn-quiet" data-build="${id}:${type}" ${state.money < cost || needsMast ? "disabled" : ""}>Build, ${money(cost)}</button>
           <small class="fac-next">${T.about[0]}${needsMast ? ". Needs a mast here first." : ""}</small></div></div>`}</li>`;
       }
-      const needsMast = type !== "mast" && type !== "school" && !hasMast;
+      const needsMast = type !== "mast" && type !== "school" && type !== "refinery" && !hasMast;
       const yours = lvl ? `${F.SIZE_NAMES[lvl]}: ${T.about[lvl - 1]}` : pub ? "Using the public one" : "None";
       const now = lvl ? U.facArt.icon(type, lvl, true, 40) : pub ? U.facArt.icon(type, 2, false, 40) : "";
       const button = cost == null ? "" : `<div class="fac-buy">${U.facArt.icon(type, lvl + 1, true, 46)}<div>
@@ -187,6 +187,7 @@ window.UpShip = window.UpShip || {};
       <ul class="facilities">${rows}</ul>
       <dl>${row("Gas supply", F.publicGas(id) ? "Public hydrogen and helium" : F.canTopUp(state, id, "hydrogen") ? "Your own" : "None")}
         ${row("Helium price", `${Math.round(F.heliumPrice(state, id) * 100)}% of the port price`)}
+        ${U.aether.discovered(state) ? row("Aetherium", F.ownLevel(state, id, "refinery") ? "From your refinery" : state.aether.publicOpen != null && id === U.aether.capital(state) ? "From the government works, for a fee" : "None here") : ""}
         ${row("Boarded today", `${Math.round(used.pax)} of ${lim.pax === Infinity ? "any number of" : lim.pax} passengers, ${Math.round(used.tons)} of ${lim.tons === Infinity ? "any" : lim.tons} tons`)}</dl>
       ${F.ownLevel(state, id, "mast") && !F.ownLevel(state, id, "terminal") ? `<p class="note">Your mast's waiting room handles about ${F.BASIC_ROOM.pax} passengers and ${F.BASIC_ROOM.tons} tons a day${pub ? " (the public terminal is used when it is larger)" : ""}.</p>` : ""}`;
   }
@@ -221,12 +222,15 @@ window.UpShip = window.UpShip || {};
 
   // Lifting gas, range left, and switching at the next overhaul.
   function gasRows(state, ship) {
-    const G = U.facilities.GAS[ship.gas], other = ship.gas === "helium" ? "hydrogen" : "helium";
+    const G = U.facilities.GAS[ship.gas];
+    const others = ["hydrogen", "helium"].concat(U.aether.discovered(state) ? ["aetherium"] : []).filter(g => g !== ship.gas);
     const forced = U.sim.policyGas(state, ship.classId);
     return `${row("Lifting gas", G.name)}
       ${row("Gas range left", ship.gasLeft > 0 ? `${km(Math.round(ship.gasLeft))} of ${km(G.range)}` : "Out: flying light, less payload")}
       </dl><div class="reconfig">${forced && forced !== ship.gas ? `<p class="small">Switching to ${forced} at the next overhaul, under your gas policy.</p>`
-        : forced ? "" : `<button class="${ship.gasTo ? "btn" : "btn-quiet"}" data-gas-switch="${ship.id}">${ship.gasTo ? `Switching to ${ship.gasTo} at the next overhaul (undo)` : `Switch to ${other} at the next overhaul`}</button>`}</div><dl>`;
+        : forced ? "" : ship.gasTo ? `<button class="btn" data-gas-switch="${ship.id}:">Switching to ${ship.gasTo} at the next overhaul (undo)</button>`
+        : `<div class="btn-row">${others.map(g => `<button class="btn-quiet" data-gas-switch="${ship.id}:${g}">Switch to ${g}</button>`).join("")}</div><p class="small">Refilled at the next overhaul.</p>`}
+        ${ship.gas === "aetherium" && !U.aether.supplied(state, ship) ? `<p class="small neg">Beyond your refineries' capacity: this ship can only top up at the public works.</p>` : ""}</div><dl>`;
   }
 
   // Cabin layout, comfort, and changing the layout at the next overhaul.
@@ -435,11 +439,15 @@ window.UpShip = window.UpShip || {};
     }).join("")}</div>`;
   }
 
+  const GAS_NAMES = { hydrogen: "Hydrogen", helium: "Helium", aetherium: "Aetherium" };
   function gasPicker(state, id) {
     const forced = U.sim.policyGas(state, id), g = forced || yardGas[id] || "hydrogen";
-    if (forced) return `<p class="small">${forced === "helium" ? "Helium" : "Hydrogen"}, under your gas policy.</p>`;
-    return `<div class="gas-pick" role="group" aria-label="Lifting gas">${["hydrogen", "helium"].map(k => `<button data-gas="${id}:${k}" aria-pressed="${g === k}">
-      <b>${k === "hydrogen" ? "Hydrogen" : "Helium"}</b><span>${k === "hydrogen" ? "Full payload, cheap to top up" : `Safe; 8% less cargo; +${money(U.sim.heliumFill(state, id, "helium"))}`}</span></button>`).join("")}</div>`;
+    if (forced) return `<p class="small">${GAS_NAMES[forced]}, under your gas policy.</p>`;
+    const gases = ["hydrogen", "helium"].concat(U.aether.discovered(state) ? ["aetherium"] : []);
+    const about = { hydrogen: "Full payload, cheap to top up", helium: `Safe; 8% less cargo; +${money(U.sim.heliumFill(state, id, "helium"))}`,
+      aetherium: `Cannot burn; a fifth more cargo; +${money(U.sim.heliumFill(state, id, "aetherium"))}` };
+    return `<div class="gas-pick${gases.length > 2 ? " three" : ""}" role="group" aria-label="Lifting gas">${gases.map(k => `<button data-gas="${id}:${k}" aria-pressed="${g === k}">
+      <b>${GAS_NAMES[k]}</b><span>${about[k]}</span></button>`).join("")}</div>`;
   }
 
   function shipyardPanel(state) {
@@ -555,6 +563,20 @@ window.UpShip = window.UpShip || {};
       <div class="btn-row"><button class="${(state.settings || {}).traffic !== false ? "btn" : "btn-quiet"}" data-traffic="on">Show traffic</button><button class="${(state.settings || {}).traffic === false ? "btn" : "btn-quiet"}" data-traffic="off">Hide traffic</button></div>
       <p class="small">Trains, steamers, and airplanes moving faintly on the Normal layer. They always show on the Competition layer.</p>`;
   }
+  // Aetherium discovered: convert now, or wait for refining to bring the price down.
+  function aetherDecisionPanel(state) {
+    const pass = state.ships.filter(s => U.passengers.berths(state, s).total), cap = U.aether.capacity(state);
+    const fillAll = state.ships.reduce((a, s) => a + U.sim.heliumFill(state, s.classId, "aetherium"), 0);
+    return `<h2>Aetherium</h2>
+      <p class="sub">A gas that lifts a fifth more than hydrogen and cannot burn. Today it is costly, and only refineries can supply it; refining research will bring the price down quickly.</p>
+      <p class="small">Your refineries can supply ${cap} ship${cap === 1 ? "" : "s"}${cap ? "" : ": build one in a city's panel"}. A government works opens at ${city(U.aether.capital(state)).name} in about a year. Filling the whole fleet now would cost about ${money(fillAll)}.</p>
+      <ul class="choice-list">
+        <li><button class="btn" data-aedecide="passenger">Convert the passenger ships</button><small>${pass.length} ship${pass.length === 1 ? "" : "s"}, each at its next overhaul.</small></li>
+        <li><button class="btn" data-aedecide="all">Convert the whole fleet</button><small>Every ship at its next overhaul, and Aetherium for new orders.</small></li>
+        <li><button class="btn-quiet" data-aedecide="none">Wait for the price to fall</button><small>Carry on as you are. You can convert ships one by one from their panels at any time.</small></li>
+      </ul>`;
+  }
+
   // After a disaster on hydrogen: whether to switch gas.
   function gasDecisionPanel(state) {
     const h = state.ships.filter(s => s.gas !== "helium"), hp = h.filter(s => U.passengers.berths(state, s).total);
@@ -594,13 +616,15 @@ window.UpShip = window.UpShip || {};
     return [words.slice(0, best).join(" "), words.slice(best).join(" ")];
   }
   function researchDiagram(state) {
-    const R = U.research, r = state.research, cols = { engines: 52, structures: 150, operations: 248 };
-    const W = 96, Hn = 34, y = tier => 30 + (tier - 1) * 46;
-    const unlocks = (U.RESEARCH_CATALOG[state.company.nation] || []).map((id, i) => ({ id, x: 52 + i * 98, y: 262 }));
+    // Four columns (the Gas branch begins in Era II), Era I above the line and Era II below, then the classes they unlock.
+    const R = U.research, r = state.research, cols = { engines: 40, structures: 113, operations: 186, gas: 259 };
+    const W = 68, Hn = 30, y = tier => tier <= 4 ? 28 + (tier - 1) * 38 : 200 + (tier - 5) * 38;
+    const cat = U.RESEARCH_CATALOG[state.company.nation] || [];
+    const unlocks = cat.map((id, i) => ({ id, x: 58 + (i % 3) * 92, y: i < 3 ? 368 : 410 }));
     let lines = "", nodes = "";
     for (const u of unlocks) for (const t of U.SHIP_CLASSES[u.id].requires) {
       const tech = R.techById[t], x1 = cols[tech.branch], y1 = y(tech.tier) + Hn / 2;
-      lines += `<path d="M${x1},${y1} C${x1},${y1 + 40} ${u.x},${u.y - 60} ${u.x},${u.y - 16}" class="rd-line${R.has(state, t) ? " is-done" : ""}"/>`;
+      lines += `<path d="M${x1},${y1} C${x1},${y1 + 40} ${u.x},${u.y - 60} ${u.x},${u.y - 15}" class="rd-line${R.has(state, t) ? " is-done" : ""}"/>`;
     }
     for (const t of R.TECHS) {
       const x = cols[t.branch] - W / 2, yy = y(t.tier);
@@ -608,17 +632,18 @@ window.UpShip = window.UpShip || {};
       const lab = wrapLabel(t.name);
       nodes += `<g class="rd-node is-${st}" ${st === "open" ? `data-research="${t.id}" role="button" tabindex="0"` : ""}>
         <rect x="${x}" y="${yy}" width="${W}" height="${Hn}" rx="3"/>
-        ${lab.map((l, i) => `<text x="${cols[t.branch]}" y="${yy + (lab.length === 1 ? 21 : 14 + i * 12)}">${esc(l)}</text>`).join("")}
+        ${lab.map((l, i) => `<text x="${cols[t.branch]}" y="${yy + (lab.length === 1 ? 18.5 : 12.5 + i * 10.5)}">${esc(l)}</text>`).join("")}
         ${st === "current" ? `<rect class="rd-progress" x="${x}" y="${yy + Hn - 3}" width="${W * (r.progress[t.id] || 0)}" height="3"/>` : ""}</g>`;
     }
     for (const u of unlocks) {
-      const c = U.SHIP_CLASSES[u.id], open = c.requires.every(t => R.has(state, t));
-      const lab = wrapLabel(c.name);
-      nodes += `<g class="rd-unlock${open ? " is-done" : ""}"><rect x="${u.x - 46}" y="${u.y - 16}" width="92" height="34" rx="17"/>
-        ${lab.map((l, i) => `<text x="${u.x}" y="${u.y + (lab.length === 1 ? 5 : -2 + i * 12)}">${esc(l)}</text>`).join("")}</g>`;
+      const c = U.SHIP_CLASSES[u.id], open = c.requires.every(t => R.has(state, t)), lab = wrapLabel(c.name);
+      nodes += `<g class="rd-unlock${open ? " is-done" : ""}"><rect x="${u.x - 43}" y="${u.y - 15}" width="86" height="30" rx="15"/>
+        ${lab.map((l, i) => `<text x="${u.x}" y="${u.y + (lab.length === 1 ? 4 : -2 + i * 10.5)}">${esc(l)}</text>`).join("")}</g>`;
     }
-    const heads = U.research.BRANCHES.map(b => `<text class="rd-head" x="${cols[b.id]}" y="16">${b.name}</text>`).join("");
-    return `<svg class="research-diagram" viewBox="0 0 300 286" role="img" aria-label="Research tree">${heads}${lines}${nodes}</svg>`;
+    const heads = R.BRANCHES.map(b => `<text class="rd-head" x="${cols[b.id]}" y="16">${b.name}</text>`).join("");
+    const eras = `<text class="rd-era" x="4" y="190">Era II</text><line x1="4" x2="296" y1="182" y2="182" class="rd-divider"/>
+      <text class="rd-gasnote" x="${cols.gas}" y="100">Opens in Era II</text>`;
+    return `<svg class="research-diagram" viewBox="0 0 300 432" role="img" aria-label="Research tree">${heads}${eras}${lines}${nodes}</svg>`;
   }
 
   function researchPanel(state) {
@@ -630,10 +655,11 @@ window.UpShip = window.UpShip || {};
     const row2 = (t, status) => `<li class="rt-${status}"><div><b>${t.name}</b><small>${t.effect}</small></div>
       ${status === "open" ? `<button class="btn-quiet" data-research="${t.id}">Research</button>` : `<span class="rt-status">${{ done: "Done", current: "In progress", locked: "Locked" }[status]}</span>`}</li>`;
     const branches = R.BRANCHES.map(b => {
-      const techs = R.TECHS.filter(t => t.branch === b.id).map(t => row2(t, R.has(state, t.id) ? "done" : r.current === t.id ? "current" : R.available(state, t.id) ? "open" : "locked")).join("");
+      const techs = R.TECHS.filter(t => t.branch === b.id).map((t, i, arr) => (t.era === 2 && (i === 0 || !arr[i - 1].era) ? `<li class="rt-era">Era II</li>` : "")
+        + row2(t, R.has(state, t.id) ? "done" : r.current === t.id ? "current" : R.available(state, t.id) ? "open" : "locked")).join("");
       const refId = "refine-" + b.id, ref = R.projectInfo(state, refId), refOpen = R.available(state, refId);
       const refRow = `<li class="rt-${r.current === refId ? "current" : refOpen ? "open" : "locked"}"><div><b>${ref.name}</b><small>${ref.effect}. Repeatable, ${money(ref.cost)}.</small></div>
-        ${r.current === refId ? `<span class="rt-status">In progress</span>` : refOpen ? `<button class="btn-quiet" data-research="${refId}">Research</button>` : `<span class="rt-status">After all four</span>`}</li>`;
+        ${r.current === refId ? `<span class="rt-status">In progress</span>` : refOpen ? `<button class="btn-quiet" data-research="${refId}">Research</button>` : `<span class="rt-status">${b.id === "gas" ? "After Aetherium refining" : "After the first four"}</span>`}</li>`;
       return `<h3>${b.name}</h3><ul class="research-list">${techs}${refRow}</ul>`;
     }).join("");
     return `
@@ -651,11 +677,13 @@ window.UpShip = window.UpShip || {};
 
   function gasPolicyBlock(state) {
     const P = state.gasPolicy || { all: null, byClass: {} };
-    const btns = (scope, cur) => ["none", "hydrogen", "helium"].map(g => `<button class="${(cur || "none") === g ? "btn" : "btn-quiet"}" data-policy="${scope}:${g}">${{ none: "Ship by ship", hydrogen: "Hydrogen", helium: "Helium" }[g]}</button>`).join("");
+    const opts = ["none", "hydrogen", "helium"].concat(U.aether.discovered(state) ? ["aetherium"] : []);
+    const btns = (scope, cur) => opts.map(g => `<button class="${(cur || "none") === g ? "btn" : "btn-quiet"}" data-policy="${scope}:${g}">${{ none: "Ship by ship", hydrogen: "Hydrogen", helium: "Helium", aetherium: "Aetherium" }[g]}</button>`).join("");
     const classes = [...new Set(state.ships.map(s => s.classId))];
     const gasCount = g => state.ships.filter(s => s.gas === g).length;
+    const ae = U.aether.discovered(state) ? ` ${gasCount("aetherium")} on Aetherium; refineries supply ${U.aether.capacity(state)}.` : "";
     return `<h3>Gas policy</h3>
-      <p class="small">${gasCount("hydrogen")} on hydrogen, ${gasCount("helium")} on helium. A policy applies to new orders, and switches other ships at their next overhaul.</p>
+      <p class="small">${gasCount("hydrogen")} on hydrogen, ${gasCount("helium")} on helium.${ae} A policy applies to new orders, and switches other ships at their next overhaul.</p>
       <p class="field-label">Whole company</p><div class="btn-row">${btns("all", P.all)}</div>
       ${classes.length > 1 || classes.length === 1 ? `<details class="own-fares"><summary>By ship class</summary>${classes.map(id => `<p class="field-label">${U.SHIP_CLASSES[id].name}</p><div class="btn-row">${btns(id, P.byClass[id])}</div>`).join("")}</details>` : ""}`;
   }
@@ -896,7 +924,7 @@ window.UpShip = window.UpShip || {};
     }
     if (b.dataset.filter) { fleetFilter = b.dataset.filter; render(); return; }
     if (b.dataset.gas) { const [cid, g] = b.dataset.gas.split(":"); yardGas[cid] = g; render(); return; }
-    if (b.dataset.gasSwitch) { const sh = s.ships.find(x => x.id === b.dataset.gasSwitch); sh.gasTo = sh.gasTo ? null : (sh.gas === "helium" ? "hydrogen" : "helium"); h.changed(); render(); return; }
+    if (b.dataset.gasSwitch) { const [sid, g] = b.dataset.gasSwitch.split(":"); const sh = s.ships.find(x => x.id === sid); sh.gasTo = g || null; h.changed(); render(); return; }
     if (b.dataset.policy) {
       const [scope, g] = b.dataset.policy.split(":"), P = s.gasPolicy = s.gasPolicy || { all: null, byClass: {} };
       const val = g === "none" ? null : g;
@@ -917,6 +945,13 @@ window.UpShip = window.UpShip || {};
       const [who, k] = b.dataset.wxpolicy.split(":");
       if (who === "all") s.weatherPolicy = k; else s.ships.find(x => x.id === who).weatherPolicy = k || null;
       h.changed(); render(); return;
+    }
+    if (b.dataset.aedecide) {
+      const d = b.dataset.aedecide, P = s.gasPolicy = s.gasPolicy || { all: null, byClass: {} };
+      if (d === "all") { P.all = "aetherium"; for (const sh of s.ships) if (sh.gas !== "aetherium") sh.gasTo = "aetherium"; }
+      if (d === "passenger") for (const sh of s.ships) if (U.passengers.berths(s, sh).total) { P.byClass[sh.classId] = "aetherium"; if (sh.gas !== "aetherium") sh.gasTo = "aetherium"; }
+      notify(d === "none" ? "No conversions for now." : "Ships will be filled with Aetherium at their next overhauls. Make sure your refineries can supply them.");
+      h.changed(); select(null); return;
     }
     if (b.dataset.gasdecide) {
       const d = b.dataset.gasdecide, P = s.gasPolicy = s.gasPolicy || { all: null, byClass: {} };

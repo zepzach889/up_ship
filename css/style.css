@@ -451,7 +451,7 @@ body.is-setup .panel { width: 360px; }
 .rd-line { fill: none; stroke: var(--ink-3); stroke-width: 1.2; }
 .rd-line.is-done { stroke: var(--brass-dim); }
 .rd-node rect { fill: var(--ink-2); stroke: var(--ink-3); stroke-width: 1; }
-.rd-node text, .rd-unlock text { font-family: var(--ui); font-size: 10.5px; text-anchor: middle; fill: var(--ivory-dim); pointer-events: none; }
+.rd-node text, .rd-unlock text { font-family: var(--ui); font-size: 9px; text-anchor: middle; fill: var(--ivory-dim); pointer-events: none; }
 .rd-node.is-done rect { fill: var(--brass-dim); stroke: var(--brass); }
 .rd-node.is-done text { fill: var(--ink); }
 .rd-node.is-open { cursor: pointer; }
@@ -634,3 +634,16 @@ body.is-setup .panel { width: 360px; }
 .comp-list { margin: 4px 0; padding-left: 18px; font-size: 13px; color: var(--ivory-dim); }
 .comp-list li { margin-bottom: 4px; }
 .traffic-canvas { position: absolute; pointer-events: none; z-index: 0; }
+.a-seam { fill: none; stroke: color-mix(in srgb, var(--company) 55%, black); stroke-width: 0.35; opacity: 0.55; }
+.a-seam line { stroke: color-mix(in srgb, var(--company) 55%, black); stroke-width: 0.35; }
+.a-rivet { fill: color-mix(in srgb, var(--company) 45%, white); opacity: 0.5; }
+.a-hoist { fill: none; stroke: color-mix(in srgb, var(--company) 35%, black); stroke-width: 0.7; }
+.rf-steel { fill: #9aa4aa; } .rf-steelhi { fill: #c9d1d5; } .rf-steello { fill: #6c767c; } .rf-steeld { fill: #3a3f44; }
+.rf-pipe { fill: none; stroke: #5c666c; stroke-width: 0.9; stroke-linejoin: round; }
+.rf-leg { stroke: #3a3f44; stroke-width: 0.7; } .rf-leg.thin { stroke-width: 0.45; }
+.rf-mast { stroke: #3a3f44; stroke-width: 0.5; }
+.gas-pick.three { grid-template-columns: 1fr 1fr 1fr; }
+.rd-era { font-family: var(--ui); font-size: 9px; fill: var(--brass); letter-spacing: 0.08em; }
+.rd-divider { stroke: var(--brass-dim); stroke-width: 0.6; stroke-dasharray: 3 3; }
+.rd-gasnote { font-family: var(--ui); font-size: 8.5px; fill: var(--ivory-dim); text-anchor: middle; font-style: italic; }
+.research-list .rt-era { color: var(--brass); font-size: 11px; letter-spacing: 0.08em; padding: 8px 0 2px; border-bottom: 0; }

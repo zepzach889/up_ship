@@ -39,7 +39,7 @@ window.UpShip = window.UpShip || {};
   }
   // Comfort as passengers find it: the layout, worn by condition, then the captain and crew.
   const comfort = (ship, state) => {
-    const st = state || U.state, extra = st && st.crew && U.crew ? U.crew.mods(st, ship).comfort : 0;
+    const st = state || U.state, extra = (st && st.crew && U.crew ? U.crew.mods(st, ship).comfort : 0) + ((ship.fitted || []).includes("operations8") ? 8 : 0);
     return Math.max(0, Math.min(100, Math.round(comfortNew(ship) * (0.85 + 0.15 * ship.condition) + extra)));
   };
 
@@ -104,7 +104,7 @@ window.UpShip = window.UpShip || {};
   function recordFlight(state, ship, route, load) {
     const m = rm(state);
     m.flights++;
-    if (load.pax) { m.pax += load.pax; m.comfortSum += load.pax * comfort(ship, state); m.paxFlights++; if (ship.gas === "helium") m.helium++; }
+    if (load.pax) { m.pax += load.pax; m.comfortSum += load.pax * comfort(ship, state); m.paxFlights++; if (ship.gas === "helium" || ship.gas === "aetherium") m.helium++; }
     const lvl = route && !route.custom ? route.fare || "standard" : null;
     if (route && route.custom) { const avg = (route.custom.first + route.custom.second) / 200; if (avg < 0.9) m.cheap++; else if (avg > 1.1) m.premium++; }
     else if (lvl === "cheap") m.cheap++; else if (lvl === "premium") m.premium++;

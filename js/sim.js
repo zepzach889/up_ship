@@ -1,8 +1,8 @@
 // Game state, turns, routes, ships, wear, incidents, telegrams, and the economy.
 window.UpShip = window.UpShip || {};
 (function (U) {
-  const SAVE_KEY = "upship.save.v10";
-  const VERSION = 10;
+  const SAVE_KEY = "upship.save.v11";
+  const VERSION = 11;
   const E = () => U.ECONOMY;
   const TH = () => U.TIME.tickHours;
   const H = tick => tick * TH();                 // hours since 7 am, 1 January 1919
@@ -209,7 +209,9 @@ window.UpShip = window.UpShip || {};
 
   // Buying, selling, renaming --------------------------------------------------------
   const HELIUM_FILL = 0.15;
-  const heliumFill = (state, classId, gas) => gas === "helium" ? Math.round(U.SHIP_CLASSES[classId].price * HELIUM_FILL / 1000) * 1000 : 0;
+  // The first fill of a lifting gas: helium costly, Aetherium more so until refining research brings it down.
+  const heliumFill = (state, classId, gas) => gas === "helium" ? Math.round(U.SHIP_CLASSES[classId].price * HELIUM_FILL / 1000) * 1000
+    : gas === "aetherium" ? U.aether.fill(state, classId) : 0;
   // The gas a new ship must use under the company's policy, if any.
   function policyGas(state, classId) { const p = state.gasPolicy || {}; return p.byClass && p.byClass[classId] || p.all || null; }
   function order(state, classId, name, config, gas) {
@@ -350,7 +352,7 @@ window.UpShip = window.UpShip || {};
     }
     ship.reconfigTo = null;
     if (ship.gasTo && ship.gasTo !== ship.gas) {
-      refit.cost += ship.gasTo === "helium" ? heliumFill(state, ship.classId, "helium") : Math.round(cls(ship).price * 0.01 / 100) * 100;
+      refit.cost += ship.gasTo === "hydrogen" ? Math.round(cls(ship).price * 0.01 / 100) * 100 : heliumFill(state, ship.classId, ship.gasTo);
       refit.done.push(`refilled with ${ship.gasTo}`);
       ship.gas = ship.gasTo;
     }
@@ -441,7 +443,7 @@ window.UpShip = window.UpShip || {};
       return;
     }
     // Not enough gas to reach the next stop: valve down to fly light for this leg.
-    if (ship.gasLeft > 0 && ship.gasLeft < km && !U.facilities.canTopUp(state, from, ship.gas)) {
+    if (ship.gasLeft > 0 && ship.gasLeft < km && !U.facilities.canTopUp(state, from, ship.gas, ship)) {
       ship.gasLeft = 0;
       const month = Math.floor(t / 720);
       if (ship.gasWarned !== month) ship.gasWarned = month, telegram(state, t, `${ship.name} short of ${ship.gas} leaving ${U.cityById[from].name} stop flying light with reduced payload stop needs a gas stop on route ${route ? routeName(route.stops, route.circuit) : ""} stop`, false, { type: "ship", id: ship.id });
@@ -467,11 +469,11 @@ window.UpShip = window.UpShip || {};
     state.totals.flights += 1; state.totals.passengers += load.pax; state.totals.tons += load.tons;
     ship.condition = Math.max(0, ship.condition - hours * E().wearPerFlightHour * wearFactor(state, ship));
     // Gas: used with distance, topped up wherever a supply allows.
-    ship.gasLeft -= km * cm.gas; ship.sinceTopUp += km * cm.gas;
-    if (U.facilities.canTopUp(state, next.to, ship.gas)) {
+    ship.gasLeft -= km * cm.gas * c.gasUse; ship.sinceTopUp += km * cm.gas * c.gasUse;
+    if (U.facilities.canTopUp(state, next.to, ship.gas, ship)) {
       const G = U.facilities.GAS[ship.gas];
-      const price = ship.gas === "helium" ? U.facilities.heliumPrice(state, next.to) : 1;
-      addCost(state, ship, Math.round(ship.sinceTopUp * G.perKm * price * cls(ship).price / 90000));
+      const rate = ship.gas === "aetherium" ? U.aether.perKm(state, next.to) : G.perKm * (ship.gas === "helium" ? U.facilities.heliumPrice(state, next.to) : 1);
+      addCost(state, ship, Math.round(ship.sinceTopUp * rate * cls(ship).price / 90000));
       ship.gasLeft = G.range; ship.sinceTopUp = 0;
     } else if (ship.gasLeft < 0) ship.gasLeft = 0;
     ship.location = next.to;
@@ -551,6 +553,7 @@ window.UpShip = window.UpShip || {};
       U.weather.monthly(state);
       U.crew.monthly(state);
       U.competition.monthly(state);
+      U.aether.monthly(state);
       for (const r of state.routes) {
         const s = routeSummary(state, r.id);
         if (s.days >= 30 && s.profit < 0)
@@ -608,7 +611,7 @@ window.UpShip = window.UpShip || {};
   }
   function clearSave() {
     saving = false;
-    try { for (const k of ["upship.save.v1", "upship.save.v2", "upship.save.v3", "upship.save.v4", "upship.save.v5", "upship.save.v6", "upship.save.v7", "upship.save.v8", "upship.save.v9", SAVE_KEY]) localStorage.removeItem(k); } catch (e) {}
+    try { for (const k of ["upship.save.v1", "upship.save.v2", "upship.save.v3", "upship.save.v4", "upship.save.v5", "upship.save.v6", "upship.save.v7", "upship.save.v8", "upship.save.v9", "upship.save.v10", SAVE_KEY]) localStorage.removeItem(k); } catch (e) {}
   }
 
   U.sim = { telegram, addGeneral, addIncome, nearestCity, distanceKm, fare, freightRate, dailyPassengers, dailyFreight, start, advance, beginTurn, dateOf, dateAtHour, H,

@@ -15,6 +15,8 @@ window.UpShip = window.UpShip || {};
       about: ["Overhauls and builds small ships", "Overhauls and builds medium ships", "Overhauls and builds every ship"] },
     school: { name: "Training school", costs: [6000, 10000, 20000],
       about: ["Trains 3 hands a month, and now and then an officer", "Trains 6 hands a month, officers more often", "Trains 10 hands a month, officers often"] },
+    refinery: { name: "Aetherium refinery", costs: [40000, 60000, 90000],
+      about: ["Supplies Aetherium for 4 ships", "Supplies Aetherium for 10 ships", "Supplies Aetherium for 25 ships"] },
     gasplant: { name: "Gas plant", costs: [4000], about: ["Hydrogen for your ships here, without the public supply"] },
     hestore: { name: "Helium store", costs: [6000], about: ["Helium bought by the trainload: much cheaper here inland"] }
   };
@@ -31,7 +33,8 @@ window.UpShip = window.UpShip || {};
   // Ship sizes: 1919 purpose-built ships are small; surplus, medium passenger, and freighter medium; liners large.
   function shipSize(classId) {
     const c = U.SHIP_CLASSES[classId];
-    if (c.liner) return 3;
+    if (c.liner || c.art === "skyfreighter") return 3;
+    if (c.art === "express") return 2;
     if (c.kind === "surplus" || c.art === "medium" || c.art === "freighter") return 2;
     return 1;
   }
@@ -50,7 +53,7 @@ window.UpShip = window.UpShip || {};
   }
   function own(state, id) {
     const f = state.facilities[id] = state.facilities[id] || { mast: 0, terminal: 0, shed: 0 };
-    f.gasplant = f.gasplant || 0; f.hestore = f.hestore || 0; f.school = f.school || 0;
+    f.gasplant = f.gasplant || 0; f.hestore = f.hestore || 0; f.school = f.school || 0; f.refinery = f.refinery || 0;
     return f;
   }
   const ownLevel = (state, id, type) => (state.facilities[id] || {})[type] || 0;
@@ -66,7 +69,8 @@ window.UpShip = window.UpShip || {};
 
   function terminalLimits(state, id) {
     const t = effective(state, id, "terminal");
-    if (t.level) return { pax: TYPES.terminal.pax[t.level - 1], tons: TYPES.terminal.tons[t.level - 1], own: t.own, level: t.level };
+    const handling = U.research && U.research.has(state, "operations7") ? 1.25 : 1;    // mechanical ground handling
+    if (t.level) return { pax: TYPES.terminal.pax[t.level - 1] * handling, tons: TYPES.terminal.tons[t.level - 1] * handling, own: t.own, level: t.level };
     if (ownLevel(state, id, "mast")) return { pax: BASIC_ROOM.pax, tons: BASIC_ROOM.tons, own: true, level: 0 };
     return { pax: 0, tons: 0, own: false, level: 0 };
   }
@@ -162,12 +166,14 @@ window.UpShip = window.UpShip || {};
   // Lifting gas --------------------------------------------------------------------------
   const GAS = {
     hydrogen: { name: "Hydrogen", range: 1500, perKm: 0.0006 },
-    helium: { name: "Helium", range: 2500, perKm: 0.0045 }
+    helium: { name: "Helium", range: 2500, perKm: 0.0045 },
+    aetherium: { name: "Aetherium", range: 2500, perKm: 0.0135 }
   };
   const HELIUM_PORTS = ["hamburg", "amsterdam", "london", "marseille", "genoa"];
   // Public gas supplies stand in industrial cities and in major and large cities and capitals.
   const publicGas = id => { const c = U.cityById[id]; return c.specialty === "industrial" || hasPublic(id); };
-  function canTopUp(state, id, gas) {
+  function canTopUp(state, id, gas, ship) {
+    if (gas === "aetherium") return U.aether.canTopUp(state, id, ship);
     if (publicGas(id)) return true;
     return gas === "helium" ? ownLevel(state, id, "hestore") > 0 : ownLevel(state, id, "gasplant") > 0 || ownLevel(state, id, "hestore") > 0;
   }
@@ -175,7 +181,8 @@ window.UpShip = window.UpShip || {};
   function heliumPrice(state, id) {
     const km = Math.min(...HELIUM_PORTS.map(p => S().distanceKm(id, p)));
     const factor = Math.min(2.5, 1 + 0.35 * km / 500);
-    return ownLevel(state, id, "hestore") ? 1 + (factor - 1) * 0.25 : factor;
+    const research = (U.research.has(state, "gas5") ? 0.75 : 1) * (U.research.has(state, "gas6") ? 0.6 : 1);   // better cells, helium recovery
+    return (ownLevel(state, id, "hestore") ? 1 + (factor - 1) * 0.25 : factor) * research;
   }
   // The longest stretch of a route with nowhere to top up, for warnings when drawing routes.
   function gasGap(state, stops, circuit, gas) {

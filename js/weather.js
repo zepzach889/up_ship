@@ -102,19 +102,20 @@ window.UpShip = window.UpShip || {};
           if (!best || kmV < best.km) best = { via, km: kmV };
         }
         if (!best) return { mode: "wait", wait: 12, reason: "a storm across the route with no way round" };
-        out.mode = "divert"; out.via = best.via; out.km = best.km;
+        out.mode = "divert"; out.via = best.via;
+        out.km = U.research.has(state, "operations5") ? km + (best.km - km) * 0.7 : best.km;      // radio beacons: tighter courses
         out.notes.push("diverting round a storm");
       }
       // Anything not yet known, or not avoided, is flown through.
       const actual = out.via ? crossings(W.systems, a, b, out.via, depart, out.km / speed, now) : all;
-      if (actual.storms.length) { out.slow *= 1.15; out.risk *= 4 * (cm.weatherRisk || 1); out.notes.push("caught by a storm"); }
+      if (actual.storms.length) { out.slow *= 1.15; out.risk *= 4 * (cm.weatherRisk || 1) * (U.research.has(state, "operations6") ? 0.67 : 1); out.notes.push("caught by a storm"); }
       if (actual.winds.length) { out.slow *= 1.1; out.risk *= 1.5; }
       if (actual.fog.length) { out.risk *= 2; }
       return out;
     }
     // Bold: straight through whatever is there.
     out.bold = true;
-    if (all.storms.length) { out.mode = "through"; out.slow *= 1.15; out.risk *= 4 * (cm.weatherRisk || 1); out.notes.push("flying through a storm"); }
+    if (all.storms.length) { out.mode = "through"; out.slow *= 1.15; out.risk *= 4 * (cm.weatherRisk || 1) * (U.research.has(state, "operations6") ? 0.67 : 1); out.notes.push("flying through a storm"); }
     if (all.winds.length) { out.slow *= 1.1; out.risk *= 1.5; }
     if (all.fog.length) { out.slow *= 1.05; out.risk *= 2; }
     return out;
@@ -128,9 +129,10 @@ window.UpShip = window.UpShip || {};
     const cm = state.crew && U.crew ? U.crew.mods(state, ship) : { risk: 1 };
     let p = leg.hours * PER_HOUR * risk * cm.risk * lvl.rate * (1 + (1 - ship.condition));
     if (ship.gas === "helium") p *= 0.5;
+    if (ship.gas === "aetherium") p *= 0.4;
     if (U.research.has(state, "operations1")) p *= 0.8;
     if (Math.random() > p) return null;
-    const fatalChance = ship.gas === "helium" ? lvl.fatalHe : lvl.fatalH;
+    const fatalChance = ship.gas === "aetherium" ? 0 : ship.gas === "helium" ? lvl.fatalHe : lvl.fatalH;
     const r = Math.random();
     return r < fatalChance ? "disaster" : r < fatalChance + (1 - fatalChance) * 0.4 ? "wreck" : "damage";
   }

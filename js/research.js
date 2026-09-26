@@ -4,7 +4,8 @@ window.UpShip = window.UpShip || {};
   const BRANCHES = [
     { id: "engines", name: "Engines", refine: { name: "Engine refinement", effect: "2% faster, every ship" } },
     { id: "structures", name: "Structures", refine: { name: "Structural refinement", effect: "2% more payload, every ship" } },
-    { id: "operations", name: "Operations", refine: { name: "Operating refinement", effect: "3% lower running costs" } }
+    { id: "operations", name: "Operations", refine: { name: "Operating refinement", effect: "3% lower running costs" } },
+    { id: "gas", name: "Gas", era: 2, refine: { name: "Aetherium refinement", effect: "Aetherium 30% cheaper; refineries supply a quarter more ships" } }
   ];
   // fit: "ship" = built into new ships, refit available; "new" = new ships only; "company" = every ship at once.
   const TECHS = [
@@ -19,17 +20,34 @@ window.UpShip = window.UpShip || {};
     { id: "operations1", branch: "operations", tier: 1, name: "Weather service", fit: "company", effect: "All incidents 20% less likely" },
     { id: "operations2", branch: "operations", tier: 2, name: "Radio navigation", fit: "company", effect: "Forced-landing repairs take half as long" },
     { id: "operations3", branch: "operations", tier: 3, name: "High mooring masts", fit: "company", effect: "Turnaround an hour shorter, every ship" },
-    { id: "operations4", branch: "operations", tier: 4, name: "Passenger comforts", fit: "ship", effect: "15% higher fares on equipped ships" }
+    { id: "operations4", branch: "operations", tier: 4, name: "Passenger comforts", fit: "ship", effect: "15% higher fares on equipped ships" },
+    // Era II: opens once every Era I technology is done.
+    { id: "engines5", branch: "engines", tier: 5, era: 2, name: "Supercharged diesels", fit: "ship", effect: "10% faster" },
+    { id: "engines6", branch: "engines", tier: 6, era: 2, name: "Water recovery", fit: "ship", effect: "Exhaust water replaces ballast: gas range 40% longer" },
+    { id: "engines7", branch: "engines", tier: 7, era: 2, name: "Turbo-diesels", fit: "ship", effect: "Another 10% faster; 15% less fuel" },
+    { id: "engines8", branch: "engines", tier: 8, era: 2, name: "Swivelling propellers", fit: "ship", effect: "Turnarounds an hour shorter" },
+    { id: "structures5", branch: "structures", tier: 5, era: 2, name: "Geodetic framework", fit: "ship", effect: "10% more passengers and cargo" },
+    { id: "structures6", branch: "structures", tier: 6, era: 2, name: "Giant rings", fit: "ship", effect: "5 more years of service life; key to the largest classes" },
+    { id: "structures7", branch: "structures", tier: 7, era: 2, name: "Metal-clad hulls", fit: "ship", effect: "A riveted aluminium skin, after the Navy's ZMC-2: 25% slower wear" },
+    { id: "structures8", branch: "structures", tier: 8, era: 2, name: "Great hull construction", fit: "company", effect: "Hulls larger than the Hindenburg" },
+    { id: "operations5", branch: "operations", tier: 5, era: 2, name: "Radio beacons", fit: "company", effect: "Diversions round weather 30% shorter" },
+    { id: "operations6", branch: "operations", tier: 6, era: 2, name: "Weather ships", fit: "company", effect: "Accident risk in bad weather a third lower" },
+    { id: "operations7", branch: "operations", tier: 7, era: 2, name: "Mechanical ground handling", fit: "company", effect: "Turnarounds an hour shorter; terminals handle a quarter more" },
+    { id: "operations8", branch: "operations", tier: 8, era: 2, name: "In-flight services", fit: "ship", effect: "Comfort up by 8 on passenger ships" },
+    { id: "gas5", branch: "gas", tier: 5, era: 2, name: "Latex-gelatin cells", fit: "company", effect: "Gas lasts 30% longer; helium top-ups a quarter cheaper" },
+    { id: "gas6", branch: "gas", tier: 6, era: 2, name: "Helium recovery", fit: "company", effect: "Helium 40% cheaper everywhere" },
+    { id: "gas7", branch: "gas", tier: 7, era: 2, name: "Aetherium", fit: "company", effect: "Discovered: about 20% more lift than hydrogen, and it cannot burn" },
+    { id: "gas8", branch: "gas", tier: 8, era: 2, name: "Aetherium refining", fit: "company", effect: "Aetherium less than half the price; refineries supply half again as many ships" }
   ];
-  const TIER_COST = { 1: 25000, 2: 32000, 3: 40000, 4: 50000 };
-  const TIER_DAYS = { 1: 250, 2: 290, 3: 360, 4: 390 };       // at normal funding: about ten years for all twelve
+  const TIER_COST = { 1: 25000, 2: 32000, 3: 40000, 4: 50000, 5: 60000, 6: 75000, 7: 95000, 8: 120000 };
+  const TIER_DAYS = { 1: 250, 2: 290, 3: 360, 4: 390, 5: 300, 6: 330, 7: 360, 8: 390 };   // Era I about ten years, Era II about fifteen
   const FUNDING = {
     low: { name: "Low", cost: 0.6, speed: 0.55 },
     normal: { name: "Normal", cost: 1, speed: 1 },
     high: { name: "High", cost: 1.7, speed: 1.5 }
   };
   const REFINE_COST = 30000, REFINE_DAYS = 180, REFINE_GROWTH = 1.25;
-  const REFIT_SHARE = { ship: 0.05, operations4: 0.04 };
+  const REFIT_SHARE = { ship: 0.05, operations4: 0.04, operations8: 0.04 };
   const techById = Object.fromEntries(TECHS.map(t => [t.id, t]));
 
   // Classes unlocked by research. German figures are the baseline; other countries scale them.
@@ -39,7 +57,13 @@ window.UpShip = window.UpShip || {};
     { role: "freighter", kind: "cargo", requires: ["structures3", "operations3"], base: { passengers: 0, cargoTons: 25, speedKmh: 95, rangeKm: 3000, crew: 16, price: 140000, dailyCost: 200, fuelPerKm: 0.14, buildDays: 150 },
       names: { germany: "Pelikan", britain: "Cormorant", france: "Pélican", italy: "Pellicano" }, roleName: "Heavy freighter" },
     { role: "liner", kind: "passenger", requires: ["structures3", "engines3", "operations2"], base: { passengers: 60, cargoTons: 8, speedKmh: 115, rangeKm: 7000, crew: 36, price: 280000, dailyCost: 420, fuelPerKm: 0.22, buildDays: 240 },
-      names: { germany: "Albatros", britain: "Imperial", france: "Frégate", italy: "Falco" }, roleName: "Long-range liner", liner: true }
+      names: { germany: "Albatros", britain: "Imperial", france: "Frégate", italy: "Falco" }, roleName: "Long-range liner", liner: true },
+    { role: "express", kind: "passenger", era: 2, requires: ["engines7", "structures5"], base: { passengers: 30, cargoTons: 3, speedKmh: 160, rangeKm: 4000, crew: 20, price: 170000, dailyCost: 260, fuelPerKm: 0.15, buildDays: 150 },
+      names: { germany: "Falke", britain: "Merlin", france: "Faucon", italy: "Sparviero" }, roleName: "Express ship" },
+    { role: "skyfreighter", kind: "cargo", era: 2, requires: ["structures7", "operations7"], base: { passengers: 0, cargoTons: 70, speedKmh: 105, rangeKm: 5000, crew: 24, price: 260000, dailyCost: 380, fuelPerKm: 0.3, buildDays: 240 },
+      names: { germany: "Kondor", britain: "Titan", france: "Condor", italy: "Grifone" }, roleName: "Sky freighter" },
+    { role: "greatliner", kind: "passenger", era: 2, requires: ["structures8", "gas7"], base: { passengers: 150, cargoTons: 15, speedKmh: 135, rangeKm: 10000, crew: 60, price: 650000, dailyCost: 900, fuelPerKm: 0.45, buildDays: 420 },
+      names: { germany: "Adler", britain: "Empire", france: "Transatlantique", italy: "Regina" }, roleName: "Great liner", liner: true }
   ];
   const NATION_SCALE = {
     germany: { cap: 1, range: 1, speed: 1, price: 1, days: 0 },
@@ -52,6 +76,12 @@ window.UpShip = window.UpShip || {};
       france: ["Champagne", "Bourgogne", "Auvergne", "Savoie", "Anjou", "Berry"], italy: ["Piemonte", "Veneto", "Marche", "Abruzzo", "Calabria", "Molise"] },
     freighter: { germany: ["Hansa", "Ruhr", "Saar", "Mosel", "Neckar", "Main"], britain: ["Tyneside", "Clydeside", "Humber", "Solent", "Medway", "Wear"],
       france: ["Loire", "Seine", "Rhône", "Garonne", "Marne", "Saône"], italy: ["Po", "Arno", "Adige", "Piave", "Brenta", "Isonzo"] },
+    express: { germany: ["Blitz", "Pfeil", "Komet", "Meteor", "Wirbel", "Sturmvogel"], britain: ["Arrow", "Dart", "Comet", "Flyer", "Mercury", "Swiftsure"],
+      france: ["Flèche", "Éclair", "Comète", "Mistral", "Rapide", "Étoile Filante"], italy: ["Freccia", "Lampo", "Cometa", "Saetta", "Baleno", "Fulmine"] },
+    skyfreighter: { germany: ["Atlas", "Goliath", "Koloss", "Riese", "Herkules", "Titan"], britain: ["Samson", "Colossus", "Behemoth", "Leviathan", "Goliath", "Atlas"],
+      france: ["Hercule", "Colosse", "Géant", "Atlas", "Titan", "Samson"], italy: ["Ercole", "Colosso", "Gigante", "Atlante", "Titano", "Sansone"] },
+    greatliner: { germany: ["Vaterland", "Kaiserin", "Imperator", "Germania", "Hansa", "Europa"], britain: ["Britannic", "Majestic", "Olympic", "Oceanic", "Sovereign", "Empress"],
+      france: ["France", "Paris", "Liberté", "Majestueux", "Souveraine", "Impératrice"], italy: ["Italia", "Roma", "Augusta", "Imperatrice", "Regina Elena", "Sovrana"] },
     liner: { germany: ["Rheinland", "Westfalen", "Pommern", "Holstein", "Thüringen", "Franken"], britain: ["Britannia", "Empire", "Dominion", "Commonwealth", "Endeavour", "Resolution"],
       france: ["Atlantide", "Méridien", "Horizon", "Zénith", "Étoile", "Aurore"], italy: ["Vittoria", "Aurora", "Serenissima", "Fortuna", "Concordia", "Speranza"] }
   };
@@ -66,7 +96,7 @@ window.UpShip = window.UpShip || {};
       const id = `${u.role}-${nation}`, b = u.base;
       U.SHIP_CLASSES[id] = {
         id, kind: u.kind, art: u.role, liner: !!u.liner, name: `${u.names[nation]} class`, role: u.roleName,
-        basis: "Built with Era I research", requires: u.requires,
+        basis: u.era === 2 ? "Built with Era II research" : "Built with Era I research", requires: u.requires,
         passengers: Math.round(b.passengers * s.cap), cargoTons: Math.round(b.cargoTons * s.cap),
         speedKmh: Math.round(b.speedKmh * s.speed), rangeKm: Math.round(b.rangeKm * s.range / 100) * 100, crew: Math.round(b.crew * s.cap),
         price: Math.round(b.price * s.price / 1000) * 1000, dailyCost: Math.round(b.dailyCost * s.price), fuelPerKm: b.fuelPerKm * s.cap,
@@ -79,7 +109,7 @@ window.UpShip = window.UpShip || {};
 
   // State ---------------------------------------------------------------------------------
   function init(state) {
-    state.research = { done: {}, progress: {}, current: null, funding: "normal", refinements: { engines: 0, structures: 0, operations: 0 } };
+    state.research = { done: {}, progress: {}, current: null, funding: "normal", refinements: { engines: 0, structures: 0, operations: 0, gas: 0 } };
   }
   const R = state => state.research;
   const has = (state, id) => !!R(state).done[id];
@@ -87,10 +117,11 @@ window.UpShip = window.UpShip || {};
   function available(state, id) {
     if (id.startsWith("refine-")) {
       const branch = id.slice(7);
-      return TECHS.filter(t => t.branch === branch).every(t => has(state, t.id));
+      return TECHS.filter(t => t.branch === branch && (branch === "gas" || !t.era)).every(t => has(state, t.id));
     }
     const t = techById[id];
     if (!t || has(state, id)) return false;
+    if (t.era === 2 && !TECHS.filter(x => !x.era).every(x => has(state, x.id))) return false;
     return TECHS.filter(x => x.branch === t.branch && x.tier < t.tier).every(x => has(state, x.id));
   }
   function projectInfo(state, id) {
@@ -135,6 +166,7 @@ window.UpShip = window.UpShip || {};
       delete r.progress[r.current];
       if (p.id.startsWith("refine-")) r.refinements[p.branch] += 1;
       else r.done[p.id] = true;
+      if (U.aether) U.aether.researched(state, p.id);
       r.current = null;
       const unlocked = Object.keys(CLASS_UNLOCK).filter(id => U.RESEARCH_CATALOG[state.company.nation].includes(id)
         && CLASS_UNLOCK[id].includes(p.id) && CLASS_UNLOCK[id].every(x => has(state, x)));
@@ -166,6 +198,7 @@ window.UpShip = window.UpShip || {};
       if (!plan.includes(o.id)) continue;
       cost += o.cost; ship.fitted.push(o.id); done.push(o.name);
       if (o.id === "structures3") ship.lifeYears += 3;
+      if (o.id === "structures6") ship.lifeYears += 5;
     }
     ship.refitPlan = [];
     return { cost, done };
@@ -178,21 +211,27 @@ window.UpShip = window.UpShip || {};
     const cm = state.crew && U.crew ? U.crew.mods(state, ship) : { speed: 1, turnaround: 0, fuel: 1, cost: 1, wear: 1, incidents: 1 };
     // Helium lifts about 8% less: it comes out of cargo, since passenger ships fill their cabins before their lift.
     // A ship out of gas flies light, losing a fifth of everything it can carry.
-    const light = ship.gasLeft != null && ship.gasLeft <= 0 ? 0.8 : 1, heCargo = ship.gas === "helium" ? 0.92 : 1;
-    const payload = (f.has("structures1") ? 1.1 : 1) * (f.has("structures2") ? 1.05 : 1) * (1 + 0.02 * r.refinements.structures) * light;
-    const speed = c.speedKmh * (f.has("engines1") ? 1.08 : 1) * (f.has("structures4") ? 1.1 : 1) * (1 + 0.02 * r.refinements.engines) * cm.speed;
+    // Aetherium lifts about a fifth more than hydrogen: much more cargo, and a little more room for passengers.
+    const light = ship.gasLeft != null && ship.gasLeft <= 0 ? 0.8 : 1;
+    const heCargo = ship.gas === "helium" ? 0.92 : ship.gas === "aetherium" ? 1.2 : 1, aePax = ship.gas === "aetherium" ? 1.1 : 1;
+    const payload = (f.has("structures1") ? 1.1 : 1) * (f.has("structures2") ? 1.05 : 1) * (f.has("structures5") ? 1.1 : 1) * (1 + 0.02 * r.refinements.structures) * light;
+    const speed = c.speedKmh * (f.has("engines1") ? 1.08 : 1) * (f.has("structures4") ? 1.1 : 1) * (f.has("engines5") ? 1.1 : 1) * (f.has("engines7") ? 1.1 : 1)
+      * (1 + 0.02 * r.refinements.engines) * cm.speed;
     return {
-      passengers: Math.floor(c.passengers * payload),
+      passengers: Math.floor(c.passengers * payload * aePax),
       cargoTons: Math.round(c.cargoTons * payload * heCargo * 10) / 10,
       speedKmh: Math.round(speed),
       rangeKm: Math.round(c.rangeKm * (f.has("engines3") ? 1.2 : 1) * (f.has("structures4") ? 1.1 : 1) / 100) * 100,
-      fuelPerKm: c.fuelPerKm * (f.has("engines3") ? 0.9 : 1) * (f.has("engines4") ? 0.75 : 1) * cm.fuel,
+      fuelPerKm: c.fuelPerKm * (f.has("engines3") ? 0.9 : 1) * (f.has("engines4") ? 0.75 : 1) * (f.has("engines7") ? 0.85 : 1) * cm.fuel,
       dailyCost: c.dailyCost * (1 - 0.03 * r.refinements.operations) * cm.cost,
-      wear: (f.has("structures2") ? 0.8 : 1) * cm.wear,
+      wear: (f.has("structures2") ? 0.8 : 1) * (f.has("structures7") ? 0.75 : 1) * cm.wear,
+      // Gas used per kilometre: water recovery and better cells make it last longer.
+      gasUse: (f.has("engines6") ? 1 / 1.4 : 1) * (has(state, "gas5") ? 1 / 1.3 : 1),
       engineFailure: f.has("engines1") ? 0.75 : 1,
       incidents: (has(state, "operations1") ? 0.8 : 1) * cm.incidents,
       repairDays: has(state, "operations2") ? 0.5 : 1,
-      turnaround: Math.max(1, U.ECONOMY.turnaroundHours - (f.has("engines2") ? 1 : 0) - (has(state, "operations3") ? 1 : 0) + cm.turnaround),
+      turnaround: Math.max(1, U.ECONOMY.turnaroundHours - (f.has("engines2") ? 1 : 0) - (has(state, "operations3") ? 1 : 0)
+        - (f.has("engines8") ? 1 : 0) - (has(state, "operations7") ? 1 : 0) + cm.turnaround),
       fare: f.has("operations4") ? 1.15 : 1
     };
   }
