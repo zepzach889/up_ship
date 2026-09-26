@@ -68,7 +68,7 @@ window.UpShip = window.UpShip || {};
     // All countries together form the land; used for the water lining and the coastline.
     const landShape = el("g", { id: "land-shape" }, defs);
     for (const c of M.countries) el("path", { d: c.path }, landShape);
-    defs.insertAdjacentHTML("beforeend", U.shipArt.DEFS + U.facArt.DEFS);
+    defs.insertAdjacentHTML("beforeend", U.shipArt.DEFS + U.facArt.DEFS + WEATHER_DEFS);
 
     world = el("g", {}, svg);
     el("rect", { x: -M.width, y: -M.height, width: M.width * 3, height: M.height * 3, class: "sea" }, world);
@@ -80,6 +80,7 @@ window.UpShip = window.UpShip || {};
     layers.overlay = el("g", { class: "overlay" }, world);
     layers.routes = el("g", { class: "routes" }, world);
     layers.fac = el("g", { class: "fac-layer" }, world);      // under the cities, so labels stay readable
+    layers.weather = el("g", { class: "weather-layer" }, world);
     layers.cities = el("g", { class: "cities" }, world);
     layers.ships = el("g", { class: "ships" }, world);
 
@@ -223,6 +224,12 @@ window.UpShip = window.UpShip || {};
     const p = U.sim.positionAt(ship, hour);
     if (p.flying) {
       const a = U.cityById[p.leg.from], b = U.cityById[p.leg.to], f = p.fraction;
+      if (p.leg.via) {
+        // A diversion: follow the curve, facing along it.
+        const q = U.weather.bez(a, p.leg.via, b, f), v = p.leg.via;
+        const dx = 2 * (1 - f) * (v.x - a.x) + 2 * f * (b.x - v.x), dy = 2 * (1 - f) * (v.y - a.y) + 2 * f * (b.y - v.y);
+        return { x: q.x, y: q.y, angle: Math.atan2(dy, dx) * 180 / Math.PI, flying: true, fraction: f, leg: p.leg, hour };
+      }
       return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, angle: Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI,
         flying: true, fraction: f, leg: p.leg, hour };
     }
@@ -380,6 +387,97 @@ window.UpShip = window.UpShip || {};
     for (const cid in cityNodes) cityNodes[cid].g.classList.toggle("is-home", cid === id);
   }
 
+  // Weather ----------------------------------------------------------------------------
+  // Clouds seen from above: generated forms lit from the north-west, shadows to the south-east.
+  const cloudFilter = (id, freq, octaves, blur, cells, relief, lift, shadow, shOpacity) => `<filter id="${id}" x="-60%" y="-60%" width="220%" height="220%" color-interpolation-filters="sRGB">
+    <feTurbulence type="fractalNoise" baseFrequency="${freq}" numOctaves="${octaves}" seed="11" result="n"/>
+    <feGaussianBlur in="SourceGraphic" stdDeviation="${blur}" result="blob"/>
+    <feColorMatrix in="n" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  ${cells}" result="cells"/>
+    <feComposite in="cells" in2="blob" operator="in" result="dens"/>
+    <feGaussianBlur in="dens" stdDeviation="1.1" result="densS"/>
+    <feDiffuseLighting in="densS" surfaceScale="${relief}" diffuseConstant="1.25" lighting-color="#ffffff" result="lit"><feDistantLight azimuth="225" elevation="50"/></feDiffuseLighting>
+    <feComponentTransfer in="lit" result="litW"><feFuncR type="linear" slope="0.62" intercept="${lift}"/><feFuncG type="linear" slope="0.62" intercept="${lift}"/><feFuncB type="linear" slope="0.58" intercept="${lift + 0.04}"/></feComponentTransfer>
+    <feComposite in="litW" in2="dens" operator="in" result="body"/>
+    <feOffset in="dens" dx="${shadow}" dy="${shadow * 1.2}" result="sh"/><feGaussianBlur in="sh" stdDeviation="${shadow * 0.4}" result="shb"/>
+    <feColorMatrix in="shb" type="matrix" values="0 0 0 0 0.12  0 0 0 0 0.12  0 0 0 0 0.18  0 0 0 ${shOpacity} 0" result="shadow"/>
+    <feMerge><feMergeNode in="shadow"/><feMergeNode in="body"/></feMerge></filter>`;
+  const WEATHER_DEFS = cloudFilter("wx-storm", 0.02, 6, 13, "2.6 0 0 0 -0.78", 7, 0.42, 20, 0.55)
+    + cloudFilter("wx-fair", 0.04, 5, 12, "2.4 0 0 0 -0.95", 3, 0.42, 9, 0.3)
+    + `<filter id="wx-fog" x="-60%" y="-90%" width="220%" height="280%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.008 0.03" numOctaves="4" seed="21" result="n"/>
+      <feGaussianBlur in="SourceGraphic" stdDeviation="13" result="blob"/>
+      <feColorMatrix in="n" type="matrix" values="0 0 0 0 0.97  0 0 0 0 0.975  0 0 0 0 0.97  2.4 0 0 0 -0.5" result="veil"/>
+      <feComposite in="veil" in2="blob" operator="in" result="f"/><feGaussianBlur in="f" stdDeviation="1.8"/></filter>
+    <filter id="wx-wind" x="-60%" y="-60%" width="220%" height="220%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.004 0.07" numOctaves="4" seed="8" result="n"/>
+      <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="blob"/>
+      <feColorMatrix in="n" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  3 0 0 0 -1.2" result="st"/>
+      <feComposite in="st" in2="blob" operator="in" result="w"/><feGaussianBlur in="w" stdDeviation="0.5" result="ws"/>
+      <feOffset in="ws" dx="6" dy="7" result="sh"/><feGaussianBlur in="sh" stdDeviation="2.5" result="shb"/>
+      <feColorMatrix in="shb" type="matrix" values="0 0 0 0 0.12  0 0 0 0 0.12  0 0 0 0 0.16  0 0 0 0.25 0" result="shadow"/>
+      <feMerge><feMergeNode in="shadow"/><feMergeNode in="ws"/></feMerge></filter>
+    <filter id="wx-rain" x="-60%" y="-60%" width="220%" height="220%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.03 0.1" numOctaves="3" seed="9" result="n"/>
+      <feGaussianBlur in="SourceGraphic" stdDeviation="18" result="blob"/>
+      <feColorMatrix in="n" type="matrix" values="0 0 0 0 0.25  0 0 0 0 0.27  0 0 0 0 0.33  1.4 0 0 0 -0.25" result="rv"/>
+      <feComposite in="rv" in2="blob" operator="in"/></filter>
+    <radialGradient id="wx-flash"><stop offset="0" stop-color="#fff5d6" stop-opacity="0.9"/><stop offset="0.45" stop-color="#fff5d6" stop-opacity="0.3"/><stop offset="1" stop-color="#fff5d6" stop-opacity="0"/></radialGradient>`;
+  const wxNodes = {};
+  let wxLast = 0;
+  // Each system is rendered once, when it forms, into a self-contained SVG picture; after that it only
+  // slides and fades, which costs almost nothing (the cloud filters are too heavy to rerun as clouds move).
+  function wxPicture(s) {
+    const pad = 1.7, w = s.rx * 2 * pad + 60, hgt = Math.max(s.rx, s.ry) * 2 * pad + 60;
+    let body;
+    if (s.kind === "storm") body = `<ellipse cx="24" cy="26" rx="${s.rx * 1.02}" ry="${s.ry * 0.8}" fill="#fff" filter="url(#wx-rain)" opacity="0.5"/>
+      <g filter="url(#wx-storm)">${s.parts.map(p => `<ellipse cx="${p.dx}" cy="${p.dy}" rx="${p.rx}" ry="${p.ry}" fill="#fff"/>`).join("")}</g>`;
+    else body = `<ellipse cx="0" cy="0" rx="${s.rx}" ry="${s.ry}" fill="#fff" filter="url(#wx-${s.kind})"/>`;
+    const scale = Math.min(2, 900 / Math.max(w, hgt));        // bitmap resolution: sharp enough when zoomed in, capped for memory
+    const svgText = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${-w / 2} ${-hgt / 2} ${w} ${hgt}" width="${Math.round(w * scale)}" height="${Math.round(hgt * scale)}"><defs>${WEATHER_DEFS}</defs>${body}</svg>`;
+    const svgUrl = URL.createObjectURL(new Blob([svgText], { type: "image/svg+xml" }));
+    const pic = { url: null, w, h: hgt, ready: null };
+    // Rasterize once into a plain bitmap, so moving it never reruns the cloud filters.
+    pic.ready = new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => {
+        const cv = document.createElement("canvas");
+        cv.width = Math.round(w * scale); cv.height = Math.round(hgt * scale);
+        cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+        URL.revokeObjectURL(svgUrl);
+        cv.toBlob(blob => { pic.url = URL.createObjectURL(blob); resolve(pic.url); }, "image/png");
+      };
+      img.onerror = () => { pic.url = svgUrl; resolve(svgUrl); };
+      img.src = svgUrl;
+    });
+    return pic;
+  }
+  function drawWeather(state, progress, force) {
+    if (!state || !state.weather || !layers.weather) return;
+    const nowMs = performance.now();
+    if (!force && nowMs - wxLast < 120) return;
+    wxLast = nowMs;
+    const dt = (U.turnActive ? progress : 0) * U.TIME.tickHours, live = new Set();
+    for (const s of state.weather.systems) {
+      live.add(s.id);
+      let n = wxNodes[s.id];
+      if (!n) {
+        const pic = wxPicture(s), g = el("g", { class: "wx wx-" + s.kind }, layers.weather);
+        const image = el("image", { x: -pic.w / 2, y: -pic.h / 2, width: pic.w, height: pic.h, preserveAspectRatio: "none" }, g);
+        n = { g, pic };
+        pic.ready.then(url => image.setAttribute("href", url));
+        if (s.kind === "storm") n.flash = el("ellipse", { cx: -s.rx * 0.1, cy: 0, rx: s.rx * 0.22, ry: s.ry * 0.3, fill: "url(#wx-flash)" }, g);
+        el("title", {}, g).textContent = s.name;
+        wxNodes[s.id] = n;
+      }
+      const hour = U.sim.H(state.tick) + dt, age = hour - s.born, left = s.dies - hour;
+      const fade = Math.max(0, Math.min(1, age / 6, left / 6));
+      n.g.setAttribute("transform", `translate(${(s.x + s.vx * dt).toFixed(1)} ${(s.y + s.vy * dt).toFixed(1)}) rotate(${s.rot.toFixed(1)})`);
+      n.g.setAttribute("opacity", fade.toFixed(2));
+      if (n.flash) n.flash.setAttribute("opacity", Math.random() < 0.08 ? "1" : "0.15");
+    }
+    for (const id in wxNodes) if (!live.has(+id)) { const n = wxNodes[id]; n.g.remove(); n.pic.ready.then(u => URL.revokeObjectURL(u)); delete wxNodes[id]; }
+  }
+
   // Map layers ------------------------------------------------------------------------
   let layerMode = "normal", draftStops = null;
   function setLayer(mode) { layerMode = mode; svg.classList.toggle("layer-dim", mode !== "normal"); layoutCities(); syncExtras(U.state); }
@@ -461,5 +559,5 @@ window.UpShip = window.UpShip || {};
   }
   function draftDemand(stops) { draftStops = stops && stops.length ? stops : null; syncExtras(U.state); }
 
-  U.map = { init, syncRoutes, drawShips, drawDraft, zoomBy, highlight, shipPosition, project, setSetup, setHome, setLayer, syncExtras, draftDemand };
+  U.map = { drawWeather, init, syncRoutes, drawShips, drawDraft, zoomBy, highlight, shipPosition, project, setSetup, setHome, setLayer, syncExtras, draftDemand };
 })(window.UpShip);

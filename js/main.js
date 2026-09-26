@@ -117,6 +117,7 @@ window.UpShip = window.UpShip || {};
         if (!frozen && elapsed >= turnLength) endTurn();
       }
       U.map.drawShips(U.state, U.progress);
+      U.map.drawWeather(U.state, U.progress);
     }
     U.ui.updateBar(U.state, auto, U.progress, frozen);
     requestAnimationFrame(frame);

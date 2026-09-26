@@ -133,7 +133,7 @@ window.UpShip = window.UpShip || {};
     const body = $("#panel-body");
     if (!selection) { body.innerHTML = ""; return; }
     const s = U.state;
-    const views = { research: researchPanel, city: cityPanel, ship: shipPanel, route: routePanel, shipyard: shipyardPanel, fleet: fleetPanel, routes: routesPanel,
+    const views = { settings: settingsPanel, gasdecision: gasDecisionPanel, research: researchPanel, city: cityPanel, ship: shipPanel, route: routePanel, shipyard: shipyardPanel, fleet: fleetPanel, routes: routesPanel,
       finances: financesPanel, company: companyPanel, telegrams: telegramsPanel, contracts: contractsPanel };
     const html = views[selection.type](s, selection.id);
     if (html == null) { select(null); return; }
@@ -197,12 +197,13 @@ window.UpShip = window.UpShip || {};
     if (pos.flying) {
       const arrive = U.sim.dateAtHour(pos.leg.start + pos.leg.hours);
       const sameDay = arrive.getUTCDate() === U.sim.dateAtHour(pos.hour).getUTCDate();
-      return `${pos.leg.ferry ? "Positioning flight" : "Flying"} to ${c(pos.leg.to)}, arriving about ${clock(arrive)}${sameDay ? "" : " " + shortDate(arrive)}`;
+      return `${pos.leg.ferry ? "Positioning flight" : "Flying"} to ${c(pos.leg.to)}${pos.leg.note ? `, ${pos.leg.note}` : ""}, arriving about ${clock(arrive)}${sameDay ? "" : " " + shortDate(arrive)}`;
     }
     if (ship.overhaulUntil && pos.hour < ship.overhaulUntil) return `In overhaul at ${c(pos.at)} until ${shortDate(U.sim.dateAtHour(ship.overhaulUntil))}`;
     if (pos.upcoming) return `Moored at ${c(pos.at)}, departing ${clock(U.sim.dateAtHour(pos.upcoming.start))} for ${c(pos.upcoming.to)}`;
     if (ship.readyHour > pos.hour + 12 && ship.routeId) return `Grounded for repairs at ${c(pos.at)} until ${shortDate(U.sim.dateAtHour(ship.readyHour))}`;
     if (!ship.routeId) return `Waiting at ${c(pos.at)} with no route`;
+    if (ship.waitNote && ship.readyHour > pos.hour) return `${ship.waitNote} at ${c(pos.at)}`;
     return `Moored at ${c(pos.at)}`;
   }
 
@@ -301,6 +302,8 @@ window.UpShip = window.UpShip || {};
       <dl>
         ${rs.passengers ? cabinRows(state, ship) : row("Passengers", "None")}
         ${gasRows(state, ship)}
+        </dl><div class="reconfig"><p class="small">Weather: ${ship.weatherPolicy ? `this ship flies ${ship.weatherPolicy}` : `company policy (${state.weatherPolicy || "cautious"})`}</p><div class="btn-row">
+          ${[["", "Company policy"], ["cautious", "Cautious"], ["bold", "Bold"]].map(([k, n]) => `<button class="${(ship.weatherPolicy || "") === k ? "btn" : "btn-quiet"}" data-wxpolicy="${ship.id}:${k}">${n}</button>`).join("")}</div></div><dl>
         ${row("Cargo", rs.cargoTons + (rs.cargoTons === 1 ? " ton" : " tons"))}
         ${row("Cruising speed", rs.speedKmh + " km/h")}
         ${row("Range", km(rs.rangeKm))}
@@ -478,6 +481,44 @@ window.UpShip = window.UpShip || {};
       <ul class="rep-notes">${(r.notes.character.length ? r.notes.character : ["Updated at the end of each month."]).map(n => `<li>${esc(n)}</li>`).join("")}</ul>`;
   }
 
+  // Settings: the accident level, changeable at any time.
+  function settingsPanel(state) {
+    const cur = (state.settings || {}).accidents || "golden";
+    const opts = [["sheltered", "Sheltered", "Accidents damage and wreck ships, but everyone aboard always survives."],
+      ["golden", "Golden age", "Mostly wrecks with everyone rescued; rarely, especially with hydrogen fire, a disaster with loss of life."],
+      ["unforgiving", "Unforgiving", "Accidents more frequent and more often fatal, closer to the record of the 1920s."]];
+    return `<h2>Settings</h2>
+      <h3>Accidents</h3>
+      <p class="small">Changes apply from now on.</p>
+      <ul class="choice-list">${opts.map(([k, n, d]) => `<li><button class="${cur === k ? "btn" : "btn-quiet"}" data-accidents="${k}">${n}</button><small>${d}</small></li>`).join("")}</ul>`;
+  }
+  // After a disaster on hydrogen: whether to switch gas.
+  function gasDecisionPanel(state) {
+    const h = state.ships.filter(s => s.gas !== "helium"), hp = h.filter(s => U.passengers.berths(state, s).total);
+    return `<h2>After the disaster</h2>
+      <p class="sub">The inquiry will ask why the ship carried hydrogen. You have ${h.length} hydrogen ship${h.length === 1 ? "" : "s"} still flying.</p>
+      <ul class="choice-list">
+        <li><button class="btn" data-gasdecide="passenger">Convert the passenger ships to helium</button><small>${hp.length} ship${hp.length === 1 ? "" : "s"}, each at its next overhaul. Freighters stay on hydrogen.</small></li>
+        <li><button class="btn" data-gasdecide="all">Convert the whole fleet to helium</button><small>Every ship at its next overhaul, and helium for all new orders.</small></li>
+        <li><button class="btn-quiet" data-gasdecide="none">Stay the course</button><small>Keep flying hydrogen. Standing will take longer to recover.</small></li>
+      </ul>`;
+  }
+  function insuranceBlock(state) {
+    const I = state.insurance, prem = U.weather.premium(state) * 12;
+    const names = { none: "None", hull: "Hull", full: "Full" };
+    const about = { none: "You bear every loss yourself.", hull: "Pays a wrecked or damaged ship's value.", full: "Also covers passenger and cargo claims after an accident." };
+    return `<h3>Insurance</h3>
+      <div class="btn-row">${Object.keys(names).map(k => `<button class="${I.cover === k ? "btn" : "btn-quiet"}" data-cover="${k}">${names[k]}</button>`).join("")}</div>
+      <p class="small">${about[I.cover]} ${I.cover !== "none" ? `About ${money(prem)} a year at present${I.factor > 1.05 ? ", raised after recent claims" : ""}.` : ""}</p>`;
+  }
+  function weatherPolicyBlock(state) {
+    const cur = state.weatherPolicy || "cautious";
+    return `<h3>Weather</h3>
+      <div class="btn-row"><button class="${cur === "cautious" ? "btn" : "btn-quiet"}" data-wxpolicy="all:cautious">Cautious</button>
+        <button class="${cur === "bold" ? "btn" : "btn-quiet"}" data-wxpolicy="all:bold">Bold</button></div>
+      <p class="small">${cur === "cautious" ? "Ships divert round storms they know of, and wait out fog." : "Ships fly straight through: faster, but at more risk, and insurance costs a little more."} ${U.research.has(state, "operations1") ? "Your weather service shows new systems as they form." : "Without a weather service, storms less than half a day old are surprises."}</p>`;
+  }
+
   // Research ---------------------------------------------------------------------------
   function wrapLabel(text) {
     const words = text.split(" ");
@@ -594,6 +635,7 @@ window.UpShip = window.UpShip || {};
           <small>${U.SHIP_CLASSES[s.classId].name}, condition ${Math.round(s.condition * 100)}%. ${esc(shipStatus(state, s, U.progress || 0))}.</small></button></li>`).join("")
         || `<li class="note">No ships in this group.</li>`}</ul>
       <button class="btn" data-open-panel="shipyard">Order a ship</button>
+      ${weatherPolicyBlock(state)}
       ${gasPolicyBlock(state)}
       ${refitRows ? `<h3>Refits</h3>
         <p class="small">Tick improvements to fit at each ship's next overhaul. ${committed ? `Planned so far: ${money(committed)}.` : ""}</p>
@@ -750,7 +792,8 @@ window.UpShip = window.UpShip || {};
         return row(routeLink(r), s.days ? `<span class="${s.profit < 0 ? "neg" : "pos"}">${money(s.profit)}</span>` : "New"); }).join("") || `<p class="note">No routes.</p>`}</dl>
       <h3>Ships, ${y.year}</h3>
       <dl>${state.ships.map(s => { const p = s.stats.revenue - s.stats.costs;
-        return row(shipLink(s), s.deliveryTick > state.tick ? "Being built" : `<span class="${p < 0 ? "neg" : "pos"}">${money(p)}</span>`); }).join("")}</dl>`;
+        return row(shipLink(s), s.deliveryTick > state.tick ? "Being built" : `<span class="${p < 0 ? "neg" : "pos"}">${money(p)}</span>`); }).join("")}</dl>
+      ${insuranceBlock(state)}`;
   }
 
   // Panel actions -------------------------------------------------------------------
@@ -798,6 +841,20 @@ window.UpShip = window.UpShip || {};
       // Ships that don't match switch at their next overhaul.
       for (const sh of s.ships) { const want = U.sim.policyGas(s, sh.classId); sh.gasTo = want && want !== sh.gas ? want : (want ? null : sh.gasTo); }
       h.changed(); render(); return;
+    }
+    if (b.dataset.accidents) { s.settings.accidents = b.dataset.accidents; h.changed(); render(); return; }
+    if (b.dataset.cover) { s.insurance.cover = b.dataset.cover; h.changed(); render(); return; }
+    if (b.dataset.wxpolicy) {
+      const [who, k] = b.dataset.wxpolicy.split(":");
+      if (who === "all") s.weatherPolicy = k; else s.ships.find(x => x.id === who).weatherPolicy = k || null;
+      h.changed(); render(); return;
+    }
+    if (b.dataset.gasdecide) {
+      const d = b.dataset.gasdecide, P = s.gasPolicy = s.gasPolicy || { all: null, byClass: {} };
+      if (d === "all") { P.all = "helium"; for (const sh of s.ships) if (sh.gas !== "helium") sh.gasTo = "helium"; }
+      if (d === "passenger") for (const sh of s.ships) if (U.passengers.berths(s, sh).total) { P.byClass[sh.classId] = "helium"; if (sh.gas !== "helium") sh.gasTo = "helium"; }
+      notify(d === "none" ? "The fleet stays on hydrogen." : "Ships will be refilled with helium at their next overhauls.");
+      h.changed(); select(null); return;
     }
     if (b.dataset.config) { const [cid, cfg] = b.dataset.config.split(":"); yardConfig[cid] = cfg; render(); return; }
     if (b.dataset.fare) { const r = s.routes.find(x => x.id === selection.id); r.fare = b.dataset.fare; r.custom = null; h.changed(); render(); return; }

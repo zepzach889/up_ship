@@ -1,8 +1,8 @@
 // Game state, turns, routes, ships, wear, incidents, telegrams, and the economy.
 window.UpShip = window.UpShip || {};
 (function (U) {
-  const SAVE_KEY = "upship.save.v8";
-  const VERSION = 8;
+  const SAVE_KEY = "upship.save.v9";
+  const VERSION = 9;
   const E = () => U.ECONOMY;
   const TH = () => U.TIME.tickHours;
   const H = tick => tick * TH();                 // hours since 7 am, 1 January 1919
@@ -129,6 +129,7 @@ window.UpShip = window.UpShip || {};
     U.research.init(state);
     U.facilities.init(state);
     U.passengers.init(state);
+    U.weather.init(state);
     for (const id of catalog(state)) if (U.SHIP_CLASSES[id].kind === "surplus") state.surplusLeft[id] = E().surplusStock;
     const first = catalog(state)[0];
     newShip(state, first, suggestName(state, first), config.home, 0);
@@ -392,7 +393,7 @@ window.UpShip = window.UpShip || {};
         // A ship won't leave nearly empty: it waits for a fair load, but never more than about half a day.
         if (!next.ferry && !worthLeaving(state, ship, route, next, t)) { ship.readyHour = T1; return; }
       }
-      fly(state, ship, next, t);
+      if (!fly(state, ship, next, t)) return;
     }
   }
 
@@ -411,9 +412,14 @@ window.UpShip = window.UpShip || {};
 
   function fly(state, ship, next, t) {
     const c = Object.assign({ price: cls(ship).price }, U.research.stats(state, ship)), route = routeOf(state, ship);
-    const km = distanceKm(ship.location, next.to);
-    let hours = km / c.speedKmh;
+    let km = distanceKm(ship.location, next.to);
     const from = ship.location;
+    // Weather: judged once, at departure, against the forecast.
+    const wx = U.weather.judge(state, ship, from, next.to, t, km, c.speedKmh);
+    if (wx.mode === "wait") { ship.readyHour = t + wx.wait; ship.waitNote = `Waiting out ${wx.reason}`; return false; }
+    ship.waitNote = null;
+    km = wx.km;
+    let hours = km / c.speedKmh * wx.slow;
     // Minor incidents, more likely in poor condition.
     const p = (E().incidentBase + E().incidentWear * (1 - ship.condition) ** 2) * c.incidents;
     let incident = Math.random() < p ? (Math.random() < 0.6 ? "forced" : "cancelled") : null;
@@ -465,6 +471,14 @@ window.UpShip = window.UpShip || {};
     ship.location = next.to;
     ship.arrivedHour = t + hours;
     ship.readyHour = t + hours + c.turnaround;
+    const leg0 = ship.legs[ship.legs.length - 1];
+    if (wx.via) leg0.via = wx.via;
+    if (wx.notes.length) leg0.note = wx.notes[0];
+    // Serious accidents: rare, likelier in storms, in worn ships, and on hydrogen.
+    {
+      const kind = U.weather.serious(state, ship, leg0, wx.risk);
+      if (kind) U.weather.consequences(state, ship, leg0, kind, t + hours * 0.6);
+    }
     if (incident === "forced") {
       const a = U.cityById[from], b = U.cityById[next.to];
       const near = nearestCity((a.lat + b.lat) / 2, (a.lon + b.lon) / 2);
@@ -475,11 +489,13 @@ window.UpShip = window.UpShip || {};
       ship.readyHour += days * 24;
       telegram(state, t + hours * 0.6, `${ship.name} forced down near ${near.name} stop engine failure stop no one hurt stop repairs ${days} days cost £${cost.toLocaleString("en-GB")} stop`, true, { type: "ship", id: ship.id });
     }
+    return true;
   }
 
   function beginTurn(state) {
     if (state.plannedTick === state.tick) return;
     state.plannedTick = state.tick;
+    U.weather.turn(state);
     const T0 = H(state.tick), T1 = T0 + TH();
     for (const ship of state.ships) planShip(state, ship, T0, T1);
   }
@@ -525,6 +541,7 @@ window.UpShip = window.UpShip || {};
     if (state.month && month !== state.month) {
       U.contracts.monthly(state);
       U.passengers.monthly(state);
+      U.weather.monthly(state);
       for (const r of state.routes) {
         const s = routeSummary(state, r.id);
         if (s.days >= 30 && s.profit < 0)
@@ -582,7 +599,7 @@ window.UpShip = window.UpShip || {};
   }
   function clearSave() {
     saving = false;
-    try { for (const k of ["upship.save.v1", "upship.save.v2", "upship.save.v3", "upship.save.v4", "upship.save.v5", "upship.save.v6", "upship.save.v7", SAVE_KEY]) localStorage.removeItem(k); } catch (e) {}
+    try { for (const k of ["upship.save.v1", "upship.save.v2", "upship.save.v3", "upship.save.v4", "upship.save.v5", "upship.save.v6", "upship.save.v7", "upship.save.v8", SAVE_KEY]) localStorage.removeItem(k); } catch (e) {}
   }
 
   U.sim = { telegram, addGeneral, addIncome, nearestCity, distanceKm, fare, freightRate, dailyPassengers, dailyFreight, start, advance, beginTurn, dateOf, dateAtHour, H,
