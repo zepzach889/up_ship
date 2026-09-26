@@ -118,6 +118,7 @@ window.UpShip = window.UpShip || {};
       }
       U.map.drawShips(U.state, U.progress);
       U.map.drawWeather(U.state, U.progress);
+      U.map.syncTransport(U.state); U.map.drawTraffic();
     }
     U.ui.updateBar(U.state, auto, U.progress, frozen);
     requestAnimationFrame(frame);

@@ -342,6 +342,15 @@ window.UpShip = window.UpShip || {};
       <p class="note">${cls.basis}.${cls.note ? " " + cls.note : ""}</p>`;
   }
 
+  function competitionBlock(state, route) {
+    const st = route.stops, pairs = [];
+    for (let i = 0; i < st.length - 1; i++) pairs.push([st[i], st[i + 1]]);
+    if (st.length > 2 && !route.circuit) pairs.push([st[0], st[st.length - 1]]);
+    if (route.circuit) pairs.push([st[st.length - 1], st[0]]);
+    return `<h3>Competition</h3><ul class="comp-list">${pairs.map(([a, b]) => `<li>${esc(U.competition.describe(state, a, b))}</li>`).join("")}</ul>
+      <p class="small">See the Competition map layer for railways, steamers, and air services.</p>`;
+  }
+
   function faresBlock(state, route) {
     const P = U.passengers, first = route.stops[0], last = route.stops[route.stops.length - 1];
     const fr = P.fares(state, route, U.sim.distanceKm(first, last), 1);
@@ -386,6 +395,7 @@ window.UpShip = window.UpShip || {};
         ${legs.map(([a, b]) => row(`${city(a).name} to ${city(b).name}`, km(U.sim.distanceKm(a, b)))).join("")}
       </dl>
       ${faresBlock(state, route)}
+      ${competitionBlock(state, route)}
       <h3>Ships</h3>
       ${ships.length ? `<ul class="plain-list">${ships.map(s => `<li>${shipLink(s)} <button class="btn-quiet" data-unassign="${s.id}">Remove</button></li>`).join("")}</ul>`
         : `<p class="note">No ships on this route yet.</p>`}
@@ -540,7 +550,10 @@ window.UpShip = window.UpShip || {};
     return `<h2>Settings</h2>
       <h3>Accidents</h3>
       <p class="small">Changes apply from now on.</p>
-      <ul class="choice-list">${opts.map(([k, n, d]) => `<li><button class="${cur === k ? "btn" : "btn-quiet"}" data-accidents="${k}">${n}</button><small>${d}</small></li>`).join("")}</ul>`;
+      <ul class="choice-list">${opts.map(([k, n, d]) => `<li><button class="${cur === k ? "btn" : "btn-quiet"}" data-accidents="${k}">${n}</button><small>${d}</small></li>`).join("")}</ul>
+      <h3>Map</h3>
+      <div class="btn-row"><button class="${(state.settings || {}).traffic !== false ? "btn" : "btn-quiet"}" data-traffic="on">Show traffic</button><button class="${(state.settings || {}).traffic === false ? "btn" : "btn-quiet"}" data-traffic="off">Hide traffic</button></div>
+      <p class="small">Trains, steamers, and airplanes moving faintly on the Normal layer. They always show on the Competition layer.</p>`;
   }
   // After a disaster on hydrogen: whether to switch gas.
   function gasDecisionPanel(state) {
@@ -897,6 +910,7 @@ window.UpShip = window.UpShip || {};
     if (b.dataset.dismiss) { const c = s.captains.find(x => x.id === b.dataset.dismiss); if (c && confirm(`Dismiss Captain ${c.name}?`)) { U.crew.dismiss(s, c.id); h.changed(); render(); } return; }
     if (b.dataset.hands) { const n = +b.dataset.hands; if (n > 0) U.crew.hireHands(s, n); else U.crew.releaseHands(s, -n); h.changed(); render(); return; }
     if (b.dataset.staffing) { const [sid, k] = b.dataset.staffing.split(":"); s.ships.find(x => x.id === sid).staffing = k; h.changed(); render(); return; }
+    if (b.dataset.traffic) { s.settings.traffic = b.dataset.traffic === "on"; h.changed(); render(); U.map.syncTransport(s); return; }
     if (b.dataset.accidents) { s.settings.accidents = b.dataset.accidents; h.changed(); render(); return; }
     if (b.dataset.cover) { s.insurance.cover = b.dataset.cover; h.changed(); render(); return; }
     if (b.dataset.wxpolicy) {
@@ -1079,8 +1093,13 @@ window.UpShip = window.UpShip || {};
       freight: [it(square("demand-freight"), "Freight demand: bigger square, more cargo")],
       facilities: [it(`${A.icon("mast", 1, true, 20)}`, "Small"), it(`${A.icon("mast", 2, true, 24)}`, "Medium"), it(`${A.icon("mast", 3, true, 28)}`, "Large"),
         it(A.icon("terminal", 2, false, 24), "Public facilities, in slate"), it(A.icon("gasplant", 1, false, 24), "Public gas supply"), it(warn, "Running full")]
+    ,
+      competition: [it(`<svg viewBox="0 0 22 10" width="22" height="10"><path d="M1,5 L21,5" stroke="#3a3228" stroke-width="2.2"/><path d="M1,5 L21,5" stroke="#3a3228" stroke-width="6" stroke-dasharray="1 4"/></svg>`, "Express railway"),
+        it(`<svg viewBox="0 0 22 10" width="22" height="10"><path d="M1,5 L21,5" stroke="#3a3228" stroke-width="1.4"/><path d="M1,5 L21,5" stroke="#3a3228" stroke-width="4.5" stroke-dasharray="0.8 4"/></svg>`, "Railway"),
+        it(`<svg viewBox="0 0 22 10" width="22" height="10"><path d="M1,5 L21,5" stroke="#3f6f86" stroke-width="1.4" stroke-dasharray="5 3"/></svg>`, "Steamer or boat train"),
+        it(`<svg viewBox="0 0 22 10" width="22" height="10"><path d="M1,5 L21,5" stroke="#8a6a1c" stroke-width="1.4" stroke-dasharray="1.5 3" stroke-linecap="round"/></svg>`, "Air service")]
     }[layer];
-    const title = { normal: "Key", passengers: "Key: passengers", freight: "Key: freight", facilities: "Key: facility sizes" }[layer];
+    const title = { normal: "Key", passengers: "Key: passengers", freight: "Key: freight", facilities: "Key: facility sizes", competition: "Key: competition" }[layer];
     $("#legend").innerHTML = `<p class="legend-head"><span>${title}</span><button data-legend-toggle>${legendCollapsed ? "Show" : "Hide"}</button></p><ul>${rows.join("")}</ul>`;
     $("#legend").classList.toggle("is-collapsed", legendCollapsed);
   }

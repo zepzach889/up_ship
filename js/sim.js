@@ -51,7 +51,9 @@ window.UpShip = window.UpShip || {};
       const boost = state.facilities ? U.facilities.demandBoost(state, a) * U.facilities.demandBoost(state, b) : 1;
       // Comfort and fares on the routes serving this pair decide how many travelers it generates.
       const pull = pulls[key] || { first: 1, second: 1 };
-      const raw = U.passengers.demandSplit(state, a, b, dailyPassengers(a, b) * boost), f = dailyFreight(a, b);
+      // Competition from rail, sea, and air reshapes demand pair by pair (the map-wide average stays the same).
+      const comp = U.competition.mult(state, a, b);
+      const raw = U.passengers.demandSplit(state, a, b, dailyPassengers(a, b) * boost * comp), f = dailyFreight(a, b) * (1 + (comp - 1) * 0.7);
       const split = { first: raw.first * pull.first, second: raw.second * pull.second };
       const w = state.waiting[key];
       next[key] = !w ? (first ? { p1: split.first, p2: split.second, tons: f } : { p1: 0, p2: 0, tons: 0 })
@@ -548,6 +550,7 @@ window.UpShip = window.UpShip || {};
       U.passengers.monthly(state);
       U.weather.monthly(state);
       U.crew.monthly(state);
+      U.competition.monthly(state);
       for (const r of state.routes) {
         const s = routeSummary(state, r.id);
         if (s.days >= 30 && s.profit < 0)

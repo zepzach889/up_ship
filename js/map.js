@@ -68,7 +68,7 @@ window.UpShip = window.UpShip || {};
     // All countries together form the land; used for the water lining and the coastline.
     const landShape = el("g", { id: "land-shape" }, defs);
     for (const c of M.countries) el("path", { d: c.path }, landShape);
-    defs.insertAdjacentHTML("beforeend", U.shipArt.DEFS + U.facArt.DEFS + WEATHER_DEFS);
+    defs.insertAdjacentHTML("beforeend", U.shipArt.DEFS + U.facArt.DEFS + WEATHER_DEFS + TRAFFIC_DEFS);
 
     world = el("g", {}, svg);
     el("rect", { x: -M.width, y: -M.height, width: M.width * 3, height: M.height * 3, class: "sea" }, world);
@@ -81,6 +81,8 @@ window.UpShip = window.UpShip || {};
     layers.routes = el("g", { class: "routes" }, world);
     layers.fac = el("g", { class: "fac-layer" }, world);      // under the cities, so labels stay readable
     layers.weather = el("g", { class: "weather-layer" }, world);
+    layers.transport = el("g", { class: "transport-layer" }, world);
+    layers.traffic = el("g", { class: "traffic-layer" }, world);
     layers.cities = el("g", { class: "cities" }, world);
     layers.ships = el("g", { class: "ships" }, world);
 
@@ -478,9 +480,105 @@ window.UpShip = window.UpShip || {};
     for (const id in wxNodes) if (!live.has(+id)) { const n = wxNodes[id]; n.g.remove(); n.pic.ready.then(u => URL.revokeObjectURL(u)); delete wxNodes[id]; }
   }
 
+  // Competition: railways, steamer lanes, air services, and generic traffic moving along them.
+  const TRAFFIC_DEFS = `<g id="tr-train"><rect x="-10" y="-1.6" width="4.2" height="3.2" rx="0.6" fill="#5b4a36"/><rect x="-5.2" y="-1.6" width="4.2" height="3.2" rx="0.6" fill="#5b4a36"/>
+      <rect x="-0.4" y="-1.8" width="5.6" height="3.6" rx="0.8" fill="#1f1a15"/><rect x="3.8" y="-1" width="1.6" height="2" fill="#9b2a24"/>
+      <circle cx="6.8" cy="-2.8" r="1.3" fill="#ffffff" opacity="0.7"/><circle cx="8.6" cy="-3.9" r="1" fill="#ffffff" opacity="0.45"/></g>
+    <g id="tr-ship"><path d="M-14,0 L-7,-1.6 M-14,0 L-7,1.6" stroke="#ffffff" stroke-width="0.9" opacity="0.8"/>
+      <path d="M-6,-2 L5,-2 L7.5,0 L5,2 L-6,2 Z" fill="#1f1a15"/><rect x="-4" y="-1.2" width="6" height="2.4" fill="#e9dcc0"/><circle cx="-0.5" cy="0" r="1.2" fill="#9b2a24"/></g>
+    <g id="tr-plane"><ellipse cx="3" cy="4" rx="4" ry="1.4" fill="#2d2418" opacity="0.18"/><rect x="-4" y="-0.7" width="8" height="1.4" rx="0.7" fill="#f0e7d1" stroke="#5a4a36" stroke-width="0.4"/>
+      <rect x="-0.8" y="-5.5" width="2.2" height="11" rx="0.6" fill="#e2d5b4" stroke="#5a4a36" stroke-width="0.4"/><rect x="-3.8" y="-2" width="1" height="4" fill="#e2d5b4" stroke="#5a4a36" stroke-width="0.3"/><line x1="4.6" y1="-1.8" x2="4.6" y2="1.8" stroke="#8a8f93" stroke-width="0.6"/></g>`;
+  // A gentle curve for each link: railways almost straight, sea lanes bowed out to sea.
+  function linkCurve(l) {
+    const a = U.cityById[l.a], b = U.cityById[l.b], len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    const bow = l.type === "sea" ? 0.16 : l.type === "air" ? 0.1 : 0.05, sgn = (l.a < l.b ? 1 : -1);
+    return { a, b, c: { x: (a.x + b.x) / 2 - (b.y - a.y) / len * len * bow * sgn, y: (a.y + b.y) / 2 + (b.x - a.x) / len * len * bow * sgn } };
+  }
+  let vehicles = [], transportKey = "";
+  function syncTransport(state) {
+    if (!state || !layers.transport) return;
+    const C = U.competition, month = C.monthIndex(state);
+    const air = C.AIR.filter(s => month >= s[2] * 12 + s[3] - 1).map(s => ({ a: s[0], b: s[1], type: "air" }));
+    const key = layerMode + ":" + air.length + ":" + ((state.settings || {}).traffic !== false);
+    if (key === transportKey) return;
+    transportKey = key;
+    layers.transport.innerHTML = ""; layers.traffic.innerHTML = ""; vehicles = [];
+    const links = C.LINKS.concat(air), show = layerMode === "competition";
+    if (show) for (const l of links) {
+      const k = linkCurve(l), d = `M${k.a.x},${k.a.y} Q${k.c.x},${k.c.y} ${k.b.x},${k.b.y}`;
+      if (l.type === "rail") { el("path", { d, class: "tr-rail" + (l.express ? " express" : "") }, layers.transport); el("path", { d, class: "tr-ties" + (l.express ? " express" : "") }, layers.transport); }
+      else el("path", { d, class: l.type === "air" ? "tr-air" : "tr-lane" }, layers.transport);
+    }
+    if (!show && ((state.settings || {}).traffic === false || layerMode !== "normal")) return;
+    // Traffic: more on express lines; in the Normal layer, a lighter touch.
+    let i = 0;
+    for (const l of links) {
+      const n = l.type === "rail" ? (l.express ? 2 : 1) : 1;
+      for (let j = 0; j < n; j++) {
+        if (!show && (i++ % 3)) continue;                 // the Normal layer shows a third of the traffic, faintly
+        const k = linkCurve(l), sym = l.type === "air" ? "tr-plane" : l.type === "rail" ? "tr-train" : "tr-ship";
+        const len = Math.hypot(k.b.x - k.a.x, k.b.y - k.a.y);
+        vehicles.push({ sym, faint: !show, k, period: Math.max(5, Math.min(40, len / (l.type === "air" ? 30 : l.type === "rail" ? 22 : 12))), phase: Math.random(), back: Math.random() < 0.5 });
+      }
+    }
+  }
+  // Traffic is drawn on a transparent canvas laid over the map, so moving it never repaints the map itself
+  // (moving it inside the map drawing made every frame repaint everything, which phones could not keep up with).
+  let trafficLast = 0, tcv = null;
+  function trafficCanvas() {
+    if (tcv) return tcv;
+    tcv = document.createElement("canvas");
+    tcv.className = "traffic-canvas";
+    svg.parentNode.insertBefore(tcv, svg.nextSibling);
+    return tcv;
+  }
+  function paintVehicle(ctx, sym) {
+    if (sym === "tr-train") {
+      ctx.fillStyle = "#5b4a36"; ctx.fillRect(-10, -1.6, 4.2, 3.2); ctx.fillRect(-5.2, -1.6, 4.2, 3.2);
+      ctx.fillStyle = "#1f1a15"; ctx.fillRect(-0.4, -1.8, 5.6, 3.6); ctx.fillStyle = "#9b2a24"; ctx.fillRect(3.8, -1, 1.6, 2);
+      ctx.fillStyle = "rgba(255,255,255,0.65)"; ctx.beginPath(); ctx.arc(6.8, -2.8, 1.3, 0, 7); ctx.fill();
+    } else if (sym === "tr-ship") {
+      ctx.strokeStyle = "rgba(255,255,255,0.8)"; ctx.lineWidth = 0.9; ctx.beginPath(); ctx.moveTo(-14, 0); ctx.lineTo(-7, -1.6); ctx.moveTo(-14, 0); ctx.lineTo(-7, 1.6); ctx.stroke();
+      ctx.fillStyle = "#1f1a15"; ctx.beginPath(); ctx.moveTo(-6, -2); ctx.lineTo(5, -2); ctx.lineTo(7.5, 0); ctx.lineTo(5, 2); ctx.lineTo(-6, 2); ctx.fill();
+      ctx.fillStyle = "#e9dcc0"; ctx.fillRect(-4, -1.2, 6, 2.4); ctx.fillStyle = "#9b2a24"; ctx.beginPath(); ctx.arc(-0.5, 0, 1.2, 0, 7); ctx.fill();
+    } else {
+      ctx.fillStyle = "rgba(45,36,24,0.18)"; ctx.beginPath(); ctx.ellipse(3, 4, 4, 1.4, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = "#f0e7d1"; ctx.strokeStyle = "#5a4a36"; ctx.lineWidth = 0.4;
+      ctx.fillRect(-4, -0.7, 8, 1.4); ctx.strokeRect(-4, -0.7, 8, 1.4);
+      ctx.fillStyle = "#e2d5b4"; ctx.fillRect(-0.8, -5.5, 2.2, 11); ctx.strokeRect(-0.8, -5.5, 2.2, 11); ctx.fillRect(-3.8, -2, 1, 4);
+    }
+  }
+  function drawTraffic() {
+    const cv = trafficCanvas();
+    const now = performance.now(); if (now - trafficLast < 50) return; trafficLast = now;
+    const w = svg.clientWidth, h = svg.clientHeight, dpr = window.devicePixelRatio || 1;
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+      cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); cv.style.width = w + "px"; cv.style.height = h + "px";
+    }
+    const pb = svg.parentNode.getBoundingClientRect(), sb = svg.getBoundingClientRect();   // SVG elements have no offsetTop
+    cv.style.left = (sb.left - pb.left) + "px"; cv.style.top = (sb.top - pb.top) + "px";
+    const ctx = cv.getContext("2d");
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height);
+    if (!vehicles.length) return;
+    // Map units to screen pixels, matching the map's viewBox.
+    const r = svg.getScreenCTM(), box = svg.getBoundingClientRect();
+    const s = 1.1 * grow();
+    for (const v of vehicles) {
+      let t = (now / 1000 / v.period + v.phase) % 1; if (v.back) t = 1 - t;
+      const p = U.weather.bez(v.k.a, v.k.c, v.k.b, t), q = U.weather.bez(v.k.a, v.k.c, v.k.b, Math.min(1, Math.max(0, t + (v.back ? -0.01 : 0.01))));
+      const sx = (r.a * p.x + r.c * p.y + r.e - box.left) * dpr, sy = (r.b * p.x + r.d * p.y + r.f - box.top) * dpr;
+      if (sx < -40 || sy < -40 || sx > cv.width + 40 || sy > cv.height + 40) continue;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.translate(sx / dpr, sy / dpr); ctx.rotate(Math.atan2(q.y - p.y, q.x - p.x)); ctx.scale(s, s);
+      ctx.globalAlpha = v.faint ? 0.5 : 1;
+      paintVehicle(ctx, v.sym);
+    }
+    ctx.globalAlpha = 1;
+  }
+
   // Map layers ------------------------------------------------------------------------
   let layerMode = "normal", draftStops = null;
-  function setLayer(mode) { layerMode = mode; svg.classList.toggle("layer-dim", mode !== "normal"); layoutCities(); syncExtras(U.state); }
+  function setLayer(mode) { layerMode = mode; svg.classList.toggle("layer-dim", mode !== "normal" && mode !== "competition"); layoutCities(); syncExtras(U.state); syncTransport(U.state); }
 
   // Facility symbols beside each city: own in the company color, public in slate.
   const GLYPH_UNUSED = {
@@ -559,5 +657,5 @@ window.UpShip = window.UpShip || {};
   }
   function draftDemand(stops) { draftStops = stops && stops.length ? stops : null; syncExtras(U.state); }
 
-  U.map = { drawWeather, init, syncRoutes, drawShips, drawDraft, zoomBy, highlight, shipPosition, project, setSetup, setHome, setLayer, syncExtras, draftDemand };
+  U.map = { drawTraffic, syncTransport, drawWeather, init, syncRoutes, drawShips, drawDraft, zoomBy, highlight, shipPosition, project, setSetup, setHome, setLayer, syncExtras, draftDemand };
 })(window.UpShip);
