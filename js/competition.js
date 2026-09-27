@@ -3,21 +3,14 @@
 window.UpShip = window.UpShip || {};
 (function (U) {
   const S = () => U.sim;
-  // e: express. Types: rail, boat (rail with a short sea crossing), sea (steamer).
-  const RAIL = [
-    ["london", "manchester", 1], ["manchester", "glasgow", 1], ["london", "edinburgh", 1], ["edinburgh", "glasgow", 1], ["london", "cardington", 0],
-    ["paris", "brussels", 1], ["brussels", "amsterdam", 1], ["brussels", "cologne", 1], ["cologne", "hamburg", 1], ["cologne", "frankfurt", 1],
-    ["frankfurt", "munich", 1], ["berlin", "hamburg", 1], ["berlin", "cologne", 1], ["berlin", "munich", 1], ["berlin", "warsaw", 1], ["warsaw", "moscow", 1],
-    ["moscow", "leningrad", 1], ["moscow", "kiev", 0], ["kiev", "warsaw", 0], ["paris", "marseille", 1], ["marseille", "toulon", 0], ["paris", "bordeaux", 1],
-    ["paris", "zurich", 1], ["paris", "munich", 1], ["munich", "vienna", 1], ["vienna", "budapest", 1], ["budapest", "bucharest", 0], ["budapest", "constantinople", 1],
-    ["milan", "rome", 1], ["rome", "naples", 1], ["milan", "genoa", 0], ["genoa", "rome", 0], ["milan", "zurich", 1], ["zurich", "frankfurt", 1], ["paris", "milan", 1],
-    ["berlin", "prague", 1], ["prague", "vienna", 1], ["copenhagen", "stockholm", 0], ["stockholm", "kristiania", 0], ["madrid", "barcelona", 0], ["madrid", "lisbon", 0],
-    ["barcelona", "marseille", 0], ["bordeaux", "madrid", 0], ["madrid", "gibraltar", 0], ["friedrichshafen", "munich", 0], ["friedrichshafen", "zurich", 0],
-    ["athens", "constantinople", 0], ["alexandria", "cairo", 1], ["algiers", "tunis", 0], ["bucharest", "constantinople", 0]
-  ].map(([a, b, e]) => ({ a, b, type: "rail", express: !!e }));
-  const BOAT = [["london", "paris"], ["london", "amsterdam"], ["london", "brussels"], ["london", "dublin"], ["hamburg", "copenhagen"]].map(([a, b]) => ({ a, b, type: "boat" }));
-  const SEA = [["marseille", "algiers"], ["marseille", "tunis"], ["naples", "malta"], ["malta", "alexandria"], ["gibraltar", "malta"], ["constantinople", "alexandria"],
-    ["athens", "alexandria"], ["stockholm", "leningrad"], ["genoa", "tunis"], ["lisbon", "gibraltar"], ["naples", "athens"]].map(([a, b]) => ({ a, b, type: "sea" }));
+  // Railways, boat trains, and steamer lanes come from the transport data, with waypoints that follow the geography.
+  const hav = (p, q) => { const R = 6371, r = Math.PI / 180, dLat = (q[0] - p[0]) * r, dLon = (q[1] - p[1]) * r;
+    const x = Math.sin(dLat / 2) ** 2 + Math.cos(p[0] * r) * Math.cos(q[0] * r) * Math.sin(dLon / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(x)); };
+  const pt = x => Array.isArray(x) ? x : U.cityById[x] ? [U.cityById[x].lat, U.cityById[x].lon] : U.TRANSPORT.POINTS[x];
+  const LINKS = U.TRANSPORT.ROUTES.map(rt => {
+    const segs = rt.segs.map(sg => { const pts = sg.pts.map(pt); let km = 0; for (let i = 1; i < pts.length; i++) km += hav(pts[i - 1], pts[i]); return { type: sg.type, pts, km }; });
+    return { a: rt.a, b: rt.b, express: rt.express, type: rt.sea ? "sea" : rt.boat ? "boat" : "rail", segs };
+  });
   // Air services, loosely following history: [a, b, year, month, operator].
   const AIR = [["london", "paris", 1919, 8, "Aircraft Transport and Travel"], ["london", "amsterdam", 1920, 5, "KLM"], ["paris", "brussels", 1920, 7, "a Belgian air company"],
     ["amsterdam", "hamburg", 1921, 4, "KLM"], ["paris", "london", 1924, 4, "Imperial Airways"], ["berlin", "munich", 1926, 4, "Lufthansa"], ["berlin", "hamburg", 1926, 5, "Lufthansa"],
@@ -29,10 +22,11 @@ window.UpShip = window.UpShip || {};
     { year: 1929, month: 9, text: "golden arrow luxury boat train opens london to paris stop rail competition on the channel route stop" },
     { year: 1931, month: 6, text: "new larger airliners enter service stop airplanes compete harder on short routes stop" }
   ];
-  const LINKS = RAIL.concat(BOAT, SEA);
-  const SPEED = { express: 65, rail: 42, boat: 55, sea: 22 };        // average km/h door to door, 1920s
+  const SPEED = { express: 65, rail: 42, sea: 24 };                   // average km/h, 1920s
   const km = (a, b) => S().distanceKm(a, b);
-  const linkHours = l => km(l.a, l.b) * (l.type === "sea" ? 1.1 : 1.2) / (l.type === "rail" ? (l.express ? SPEED.express : SPEED.rail) : SPEED[l.type]) + (l.type === "rail" ? 0 : l.type === "boat" ? 2 : 3);
+  // Journey time along the actual route: rail at express or ordinary speed, steamers slower, and time lost changing at the ports.
+  const linkHours = l => l.segs.reduce((h, sg) => h + sg.km / (sg.type === "sea" ? SPEED.sea : l.express || l.type === "boat" ? SPEED.express : SPEED.rail), 0)
+    + (l.type === "boat" ? 2 : l.type === "sea" ? 3 : 0);
 
   // Fastest surface journey between two cities, and whether it crosses water.
   let graph = null;

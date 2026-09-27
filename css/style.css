@@ -647,3 +647,4 @@ body.is-setup .panel { width: 360px; }
 .rd-divider { stroke: var(--brass-dim); stroke-width: 0.6; stroke-dasharray: 3 3; }
 .rd-gasnote { font-family: var(--ui); font-size: 8.5px; fill: var(--ivory-dim); text-anchor: middle; font-style: italic; }
 .research-list .rt-era { color: var(--brass); font-size: 11px; letter-spacing: 0.08em; padding: 8px 0 2px; border-bottom: 0; }
+.transport-layer.muted { opacity: 0.35; }

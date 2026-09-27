@@ -391,8 +391,8 @@ window.UpShip = window.UpShip || {};
 
   // Weather ----------------------------------------------------------------------------
   // Clouds seen from above: generated forms lit from the north-west, shadows to the south-east.
-  const cloudFilter = (id, freq, octaves, blur, cells, relief, lift, shadow, shOpacity) => `<filter id="${id}" x="-60%" y="-60%" width="220%" height="220%" color-interpolation-filters="sRGB">
-    <feTurbulence type="fractalNoise" baseFrequency="${freq}" numOctaves="${octaves}" seed="11" result="n"/>
+  const cloudFilter = (id, freq, octaves, blur, cells, relief, lift, shadow, shOpacity, seed = 11) => `<filter id="${id}" x="-60%" y="-60%" width="220%" height="220%" color-interpolation-filters="sRGB">
+    <feTurbulence type="fractalNoise" baseFrequency="${freq}" numOctaves="${octaves}" seed="${seed}" result="n"/>
     <feGaussianBlur in="SourceGraphic" stdDeviation="${blur}" result="blob"/>
     <feColorMatrix in="n" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  ${cells}" result="cells"/>
     <feComposite in="cells" in2="blob" operator="in" result="dens"/>
@@ -404,6 +404,9 @@ window.UpShip = window.UpShip || {};
     <feColorMatrix in="shb" type="matrix" values="0 0 0 0 0.12  0 0 0 0 0.12  0 0 0 0 0.18  0 0 0 ${shOpacity} 0" result="shadow"/>
     <feMerge><feMergeNode in="shadow"/><feMergeNode in="body"/></feMerge></filter>`;
   const WEATHER_DEFS = cloudFilter("wx-storm", 0.02, 6, 13, "2.6 0 0 0 -0.78", 7, 0.42, 20, 0.55)
+    + cloudFilter("wx-storm2", 0.024, 6, 12, "2.6 0 0 0 -0.82", 7, 0.42, 0, 0, 29)
+    + cloudFilter("wx-storm3", 0.03, 5, 10, "2.8 0 0 0 -1.0", 8, 0.45, 0, 0, 47)
+    + cloudFilter("wx-fair2", 0.035, 5, 11, "2.6 0 0 0 -1.0", 3, 0.44, 0, 0, 23)
     + cloudFilter("wx-fair", 0.04, 5, 12, "2.4 0 0 0 -0.95", 3, 0.42, 9, 0.3)
     + `<filter id="wx-fog" x="-60%" y="-90%" width="220%" height="280%" color-interpolation-filters="sRGB">
       <feTurbulence type="fractalNoise" baseFrequency="0.008 0.03" numOctaves="4" seed="21" result="n"/>
@@ -428,12 +431,20 @@ window.UpShip = window.UpShip || {};
   let wxLast = 0;
   // Each system is rendered once, when it forms, into a self-contained SVG picture; after that it only
   // slides and fades, which costs almost nothing (the cloud filters are too heavy to rerun as clouds move).
-  function wxPicture(s) {
+  // The layers a system is drawn in: each becomes its own picture, so they can churn against each other.
+  function wxLayers(s) {
+    const E = (rx, ry, f, extra = "") => `<ellipse cx="0" cy="0" rx="${rx}" ry="${ry}" fill="#fff" filter="url(#${f})"${extra}/>`;
+    if (s.kind === "storm") return [
+      `<ellipse cx="24" cy="26" rx="${s.rx * 1.02}" ry="${s.ry * 0.8}" fill="#fff" filter="url(#wx-rain)" opacity="0.5"/>`,
+      `<g filter="url(#wx-storm)">${s.parts.map(p => `<ellipse cx="${p.dx}" cy="${p.dy}" rx="${p.rx}" ry="${p.ry}" fill="#fff"/>`).join("")}</g>`,
+      `<g filter="url(#wx-storm2)"><ellipse cx="${s.rx * 0.06}" cy="0" rx="${s.rx * 0.85}" ry="${s.ry * 0.85}" fill="#fff"/><ellipse cx="${-s.rx * 0.36}" cy="${s.ry * 0.05}" rx="${s.rx * 0.34}" ry="${s.ry * 0.8}" fill="#fff"/></g>`,
+      `<g filter="url(#wx-storm3)"><ellipse cx="${-s.rx * 0.03}" cy="${-s.ry * 0.1}" rx="${s.rx * 0.6}" ry="${s.ry * 0.68}" fill="#fff"/><ellipse cx="${s.rx * 0.34}" cy="${s.ry * 0.2}" rx="${s.rx * 0.29}" ry="${s.ry * 0.58}" fill="#fff"/></g>`];
+    if (s.kind === "fair") return [E(s.rx, s.ry, "wx-fair"), E(s.rx * 0.8, s.ry * 0.8, "wx-fair2")];
+    if (s.kind === "fog") return [E(s.rx, s.ry, "wx-fog"), E(s.rx * 0.75, s.ry * 0.8, "wx-fog", ' transform="translate(12 3)"')];
+    return [E(s.rx, s.ry, "wx-wind")];
+  }
+  function wxPicture(s, body) {
     const pad = 1.7, w = s.rx * 2 * pad + 60, hgt = Math.max(s.rx, s.ry) * 2 * pad + 60;
-    let body;
-    if (s.kind === "storm") body = `<ellipse cx="24" cy="26" rx="${s.rx * 1.02}" ry="${s.ry * 0.8}" fill="#fff" filter="url(#wx-rain)" opacity="0.5"/>
-      <g filter="url(#wx-storm)">${s.parts.map(p => `<ellipse cx="${p.dx}" cy="${p.dy}" rx="${p.rx}" ry="${p.ry}" fill="#fff"/>`).join("")}</g>`;
-    else body = `<ellipse cx="0" cy="0" rx="${s.rx}" ry="${s.ry}" fill="#fff" filter="url(#wx-${s.kind})"/>`;
     const scale = Math.min(2, 900 / Math.max(w, hgt));        // bitmap resolution: sharp enough when zoomed in, capped for memory
     const svgText = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${-w / 2} ${-hgt / 2} ${w} ${hgt}" width="${Math.round(w * scale)}" height="${Math.round(hgt * scale)}"><defs>${WEATHER_DEFS}</defs>${body}</svg>`;
     const svgUrl = URL.createObjectURL(new Blob([svgText], { type: "image/svg+xml" }));
@@ -453,21 +464,33 @@ window.UpShip = window.UpShip || {};
     });
     return pic;
   }
+  // How each layer of a system churns: its own slow loop of drift, swelling, and fading, out of step with the others.
+  const CHURN = {
+    storm: [{ ax: 0, ay: 0, s: 0, p: 10, o: [0.5, 0.5] }, { ax: 0.06, ay: 0.12, s: 0.05, p: 7.5, o: [0.75, 1] },
+      { ax: 0.08, ay: 0.16, s: 0.07, p: 9.5, o: [0.2, 0.95] }, { ax: 0.07, ay: 0.18, s: 0.08, p: 6.5, o: [0.15, 0.9] }],
+    fair: [{ ax: 0.05, ay: 0.08, s: 0.05, p: 8, o: [0.75, 1] }, { ax: 0.08, ay: 0.1, s: 0.07, p: 6, o: [0.2, 0.8] }],
+    fog: [{ ax: 0.06, ay: 0.06, s: 0.03, p: 12, o: [0.7, 1] }, { ax: 0.09, ay: 0.08, s: 0.04, p: 9, o: [0.2, 0.7] }],
+    wind: [{ ax: 0.04, ay: 0.05, s: 0.04, p: 7, o: [0.7, 1] }]
+  };
   function drawWeather(state, progress, force) {
     if (!state || !state.weather || !layers.weather) return;
     const nowMs = performance.now();
-    if (!force && nowMs - wxLast < 120) return;
+    if (!force && nowMs - wxLast < 40) return;             // smooth on a desktop: about 25 updates a second
     wxLast = nowMs;
-    const dt = (U.turnActive ? progress : 0) * U.TIME.tickHours, live = new Set();
+    const dt = (U.turnActive ? progress : 0) * U.TIME.tickHours, live = new Set(), sec = nowMs / 1000;
     for (const s of state.weather.systems) {
       live.add(s.id);
       let n = wxNodes[s.id];
       if (!n) {
-        const pic = wxPicture(s), g = el("g", { class: "wx wx-" + s.kind }, layers.weather);
-        const image = el("image", { x: -pic.w / 2, y: -pic.h / 2, width: pic.w, height: pic.h, preserveAspectRatio: "none" }, g);
-        n = { g, pic };
-        pic.ready.then(url => image.setAttribute("href", url));
-        if (s.kind === "storm") n.flash = el("ellipse", { cx: -s.rx * 0.1, cy: 0, rx: s.rx * 0.22, ry: s.ry * 0.3, fill: "url(#wx-flash)" }, g);
+        const g = el("g", { class: "wx wx-" + s.kind }, layers.weather);
+        n = { g, layers: [], pics: [], phase: (s.id * 1.7) % 6.28 };
+        wxLayers(s).forEach((body, i) => {
+          const pic = wxPicture(s, body), lg = el("g", {}, g);
+          const image = el("image", { x: -pic.w / 2, y: -pic.h / 2, width: pic.w, height: pic.h, preserveAspectRatio: "none" }, lg);
+          pic.ready.then(url => image.setAttribute("href", url));
+          n.layers.push(lg); n.pics.push(pic);
+        });
+        if (s.kind === "storm") { n.flash = el("ellipse", { rx: 1, ry: 1, fill: "url(#wx-flash)", opacity: 0 }, g); n.nextFlash = sec + 0.5 + Math.random() * 2; }
         el("title", {}, g).textContent = s.name;
         wxNodes[s.id] = n;
       }
@@ -475,103 +498,198 @@ window.UpShip = window.UpShip || {};
       const fade = Math.max(0, Math.min(1, age / 6, left / 6));
       n.g.setAttribute("transform", `translate(${(s.x + s.vx * dt).toFixed(1)} ${(s.y + s.vy * dt).toFixed(1)}) rotate(${s.rot.toFixed(1)})`);
       n.g.setAttribute("opacity", fade.toFixed(2));
-      if (n.flash) n.flash.setAttribute("opacity", Math.random() < 0.08 ? "1" : "0.15");
+      const churn = CHURN[s.kind] || CHURN.fair;
+      n.layers.forEach((lg, i) => {
+        const c = churn[Math.min(i, churn.length - 1)], a = (sec / c.p) * Math.PI * 2 + n.phase + i * 2.1;
+        const dx = Math.cos(a) * c.ax * s.rx, dy = Math.sin(a * 1.3) * c.ay * s.ry, k = 1 + Math.sin(a * 0.8) * c.s;
+        const op = c.o[0] + (c.o[1] - c.o[0]) * (0.5 + 0.5 * Math.sin(a * 1.1));
+        lg.setAttribute("transform", `translate(${dx.toFixed(1)} ${dy.toFixed(1)}) scale(${k.toFixed(3)})`);
+        lg.setAttribute("opacity", op.toFixed(2));
+      });
+      // Lightning: a new random place inside the storm each time; mostly small, sometimes a wide sheet, sometimes a double flicker.
+      if (n.flash) {
+        if (sec >= n.nextFlash) {
+          let u, v; do { u = Math.random() * 2 - 1; v = Math.random() * 2 - 1; } while (u * u + v * v > 0.8);
+          const wide = Math.random() < 0.2;
+          n.flash.setAttribute("cx", (u * s.rx * 0.85).toFixed(1)); n.flash.setAttribute("cy", (v * s.ry * 0.8).toFixed(1));
+          n.flash.setAttribute("rx", (wide ? s.rx * (0.35 + Math.random() * 0.2) : s.rx * (0.1 + Math.random() * 0.12)).toFixed(1));
+          n.flash.setAttribute("ry", (wide ? s.ry * (0.5 + Math.random() * 0.2) : s.ry * (0.2 + Math.random() * 0.15)).toFixed(1));
+          n.flashOn = sec; n.flashDouble = Math.random() < 0.4;
+          n.nextFlash = sec + 0.4 + Math.random() * 1.8;
+        }
+        const t = sec - (n.flashOn ?? -9);
+        n.flash.setAttribute("opacity", t < 0.11 ? "1" : n.flashDouble && t > 0.2 && t < 0.27 ? "0.85" : "0");
+      }
     }
-    for (const id in wxNodes) if (!live.has(+id)) { const n = wxNodes[id]; n.g.remove(); n.pic.ready.then(u => URL.revokeObjectURL(u)); delete wxNodes[id]; }
+    for (const id in wxNodes) if (!live.has(+id)) { const n = wxNodes[id]; n.g.remove(); n.pics.forEach(p => p.ready.then(u => URL.revokeObjectURL(u))); delete wxNodes[id]; }
   }
 
+
   // Competition: railways, steamer lanes, air services, and generic traffic moving along them.
-  const TRAFFIC_DEFS = `<g id="tr-train"><rect x="-10" y="-1.6" width="4.2" height="3.2" rx="0.6" fill="#5b4a36"/><rect x="-5.2" y="-1.6" width="4.2" height="3.2" rx="0.6" fill="#5b4a36"/>
-      <rect x="-0.4" y="-1.8" width="5.6" height="3.6" rx="0.8" fill="#1f1a15"/><rect x="3.8" y="-1" width="1.6" height="2" fill="#9b2a24"/>
-      <circle cx="6.8" cy="-2.8" r="1.3" fill="#ffffff" opacity="0.7"/><circle cx="8.6" cy="-3.9" r="1" fill="#ffffff" opacity="0.45"/></g>
-    <g id="tr-ship"><path d="M-14,0 L-7,-1.6 M-14,0 L-7,1.6" stroke="#ffffff" stroke-width="0.9" opacity="0.8"/>
-      <path d="M-6,-2 L5,-2 L7.5,0 L5,2 L-6,2 Z" fill="#1f1a15"/><rect x="-4" y="-1.2" width="6" height="2.4" fill="#e9dcc0"/><circle cx="-0.5" cy="0" r="1.2" fill="#9b2a24"/></g>
-    <g id="tr-plane"><ellipse cx="3" cy="4" rx="4" ry="1.4" fill="#2d2418" opacity="0.18"/><rect x="-4" y="-0.7" width="8" height="1.4" rx="0.7" fill="#f0e7d1" stroke="#5a4a36" stroke-width="0.4"/>
-      <rect x="-0.8" y="-5.5" width="2.2" height="11" rx="0.6" fill="#e2d5b4" stroke="#5a4a36" stroke-width="0.4"/><rect x="-3.8" y="-2" width="1" height="4" fill="#e2d5b4" stroke="#5a4a36" stroke-width="0.3"/><line x1="4.6" y1="-1.8" x2="4.6" y2="1.8" stroke="#8a8f93" stroke-width="0.6"/></g>`;
-  // A gentle curve for each link: railways almost straight, sea lanes bowed out to sea.
-  function linkCurve(l) {
-    const a = U.cityById[l.a], b = U.cityById[l.b], len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
-    const bow = l.type === "sea" ? 0.16 : l.type === "air" ? 0.1 : 0.05, sgn = (l.a < l.b ? 1 : -1);
-    return { a, b, c: { x: (a.x + b.x) / 2 - (b.y - a.y) / len * len * bow * sgn, y: (a.y + b.y) / 2 + (b.x - a.x) / len * len * bow * sgn } };
+  const TRAFFIC_DEFS = "";
+  // A smooth path through waypoints (Catmull-Rom), sampled into a polyline in map units.
+  function smooth(points, perSpan = 10) {
+    const P = points, out = [];
+    for (let i = 0; i < P.length - 1; i++) {
+      const p0 = P[Math.max(0, i - 1)], p1 = P[i], p2 = P[i + 1], p3 = P[Math.min(P.length - 1, i + 2)];
+      for (let k = 0; k < perSpan; k++) {
+        const t = k / perSpan, t2 = t * t, t3 = t2 * t;
+        out.push({ x: 0.5 * (2 * p1.x + (-p0.x + p2.x) * t + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3),
+                   y: 0.5 * (2 * p1.y + (-p0.y + p2.y) * t + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3) });
+      }
+    }
+    out.push(P[P.length - 1]);
+    const len = [0]; for (let i = 1; i < out.length; i++) len.push(len[i - 1] + Math.hypot(out[i].x - out[i - 1].x, out[i].y - out[i - 1].y));
+    return { pts: out, len, total: len[len.length - 1] };
   }
-  let vehicles = [], transportKey = "";
+  function along(poly, d) {
+    d = Math.max(0, Math.min(poly.total, d));
+    let lo = 0, hi = poly.len.length - 1;
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (poly.len[m] <= d) lo = m; else hi = m; }
+    const a = poly.pts[lo], b = poly.pts[hi], seg = poly.len[hi] - poly.len[lo] || 1, f = (d - poly.len[lo]) / seg;
+    return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, ang: Math.atan2(b.y - a.y, b.x - a.x) };
+  }
+  const toMap = ll => { const [x, y] = project(ll[1], ll[0]); return { x, y }; };
+  const polyD = poly => "M" + poly.pts.map(p => p.x.toFixed(1) + "," + p.y.toFixed(1)).join(" L");
+  let vehicles = [], transportKey = "", polys = null;
+  function buildPolys() {
+    if (polys) return polys;
+    polys = [];
+    for (const l of U.competition.LINKS) for (const sg of l.segs) polys.push({ link: l, type: sg.type, express: l.express || l.type === "boat", poly: smooth(sg.pts.map(toMap)) });
+    return polys;
+  }
   function syncTransport(state) {
     if (!state || !layers.transport) return;
     const C = U.competition, month = C.monthIndex(state);
-    const air = C.AIR.filter(s => month >= s[2] * 12 + s[3] - 1).map(s => ({ a: s[0], b: s[1], type: "air" }));
+    const air = C.AIR.filter(s => month >= s[2] * 12 + s[3] - 1);
     const key = layerMode + ":" + air.length + ":" + ((state.settings || {}).traffic !== false);
     if (key === transportKey) return;
     transportKey = key;
-    layers.transport.innerHTML = ""; layers.traffic.innerHTML = ""; vehicles = [];
-    const links = C.LINKS.concat(air), show = layerMode === "competition";
-    if (show) for (const l of links) {
-      const k = linkCurve(l), d = `M${k.a.x},${k.a.y} Q${k.c.x},${k.c.y} ${k.b.x},${k.b.y}`;
-      if (l.type === "rail") { el("path", { d, class: "tr-rail" + (l.express ? " express" : "") }, layers.transport); el("path", { d, class: "tr-ties" + (l.express ? " express" : "") }, layers.transport); }
-      else el("path", { d, class: l.type === "air" ? "tr-air" : "tr-lane" }, layers.transport);
+    layers.transport.innerHTML = ""; vehicles = [];
+    if (layerMode !== "normal" && layerMode !== "competition") return;
+    const full = layerMode === "competition";
+    layers.transport.setAttribute("class", "transport-layer" + (full ? "" : " muted"));
+    const P = buildPolys();
+    for (const p of P) {
+      const d = polyD(p.poly);
+      if (p.type === "rail") { el("path", { d, class: "tr-rail" + (p.express ? " express" : "") }, layers.transport); el("path", { d, class: "tr-ties" + (p.express ? " express" : "") }, layers.transport); }
+      else el("path", { d, class: "tr-lane" }, layers.transport);
     }
-    if (!show && ((state.settings || {}).traffic === false || layerMode !== "normal")) return;
-    // Traffic: more on express lines; in the Normal layer, a lighter touch.
-    let i = 0;
-    for (const l of links) {
-      const n = l.type === "rail" ? (l.express ? 2 : 1) : 1;
+    const airPolys = air.map(s => ({ type: "air", poly: smooth([toMap(pt(s[0])), toMap(pt(s[1]))], 2) }));
+    for (const a of airPolys) el("path", { d: polyD(a.poly), class: "tr-air" }, layers.transport);
+    if ((state.settings || {}).traffic === false) return;
+    // Traffic: two trains on express lines, one on others; a steamer per crossing; a plane per air service.
+    for (const p of P.concat(airPolys)) {
+      const n = p.type === "rail" ? (p.express ? 2 : 1) : 1;
       for (let j = 0; j < n; j++) {
-        if (!show && (i++ % 3)) continue;                 // the Normal layer shows a third of the traffic, faintly
-        const k = linkCurve(l), sym = l.type === "air" ? "tr-plane" : l.type === "rail" ? "tr-train" : "tr-ship";
-        const len = Math.hypot(k.b.x - k.a.x, k.b.y - k.a.y);
-        vehicles.push({ sym, faint: !show, k, period: Math.max(5, Math.min(40, len / (l.type === "air" ? 30 : l.type === "rail" ? 22 : 12))), phase: Math.random(), back: Math.random() < 0.5 });
+        const rev = Math.random() < 0.5, pts = rev ? p.poly.pts.slice().reverse() : p.poly.pts;
+        const poly = rev ? smooth(pts, 1) : p.poly;
+        const speed = p.type === "air" ? 22 : p.type === "rail" ? 12 : 6;              // map units a second
+        vehicles.push({ kind: p.type === "air" ? "plane" : p.type === "rail" ? "train" : "ship", poly, speed, d: Math.random() * poly.total, puffT: Math.random() });
       }
     }
   }
-  // Traffic is drawn on a transparent canvas laid over the map, so moving it never repaints the map itself
-  // (moving it inside the map drawing made every frame repaint everything, which phones could not keep up with).
-  let trafficLast = 0, tcv = null;
+  const pt = id => { const c = U.cityById[id]; return [c.lat, c.lon]; };
+
+  // Traffic and smoke are painted on a transparent canvas over the map, so their movement never repaints the map itself.
+  let trafficLast = 0, tcv = null, puffs = [], sprite = null, shadowSprite = null;
   function trafficCanvas() {
     if (tcv) return tcv;
-    tcv = document.createElement("canvas");
-    tcv.className = "traffic-canvas";
+    tcv = document.createElement("canvas"); tcv.className = "traffic-canvas";
     svg.parentNode.insertBefore(tcv, svg.nextSibling);
+    // Soft sprites for smoke and its shadow, drawn once.
+    const mk = (r, stops) => { const c = document.createElement("canvas"); c.width = c.height = r * 2; const g = c.getContext("2d"), gr = g.createRadialGradient(r, r, 0, r, r, r);
+      for (const [o, col] of stops) gr.addColorStop(o, col); g.fillStyle = gr; g.fillRect(0, 0, r * 2, r * 2); return c; };
+    sprite = mk(32, [[0, "rgba(255,255,255,0.95)"], [0.55, "rgba(241,238,232,0.7)"], [1, "rgba(230,226,218,0)"]]);
+    shadowSprite = mk(32, [[0, "rgba(45,36,24,0.22)"], [1, "rgba(45,36,24,0)"]]);
     return tcv;
   }
-  function paintVehicle(ctx, sym) {
-    if (sym === "tr-train") {
-      ctx.fillStyle = "#5b4a36"; ctx.fillRect(-10, -1.6, 4.2, 3.2); ctx.fillRect(-5.2, -1.6, 4.2, 3.2);
-      ctx.fillStyle = "#1f1a15"; ctx.fillRect(-0.4, -1.8, 5.6, 3.6); ctx.fillStyle = "#9b2a24"; ctx.fillRect(3.8, -1, 1.6, 2);
-      ctx.fillStyle = "rgba(255,255,255,0.65)"; ctx.beginPath(); ctx.arc(6.8, -2.8, 1.3, 0, 7); ctx.fill();
-    } else if (sym === "tr-ship") {
-      ctx.strokeStyle = "rgba(255,255,255,0.8)"; ctx.lineWidth = 0.9; ctx.beginPath(); ctx.moveTo(-14, 0); ctx.lineTo(-7, -1.6); ctx.moveTo(-14, 0); ctx.lineTo(-7, 1.6); ctx.stroke();
-      ctx.fillStyle = "#1f1a15"; ctx.beginPath(); ctx.moveTo(-6, -2); ctx.lineTo(5, -2); ctx.lineTo(7.5, 0); ctx.lineTo(5, 2); ctx.lineTo(-6, 2); ctx.fill();
-      ctx.fillStyle = "#e9dcc0"; ctx.fillRect(-4, -1.2, 6, 2.4); ctx.fillStyle = "#9b2a24"; ctx.beginPath(); ctx.arc(-0.5, 0, 1.2, 0, 7); ctx.fill();
-    } else {
-      ctx.fillStyle = "rgba(45,36,24,0.18)"; ctx.beginPath(); ctx.ellipse(3, 4, 4, 1.4, 0, 0, 7); ctx.fill();
-      ctx.fillStyle = "#f0e7d1"; ctx.strokeStyle = "#5a4a36"; ctx.lineWidth = 0.4;
-      ctx.fillRect(-4, -0.7, 8, 1.4); ctx.strokeRect(-4, -0.7, 8, 1.4);
-      ctx.fillStyle = "#e2d5b4"; ctx.fillRect(-0.8, -5.5, 2.2, 11); ctx.strokeRect(-0.8, -5.5, 2.2, 11); ctx.fillRect(-3.8, -2, 1, 4);
+  const CAR_GAPS = [0, 16, 30, 45];                      // locomotive, tender, two carriages (in drawing units)
+  function paintCar(ctx, i) {
+    if (i === 0) {                                          // locomotive seen from above: boiler, smokebox, chimney, cab
+      ctx.fillStyle = "#1f1a15"; ctx.beginPath(); ctx.roundRect(-4, -3, 14, 6, 2.6); ctx.fill();
+      ctx.fillStyle = "#2d2622"; ctx.beginPath(); ctx.roundRect(7, -2.6, 3.6, 5.2, 1.8); ctx.fill();
+      ctx.fillStyle = "#0d0b09"; ctx.beginPath(); ctx.arc(8.2, 0, 1.1, 0, 7); ctx.fill();
+      ctx.fillStyle = "#6b2a22"; ctx.fillRect(-8.6, -3.6, 5.2, 7.2); ctx.fillStyle = "#8a3a2e"; ctx.fillRect(-8.6, -3.6, 5.2, 1.4);
+    } else if (i === 1) {                                   // tender heaped with coal
+      ctx.fillStyle = "#1f1a15"; ctx.fillRect(-4.6, -3.3, 9.2, 6.6); ctx.fillStyle = "#3a3530"; ctx.fillRect(-3.6, -2.4, 7.2, 4.8);
+    } else {                                                // a maroon carriage
+      ctx.fillStyle = "#6a2a1e"; ctx.beginPath(); ctx.roundRect(-6.6, -3.3, 13.2, 6.6, 1.2); ctx.fill();
+      ctx.fillStyle = "#8a4230"; ctx.fillRect(-6.4, -3.3, 12.8, 2); ctx.fillStyle = "#4a1c14"; ctx.fillRect(-6.6, 2.2, 13.2, 1.1);
     }
+  }
+  function paintShip(ctx) {
+    ctx.strokeStyle = "rgba(255,255,255,0.8)"; ctx.lineWidth = 0.9; ctx.beginPath(); ctx.moveTo(-14, 0); ctx.lineTo(-7, -1.6); ctx.moveTo(-14, 0); ctx.lineTo(-7, 1.6); ctx.stroke();
+    ctx.fillStyle = "#1f1a15"; ctx.beginPath(); ctx.moveTo(-6, -2.6); ctx.lineTo(6, -2.6); ctx.lineTo(9, 0); ctx.lineTo(6, 2.6); ctx.lineTo(-6, 2.6); ctx.fill();
+    ctx.fillStyle = "#e9dcc0"; ctx.fillRect(-4, -1.6, 6.5, 3.2); ctx.fillStyle = "#9b2a24"; ctx.beginPath(); ctx.arc(-0.5, 0, 1.4, 0, 7); ctx.fill();
+  }
+  function paintPlane(ctx) {
+    ctx.fillStyle = "rgba(45,36,24,0.18)"; ctx.beginPath(); ctx.ellipse(3, 4, 4, 1.4, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = "#f0e7d1"; ctx.strokeStyle = "#5a4a36"; ctx.lineWidth = 0.4;
+    ctx.fillRect(-4, -0.7, 8, 1.4); ctx.strokeRect(-4, -0.7, 8, 1.4);
+    ctx.fillStyle = "#e2d5b4"; ctx.fillRect(-0.8, -5.5, 2.2, 11); ctx.strokeRect(-0.8, -5.5, 2.2, 11); ctx.fillRect(-3.8, -2, 1, 4);
   }
   function drawTraffic() {
     const cv = trafficCanvas();
-    const now = performance.now(); if (now - trafficLast < 50) return; trafficLast = now;
+    const now = performance.now(), dt = Math.min(0.1, (now - (trafficLast || now)) / 1000);
+    if (now - trafficLast < 33) return; trafficLast = now;
     const w = svg.clientWidth, h = svg.clientHeight, dpr = window.devicePixelRatio || 1;
-    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
-      cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); cv.style.width = w + "px"; cv.style.height = h + "px";
-    }
-    const pb = svg.parentNode.getBoundingClientRect(), sb = svg.getBoundingClientRect();   // SVG elements have no offsetTop
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); cv.style.width = w + "px"; cv.style.height = h + "px"; }
+    const pb = svg.parentNode.getBoundingClientRect(), sb = svg.getBoundingClientRect();
     cv.style.left = (sb.left - pb.left) + "px"; cv.style.top = (sb.top - pb.top) + "px";
     const ctx = cv.getContext("2d");
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height);
-    if (!vehicles.length) return;
-    // Map units to screen pixels, matching the map's viewBox.
-    const r = svg.getScreenCTM(), box = svg.getBoundingClientRect();
-    const s = 1.1 * grow();
+    if (!vehicles.length && !puffs.length) return;
+    const r = svg.getScreenCTM(), unit = r.a;                 // screen pixels per map unit
+    const S = 0.5 * grow();                                    // screen pixels per drawing unit
+    const toScr = p => ({ x: (r.a * p.x + r.c * p.y + r.e - sb.left), y: (r.b * p.x + r.d * p.y + r.f - sb.top) });
+    const onScreen = q => q.x > -60 && q.y > -60 && q.x < w + 60 && q.y < h + 60;
+    const alpha = layerMode === "competition" ? 1 : 0.8;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // Smoke shadows first, then vehicles, then smoke on top.
+    for (const p of puffs) { p.age += dt; }
+    puffs = puffs.filter(p => p.age < p.life);
+    for (const p of puffs) {
+      const k = p.age / p.life, fade = (1 - k) * (1 - k);
+      p.x += (p.vx + Math.sin(p.age * 3 + p.seed) * 2.5) * dt / unit * S * 0.45; p.y += (p.vy + Math.cos(p.age * 2.4 + p.seed) * 1.5) * dt / unit * S * 0.45;
+      p.vx *= 0.985; p.vy *= 0.985;
+      const q = toScr(p); if (!onScreen(q)) continue;
+      const rad = (2.4 + 11 * Math.sqrt(k)) * S / 2 * p.strength, lift = (2 + 10 * k) * S * 0.45;
+      ctx.globalAlpha = fade * 0.9 * alpha; ctx.drawImage(shadowSprite, q.x + lift - rad * 1.1, q.y + lift * 1.2 - rad * 1.1, rad * 2.2, rad * 2.2);
+    }
     for (const v of vehicles) {
-      let t = (now / 1000 / v.period + v.phase) % 1; if (v.back) t = 1 - t;
-      const p = U.weather.bez(v.k.a, v.k.c, v.k.b, t), q = U.weather.bez(v.k.a, v.k.c, v.k.b, Math.min(1, Math.max(0, t + (v.back ? -0.01 : 0.01))));
-      const sx = (r.a * p.x + r.c * p.y + r.e - box.left) * dpr, sy = (r.b * p.x + r.d * p.y + r.f - box.top) * dpr;
-      if (sx < -40 || sy < -40 || sx > cv.width + 40 || sy > cv.height + 40) continue;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.translate(sx / dpr, sy / dpr); ctx.rotate(Math.atan2(q.y - p.y, q.x - p.x)); ctx.scale(s, s);
-      ctx.globalAlpha = v.faint ? 0.5 : 1;
-      paintVehicle(ctx, v.sym);
+      v.d += v.speed * dt;
+      const gapMap = v.kind === "train" ? CAR_GAPS[CAR_GAPS.length - 1] * S / unit : 0;
+      if (v.d - gapMap > v.poly.total) v.d = -Math.random() * 20;
+      const cars = v.kind === "train" ? CAR_GAPS : [0];
+      let head = null;
+      for (let i = 0; i < cars.length; i++) {
+        const d = v.d - cars[i] * S / unit;
+        if (d < 0 || d > v.poly.total) continue;
+        const a = along(v.poly, d), q = toScr(a);
+        if (!onScreen(q)) continue;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.translate(q.x, q.y); ctx.rotate(a.ang); ctx.scale(S, S);
+        ctx.globalAlpha = alpha;
+        if (v.kind === "train") paintCar(ctx, i); else if (v.kind === "ship") paintShip(ctx); else paintPlane(ctx);
+        if (i === 0) head = a;
+      }
+      // Smoke from the locomotive's chimney, and more lazily from a steamer's funnel.
+      if (head && v.kind !== "plane") {
+        v.puffT += dt;
+        const every = v.kind === "train" ? 0.18 : 0.45;
+        if (v.puffT > every) {
+          v.puffT = 0;
+          const off = (v.kind === "train" ? 8.2 : -0.5) * S / unit;
+          puffs.push({ x: head.x + Math.cos(head.ang) * off, y: head.y + Math.sin(head.ang) * off, age: 0, life: 2.4 + Math.random() * 0.8,
+            vx: -Math.cos(head.ang) * 5 + 12, vy: -Math.sin(head.ang) * 5 - 9, seed: Math.random() * 6, strength: v.kind === "train" ? 1 : 0.8 });
+        }
+      }
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    for (const p of puffs) {
+      const q = toScr(p); if (!onScreen(q)) continue;
+      const k = p.age / p.life, fade = (1 - k) * (1 - k), rad = (2.4 + 11 * Math.sqrt(k)) * S / 2 * p.strength;
+      ctx.globalAlpha = fade * alpha; ctx.drawImage(sprite, q.x - rad, q.y - rad, rad * 2, rad * 2);
     }
     ctx.globalAlpha = 1;
   }
@@ -657,5 +775,5 @@ window.UpShip = window.UpShip || {};
   }
   function draftDemand(stops) { draftStops = stops && stops.length ? stops : null; syncExtras(U.state); }
 
-  U.map = { drawTraffic, syncTransport, drawWeather, init, syncRoutes, drawShips, drawDraft, zoomBy, highlight, shipPosition, project, setSetup, setHome, setLayer, syncExtras, draftDemand };
+  U.map = { buildPolys, drawTraffic, syncTransport, drawWeather, init, syncRoutes, drawShips, drawDraft, zoomBy, highlight, shipPosition, project, setSetup, setHome, setLayer, syncExtras, draftDemand };
 })(window.UpShip);

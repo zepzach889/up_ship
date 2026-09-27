@@ -561,7 +561,7 @@ window.UpShip = window.UpShip || {};
       <ul class="choice-list">${opts.map(([k, n, d]) => `<li><button class="${cur === k ? "btn" : "btn-quiet"}" data-accidents="${k}">${n}</button><small>${d}</small></li>`).join("")}</ul>
       <h3>Map</h3>
       <div class="btn-row"><button class="${(state.settings || {}).traffic !== false ? "btn" : "btn-quiet"}" data-traffic="on">Show traffic</button><button class="${(state.settings || {}).traffic === false ? "btn" : "btn-quiet"}" data-traffic="off">Hide traffic</button></div>
-      <p class="small">Trains, steamers, and airplanes moving faintly on the Normal layer. They always show on the Competition layer.</p>`;
+      <p class="small">Trains, steamers, and airplanes moving along the railways and steamer lanes, on the Normal and Competition layers.</p>`;
   }
   // Aetherium discovered: convert now, or wait for refining to bring the price down.
   function aetherDecisionPanel(state) {
