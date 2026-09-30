@@ -14,7 +14,9 @@ window.UpShip = window.UpShip || {};
     corridor:  { name: "Corridor",    sw: "#2d3f66", floor: "url(#dp-runner)" }
   };
   // How many squares wide a deck is: a little over half the hull's diameter.
-  const widthSq = D => Math.max(3, Math.floor(0.55 * D / 2.5));
+  // The decks sit in the lower hull, where it is still nearly full width: about 72% of the diameter.
+  const DECK_SHARE = 0.72;
+  const widthSq = D => Math.max(3, Math.floor(DECK_SHARE * D / 2.5));
 const OPP = { n: "s", s: "n", e: "w", w: "e" };
 const OPEN = new Set(["dining", "lounge", "promenade", "corridor"]);
 function frame(rect, back) {
@@ -136,10 +138,14 @@ const FURNISH = {
     const big = W >= 3 * Q && D >= 2 * Q, t = big ? 19 : 15;
     const nx = Math.max(1, Math.floor((W - 1) / (t + 1))), ny = Math.max(1, Math.floor((D - 6) / (t + 1)));
     const ox = (W - nx * t) / (nx + 1), oy = D >= 2 * Q && W >= 2 * Q ? 6 : 1, sy = (D - oy - ny * t) / (ny + 1);
+    let placed = 0;
     for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
       const x = ox + i * (t + ox), y = oy + sy + j * (t + sy);
-      L.put(t, t, [[x, y]], (x, y) => F.table(x + t / 2, y + t / 2, big ? 6 : 4.5, big ? 6 : 4));
+      if (L.put(t, t, [[x, y]], (x, y) => F.table(x + t / 2, y + t / 2, big ? 6 : 4.5, big ? 6 : 4))) placed++;
     }
+    // Too small or too narrow for tables of four: tables for two, as many as fit.
+    if (!placed) for (const [x, y] of gridSpots(W, D, 11, 11, 12)) if (L.put(11, 11, [[x, y]], (x, y) => F.table(x + 5.5, y + 5.5, 3.2, 2))) placed++;
+    if (!placed) L.put(9, 9, [[W / 2 - 4.5, D / 2 - 4.5], [0.5, 0.5]], (x, y) => F.table(x + 4.5, y + 4.5, 2.6, 2));
     return L.svg();
   },
   lounge(fr, n, door) {
@@ -151,6 +157,10 @@ const FURNISH = {
       L.put(22, 18, [[cx - 11, cy - 9], [cx - 11, cy - 8], [cx - 10, cy - 9]], (x, y) => F.rug(x, y, 22, 18, (i + j) % 2 ? "#5a2e3a" : "#2e4a5a")
         + F.armchair(x + 5, y + 6, col, 20) + F.armchair(x + 17, y + 6, col, -20) + F.armchair(x + 11, y + 14.5, col, 180) + `<circle cx="${x + 11}" cy="${y + 8.5}" r="2.2" fill="#5c3b25" filter="url(#dp-lift)"/>`);
     }
+    // Too small or narrow for a group: pairs of armchairs with a side table between them.
+    for (const [x, y] of gridSpots(W, D, 13, 7, 8)) L.put(13, 7, [[x, y]], (x, y) => F.armchair(x + 3.2, y + 3.5, cols[0], 0) + F.armchair(x + 9.8, y + 3.5, cols[1], 0) + `<circle cx="${x + 6.5}" cy="${y + 3.5}" r="1.6" fill="#5c3b25" filter="url(#dp-lift)"/>`);
+    for (const [x, y] of gridSpots(W, D, 7, 13, 8)) L.put(7, 13, [[x, y]], (x, y) => F.armchair(x + 3.5, y + 3.2, cols[2], 90) + F.armchair(x + 3.5, y + 9.8, cols[0], 90) + `<circle cx="${x + 3.5}" cy="${y + 6.5}" r="1.6" fill="#5c3b25" filter="url(#dp-lift)"/>`);
+    L.put(6.4, 6, gridSpots(W, D, 6.4, 6, 3), (x, y) => F.armchair(x + 3.2, y + 3, cols[0], 0));
     for (let i = 0; i < 4; i++) L.put(8, 8, cornerSpots(W, D, 8, 8), (x, y) => F.palm(x + 4, y + 4));
     return L.svg();
   },
@@ -162,7 +172,8 @@ const FURNISH = {
   },
   galley(fr, n, door) {
     const { W, D } = fr, L = layout(W, D, door);
-    L.put(W - 2, 5, [[1, 1]], (x, y) => F.counter(x, y, W - 2, 5) + (W > 16 ? F.stove(x + 1.5, y) : "") + F.sink(x + W - 9, y + 0.5));
+    if (!L.put(W - 2, 5, [[1, 1]], (x, y) => F.counter(x, y, W - 2, 5) + F.stove(x + 1, y) + (W > 18 ? F.sink(x + W - 9, y + 0.5) : "")))
+      L.put(5, D - 2, [[1, 1]], (x, y) => F.counter(x, y, 5, D - 2) + `<g transform="translate(${x + 5} ${y + 1}) rotate(90)">${F.stove(0, 0)}</g>`);
     if (D >= 2 * Q) L.put(5, D - 16, [[1, 7]], (x, y) => F.counter(x, y, 5, D - 16));
     L.put(14, 6, gridSpots(W, D, 14, 6, 2), (x, y) => `<rect x="${x}" y="${y}" width="14" height="6" fill="#9a7a4e" filter="url(#dp-lift)"/>`);
     return L.svg();
@@ -277,13 +288,17 @@ const DEFS_BODY = `
     for (const { r, c } of room.cells) for (const [dd, dr, dc] of [["n", -1, 0], ["s", 1, 0], ["w", 0, -1], ["e", 0, 1]]) {
       const n = t(r + dr, c + dc, c);
       if (n && (n.type === "corridor" || n.type === "promenade") && n.id !== room.id && !OPEN.has(room.type)) cand[dd].push({ r, c });
+      if (n && room.type === "galley" && n.type === "dining") (cand[dd].service = cand[dd].service || []).push({ r, c });
     }
+    // A galley beside a dining room serves it through its own door.
+    if (room.type === "galley") for (const dd of Object.keys(cand)) if (cand[dd].service) { cand[dd] = cand[dd].service; return pickDoor(cand, dd); }
     const side = Object.keys(cand).sort((a, b) => cand[b].length - cand[a].length)[0];
     if (!cand[side].length) return null;
     const list = cand[side].sort((a, b) => a.r - b.r || a.c - b.c);
     return { side, cell: list[Math.floor((list.length - 1) / 2)] };
   }
 
+  function pickDoor(cand, side) { const list = cand[side].sort((a, b) => a.r - b.r || a.c - b.c); return { side, cell: list[Math.floor((list.length - 1) / 2)] }; }
   // Drawing a deck. Coordinates: x along the ship (bow on the left), y across it (port side at the top).
   function render(ctx, opts = {}) {
     if (!ctx.cols.length) return "";
@@ -332,9 +347,21 @@ const DEFS_BODY = `
     // Bay labels above each block of columns.
     let labels = "";
     for (const b of ctx.bays) { const i = ctx.cols.findIndex(c => c.bay === b); labels += `<text x="${ctx.colX(i) + BAY_SQ * S / 2}" y="-8" class="lbl">Bay ${b}</text><line x1="${ctx.colX(i)}" y1="-4" x2="${ctx.colX(i)}" y2="0" class="baytick"/>`; }
-    return `<g class="dp">${floors}${furn}${walls}${doors}${marks}${labels}</g>`;
+    // Dimensions: each run of bays' length, the deck's width, and a scale bar.
+    let dims = "";
+    for (const b of blocks) {
+      const cs = ctx.cols.map((c, i) => i).filter(i => ctx.cols[i].block === b), x0 = ctx.colX(cs[0]), x1 = ctx.colX(cs[cs.length - 1]) + S;
+      dims += `<line x1="${x0}" y1="${H + 16}" x2="${x1}" y2="${H + 16}" class="dp-dim" marker-start="url(#dp-arrow)" marker-end="url(#dp-arrow)"/><rect x="${(x0 + x1) / 2 - 24}" y="${H + 9}" width="48" height="14" fill="#ebe0c4"/><text x="${(x0 + x1) / 2}" y="${H + 20}" class="dp-dimtext">${cs.length * 2.5} m</text>`;
+    }
+    const xr = W + 12;
+    dims += `<line x1="${xr}" y1="0" x2="${xr}" y2="${H}" class="dp-dim" marker-start="url(#dp-arrow)" marker-end="url(#dp-arrow)"/><text x="${xr + 6}" y="${H / 2 + 4}" class="dp-dimtext start">${ctx.rows * 2.5} m</text>`;
+    const sy = H + 66;
+    dims += `<g transform="translate(0 ${sy})"><rect width="${S * 2}" height="5" fill="#2d2418"/><rect x="${S * 2}" width="${S * 2}" height="5" fill="none" stroke="#2d2418" stroke-width="0.8"/>
+      <text x="0" y="-4" class="dp-dimtext start">0</text><text x="${S * 2}" y="-4" class="dp-dimtext">5</text><text x="${S * 4}" y="-4" class="dp-dimtext">10 m</text>
+      <text x="${S * 4 + 12}" y="6" class="dp-dimtext start">Each square is 2.5 m by 2.5 m</text></g>`;
+    return `<g class="dp">${floors}${furn}${walls}${doors}${marks}${labels}${dims}</g>`;
   }
-  const defs = () => `<style>${DEFS_STYLE}</style>${DEFS_BODY}`;
+  const defs = () => `<style>${DEFS_STYLE}</style>${DEFS_BODY}<marker id="dp-arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,1 L10,5 L0,9" fill="none" stroke="#2d2418" stroke-width="1.4"/></marker>`;
 
   // Painting: each stroke is one room; starting in a room of the same type extends it. Strokes stay within one block of bays.
   let stroke = null;
@@ -425,5 +452,5 @@ const DEFS_BODY = `
     }
   }
 
-  U.decks = { TYPES, S, BAY_SQ, widthSq, context, render, defs, paintStart, paintAt, paintEnd, painting, stats, standardLayout, rooms };
+  U.decks = { DECK_SHARE, TYPES, S, BAY_SQ, widthSq, context, render, defs, paintStart, paintAt, paintEnd, painting, stats, standardLayout, rooms };
 })(window.UpShip);

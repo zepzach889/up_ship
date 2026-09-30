@@ -866,3 +866,8 @@ body.office-open { overflow: hidden; }
 .do-picker input { width: 60px; height: 26px; border: 0; background: none; }
 .do-pop .btn-quiet { margin-top: 8px; width: 100%; font-size: 12px; }
 .office { position: fixed; }
+.dp-dim { stroke: #2d2418; stroke-width: 0.8; fill: none; }
+.dp-dimtext { font-family: var(--ui); font-size: 10px; fill: #2d2418; text-anchor: middle; }
+.dp-dimtext.start { text-anchor: start; }
+.bp-deck { stroke: #7a3a2e; stroke-width: 2.2; } .bp-deck.up { stroke-dasharray: 5 3; }
+.bp-decklabel { fill: #7a3a2e; font-weight: 600; paint-order: stroke; stroke: #ebe0c4; stroke-width: 3px; }

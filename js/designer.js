@@ -315,7 +315,19 @@ window.UpShip = window.UpShip || {};
       <text x="${cx - R - 34}" y="${cy + 4}" class="bp-small end">${fmt(d.D, 1)} m</text>
       ${lab(cy - R * 0.8, "Envelope (fabric)", cx + R * 0.55, cy - R * 0.8)}${lab(cy - R * 0.45, "Gas cell", cx + R * 0.5, cy - R * 0.4)}
       ${lab(cy - R * 0.1, "Main ring", cx + R * 0.96, cy - R * 0.1)}${lab(cy + R * 0.25, "Bracing wire", cx + R * 0.45, cy + R * 0.2)}
-      ${lab(cy + R * 0.6, "Catwalk", cx + R * 0.16, kt + 7)}${lab(cy + R * 0.92, "Keel", cx + R * 0.1, kb - 4)}`;
+      ${lab(cy + R * 0.6, "Catwalk", cx + R * 0.16, kt + 7)}${lab(cy + R * 0.92, "Keel", cx + R * 0.1, kb - 4)}
+      ${decksInSection(d, cx, cy, R)}`;
+  }
+  // The passenger decks drawn into the cross-section at their true width, so the Accommodation tab holds no surprises.
+  function decksInSection(d, cx, cy, R) {
+    const Rm = d.D / 2, k = R / Rm, w = U.decks.widthSq(d.D) * 2.5;
+    const yLow = Math.sqrt(Math.max(0, Rm * Rm - (w / 2) * (w / 2)));          // the floor sits where the hull is exactly that wide
+    const two = d.D >= P().TWO_DECKS, yUp = yLow - 2.8;
+    const line = (y, ww, cls) => `<line x1="${cx - ww / 2 * k}" y1="${cy + y * k}" x2="${cx + ww / 2 * k}" y2="${cy + y * k}" class="${cls}"/>`;
+    const upW = two ? Math.min(2 * Math.sqrt(Rm * Rm - yUp * yUp), w + 3) : 0;
+    return `${line(yLow, w, "bp-deck")}${two ? line(yUp, upW, "bp-deck up") : ""}
+      <line x1="${cx - w / 2 * k}" y1="${cy + yLow * k + 9}" x2="${cx + w / 2 * k}" y2="${cy + yLow * k + 9}" class="bp-dim" marker-start="url(#bp-arrow)" marker-end="url(#bp-arrow)"/>
+      <text x="${cx}" y="${cy + R + 22}" class="bp-small mid bp-decklabel">Passenger deck ${fmt(w, 1)} m wide${two ? ", with an upper deck above" : ""}</text>`;
   }
   // A typical bay seen from the side: two ring frames, longitudinals, crossed bracing, and the keel walkway.
   function baySection(d, f) {
@@ -710,11 +722,11 @@ window.UpShip = window.UpShip || {};
   }
   function accSvg(ctx) {
     const W = ctx.width, H = ctx.rows * U.decks.S, pad = 40;
-    return `<svg viewBox="${-pad - 30} ${-pad} ${W + pad * 2 + 60} ${H + pad * 2}" class="bp do-deck" data-deck="${ctx.deck}" aria-label="Deck plan, seen from above: bow to the left">
+    return `<svg viewBox="${-pad - 30} ${-pad} ${W + pad * 2 + 130} ${H + pad * 2 + 60}" class="bp do-deck" data-deck="${ctx.deck}" aria-label="Deck plan, seen from above: bow to the left">
       <defs>${U.decks.defs()}</defs>
       ${U.decks.render(ctx, { grid: accGrid })}
-      <text x="${W / 2}" y="${-24}" class="bp-small mid">Port side</text><text x="${W / 2}" y="${H + 30}" class="bp-small mid">Starboard side</text>
-      <text x="-22" y="${H / 2}" class="bp-small mid" transform="rotate(-90 -22 ${H / 2})">Bow</text><text x="${W + 22}" y="${H / 2}" class="bp-small mid" transform="rotate(90 ${W + 22} ${H / 2})">Stern</text></svg>`;
+      <text x="${W / 2}" y="${-24}" class="bp-small mid">Port side</text><text x="${W / 2}" y="${H + 42}" class="bp-small mid">Starboard side</text>
+      <text x="-22" y="${H / 2}" class="bp-small mid" transform="rotate(-90 -22 ${H / 2})">Bow</text><text x="${W + 72}" y="${H / 2}" class="bp-small mid" transform="rotate(90 ${W + 72} ${H / 2})">Stern</text></svg>`;
   }
   function accCell(e) {
     const svg = root.querySelector("svg.do-deck"); if (!svg || !accCtx) return null;
