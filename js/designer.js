@@ -29,9 +29,42 @@ window.UpShip = window.UpShip || {};
   };
 
   function draft(state) {
-    if (!state.drawing) state.drawing = U.physics.preset(state, "blank");
-    if (!state.drawing.livery) state.drawing.livery = U.livery.fresh(state);
-    return state.drawing;
+    if (!state.designs) {
+      state.designs = [];
+      const d = state.drawing || U.physics.preset(state, "blank");
+      state.designs.push({ id: 1, name: "Design 1", d, locked: false, classId: null });
+      state.nextDesignId = 2; state.openDesign = 1;
+    }
+    let entry = state.designs.find(x => x.id === state.openDesign);
+    if (!entry) { entry = state.designs[0] || newDesign(state); state.openDesign = entry.id; }
+    state.drawing = entry.d;
+    if (!entry.d.livery) entry.d.livery = U.livery.fresh(state);
+    return entry.d;
+  }
+  const openEntry = st => (draft(st), st.designs.find(x => x.id === st.openDesign));
+  function newDesign(state, d, name) {
+    const id = state.nextDesignId = (state.nextDesignId || state.designs.length + 1);
+    state.nextDesignId++;
+    const e = { id, name: name || `Design ${id}`, d: d || U.physics.preset(state, "blank"), locked: false, classId: null };
+    if (!e.d.livery) e.d.livery = U.livery.fresh(state);
+    state.designs.push(e);
+    return e;
+  }
+  // What a design needs that the company has not yet researched.
+  function needsResearch(state, d) {
+    const lim = P().limits(state), R = U.research, out = [];
+    if (d.D > lim.maxD) out.push(d.D > 41 ? "Giant rings, for a hull over 41 m wide" : "Deep ring frames, for a hull over 30 m wide");
+    const L = P().hullLengths(d).L;
+    if (L > 250 && !R.has(state, "structures8")) out.push("Great hull construction, for a ship over 250 m long");
+    if (d.gas === "aetherium" && !(U.aether && U.aether.discovered(state))) out.push("Aetherium");
+    return out;
+  }
+  // A locked design (ships ordered) keeps its hull, systems, and decks; only its paint can change.
+  function locked(st) { const e = openEntry(st); return !!(e && e.locked); }
+  function blockedEdit() {
+    if (tab === "paint" || !locked(U.state)) return false;
+    note("Ships of this class have been ordered, so its hull, systems, and decks are fixed. Make a Mark II to change them.");
+    return true;
   }
 
   // Opening and closing ----------------------------------------------------------------
@@ -123,7 +156,9 @@ window.UpShip = window.UpShip || {};
           ${[["hull", "Hull"], ["systems", "Systems"], ["accommodation", "Accommodation"], ["paint", "Paint"]].map(([k, n]) =>
             `<button data-tab="${k}" aria-pressed="${tab === k}">${n}</button>`).join("")}
         </nav>
-        <label class="do-start">Start from <select data-preset-select><option value="">Choose a starting design</option>${Object.entries(P().PRESETS).map(([k, p]) => `<option value="${k}">${p.label}</option>`).join("")}</select></label>
+        <button class="btn-quiet do-portfolio-btn" data-do="portfolio" aria-haspopup="dialog">Designs</button>
+        <span class="do-design-name" title="The design you are working on">${esc(openEntry(st).name)}${openEntry(st).locked ? " (ordered)" : ""}</span>
+        <label class="do-start"><span class="sr-only">Start from</span><select data-preset-select aria-label="Start from a standard design"><option value="">Start from…</option>${Object.entries(P().PRESETS).map(([k, p]) => `<option value="${k}">${p.label}</option>`).join("")}</select></label>
         <div class="do-clock"><span class="do-date"></span>
           <div class="do-speed" role="group" aria-label="Game speed">
             <button data-speed="0" aria-label="Pause">${icon("pause")}</button><button data-speed="1" aria-label="Normal speed">${icon("play")}</button>
@@ -132,6 +167,8 @@ window.UpShip = window.UpShip || {};
           <button class="btn-quiet do-close" data-do="back">To the map</button></div>
       </header>
       <div class="do-banner" hidden></div>
+      ${openEntry(st).locked && tab !== "paint" ? `<div class="do-lockbar">Ships of this class have been ordered, so its hull, systems, and decks are fixed; its paint can still change. <button class="btn" data-do="mark2">Make a Mark II</button></div>` : ""}
+      ${needsResearch(st, d).length ? `<div class="do-lockbar research">Needs research before it can be built: ${needsResearch(st, d).map(esc).join("; ")}.</div>` : ""}
       <div class="do-body">
         <main class="do-main">${tab === "hull" ? hullTab(st, d, f) : tab === "systems" ? systemsTab(st, d, f) : tab === "accommodation" ? accTab(st, d, f) : paintTab(st, d, f)}</main>
         <aside class="do-figures" aria-label="Figures">${figuresPanel(st, d, f)}</aside>
@@ -661,6 +698,7 @@ window.UpShip = window.UpShip || {};
 
   // Dragging, with pointer events so it works with a mouse, a pen, or a finger.
   function onPointerDown(e) {
+    if (tab !== "paint" && locked(U.state) && e.target.closest && (e.target.closest("[data-handle]") || e.target.closest("[data-card]") || e.target.closest("[data-item]") || e.target.closest("svg.do-deck"))) { blockedEdit(); return; }
     if (pop && !e.target.closest(".do-pop") && !e.target.closest("[data-color]")) closePalette();
     if (tab === "accommodation" && e.target.closest && e.target.closest("svg.do-deck")) {
       const d = draft(U.state);
@@ -918,6 +956,84 @@ window.UpShip = window.UpShip || {};
     lv.preset = null;
   }
 
+  // The portfolio of designs --------------------------------------------------------------------
+  function openPortfolio() {
+    closePortfolio();
+    const st = U.state; draft(st);
+    const box = document.createElement("div");
+    box.className = "do-portfolio"; box.setAttribute("role", "dialog"); box.setAttribute("aria-label", "Designs");
+    const rows = st.designs.map(e => {
+      const need = needsResearch(st, e.d), f = P().figures(st, e.d), open = e.id === st.openDesign;
+      const hl = P().hullLengths(e.d), k = 150 / hl.L, X = x => 8 + x * k, Y = y => 22 + y * k;
+      return `<li class="${need.length ? "needs" : ""}${open ? " open" : ""}">
+        <svg viewBox="0 0 166 44" width="166" height="44" aria-hidden="true">${U.livery.top(e.d, f, X, Y)}</svg>
+        <div class="pf-info"><b>${esc(e.name)}</b><small>${Math.round(f.L)} m, ${f.planned ? f.berths + " passengers" : "decks not laid out"}, ${fmt(f.cargoCap, 0)} t cargo${e.locked ? " · ordered" : ""}</small>
+          ${need.length ? `<small class="pf-need">Needs research: ${need.map(esc).join("; ")}</small>` : ""}</div>
+        <div class="pf-acts">${open ? `<span class="pf-open">Open</span>` : `<button class="btn-quiet" data-pf="open" data-id="${e.id}">Open</button>`}
+          <button class="btn-quiet" data-pf="copy" data-id="${e.id}">Copy</button><button class="btn-quiet" data-pf="rename" data-id="${e.id}">Rename</button>
+          <button class="btn-quiet" data-pf="export" data-id="${e.id}">Export</button><button class="btn-quiet" data-pf="delete" data-id="${e.id}">Delete</button></div></li>`;
+    }).join("");
+    box.innerHTML = `<div class="pf-head"><h2>Designs</h2><button class="btn-quiet" data-do="pf-close">Close</button></div>
+      <ul class="pf-list">${rows}</ul>
+      <div class="pf-foot"><button class="btn" data-pf="new" data-id="0">New design</button><button class="btn-quiet" data-pf="import" data-id="0">Import from a file</button>
+        <button class="btn-quiet" data-pf="exportall" data-id="0">Export all designs</button><input type="file" accept=".json,application/json" hidden data-pf-file></div>`;
+    root.appendChild(box);
+    box.querySelector("[data-pf-file]").addEventListener("change", ev => importFile(ev.target.files[0]));
+  }
+  function closePortfolio() { const b = root && root.querySelector(".do-portfolio"); if (b) b.remove(); }
+  function portfolioAction(act, id) {
+    const st = U.state, e = st.designs.find(x => x.id === id);
+    if (act === "open") { st.openDesign = id; resetAnim(); selBay = null; paintSel = null; closePortfolio(); render(); return; }
+    if (act === "new") { const n = newDesign(st); st.openDesign = n.id; resetAnim(); closePortfolio(); render(); return; }
+    if (act === "copy") { const n = newDesign(st, JSON.parse(JSON.stringify(e.d)), `${e.name} (copy)`); openPortfolio(); return; }
+    if (act === "rename") { const name = prompt("Rename this design:", e.name); if (name && name.trim()) { e.name = name.trim().slice(0, 40); render(); openPortfolio(); } return; }
+    if (act === "delete") {
+      const flying = e.classId && st.ships.some(s => s.classId === e.classId);
+      if (!confirm(`Delete "${e.name}"?${flying ? " Its ships already built will keep flying, but no more can be ordered." : ""}`)) return;
+      st.designs = st.designs.filter(x => x.id !== id);
+      if (e.classId && U.SHIP_CLASSES[e.classId]) U.SHIP_CLASSES[e.classId].retired = true;
+      if (!st.designs.length) newDesign(st);
+      if (st.openDesign === id) st.openDesign = st.designs[0].id;
+      resetAnim(); render(); openPortfolio(); return;
+    }
+    if (act === "export") { download([e], e.name); return; }
+    if (act === "exportall") { download(st.designs, `${st.company.name} designs`); return; }
+    if (act === "import") { root.querySelector("[data-pf-file]").click(); return; }
+  }
+  // A Mark II: a fresh, editable copy of a design whose ships have been ordered.
+  function markTwo() {
+    const st = U.state, e = openEntry(st);
+    const base = e.name.replace(/\s+Mark\s+[IVX]+$/i, ""), marks = st.designs.filter(x => x.name.startsWith(base + " Mark")).length;
+    const n = newDesign(st, JSON.parse(JSON.stringify(e.d)), `${base} Mark ${["II", "III", "IV", "V", "VI", "VII"][marks] || marks + 2}`);
+    st.openDesign = n.id; resetAnim(); render();
+    note(`${n.name} is a new design, free to change. ${e.name} and its ships stay as they are.`);
+  }
+  function download(entries, name) {
+    const data = { format: "upship-designs", version: 1, designs: entries.map(e => ({ name: e.name, design: e.d })) };
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 1)], { type: "application/json" }));
+    a.download = `${name.replace(/[^\w\- ]+/g, "").trim() || "designs"}.upship.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }
+  async function importFile(file) {
+    if (!file) return;
+    let data;
+    try { data = JSON.parse(await file.text()); } catch (err) { note("That file could not be read as designs."); return; }
+    const list = data && data.format === "upship-designs" && Array.isArray(data.designs) ? data.designs : null;
+    if (!list || !list.length) { note("That file does not contain any Up, Ship! designs."); return; }
+    const st = U.state, notes = [];
+    let last = null;
+    for (const item of list.slice(0, 50)) {
+      const { d, changes } = U.designIO.clean(st, item.design);
+      last = newDesign(st, d, String(item.name || "Imported design").slice(0, 40));
+      if (changes.length) notes.push(`${last.name}: ${changes.join("; ")}`);
+      const need = needsResearch(st, d); if (need.length) notes.push(`${last.name} needs research: ${need.join("; ")}`);
+    }
+    st.openDesign = last.id; resetAnim(); closePortfolio(); render();
+    note(`Imported ${list.length} design${list.length > 1 ? "s" : ""}.${notes.length ? " " + notes.join(" ") : ""}`);
+  }
+
   // Small drawings: the office's logo, the speed icons, and a hull silhouette for each option.
   function logoLines() {
     return `<g fill="none" stroke="#2d2418" stroke-width="1.2"><ellipse cx="24" cy="10" rx="22" ry="7"/><line x1="4" y1="10" x2="44" y2="10"/><path d="M18,17 h12 v3 h-12 z"/></g>`;
@@ -951,6 +1067,10 @@ window.UpShip = window.UpShip || {};
     const b = e.target.closest("button"); if (!b) return;
     const st = U.state, d = draft(st), lim = P().limits(st);
     if (b.dataset.do === "back") { close(); return; }
+    if (b.dataset.do === "portfolio") { openPortfolio(); return; }
+    if (b.dataset.do === "mark2") { markTwo(); return; }
+    if (b.dataset.pf) { portfolioAction(b.dataset.pf, +b.dataset.id); return; }
+    if (b.dataset.do === "pf-close") { closePortfolio(); return; }
     if (b.dataset.do === "dismiss") { root.querySelector(".do-banner").hidden = true; return; }
     if (b.dataset.speed != null) { U.game && U.game.setAuto(+b.dataset.speed); clock(); return; }
     if (b.dataset.tab) { tab = b.dataset.tab; closePalette(); render(); return; }
@@ -976,6 +1096,7 @@ window.UpShip = window.UpShip || {};
     if (b.dataset.removeEng) { remove({ type: "eng", bay: +b.dataset.removeEng }); refresh(); return; }
     if (b.dataset.mount) { const en = sys.engines.find(x => x.bay === selBay); if (en) en.mount = b.dataset.mount; refresh(); return; }
     if (b.dataset.preset) { startFrom(b.dataset.preset); return; }
+    if ((b.dataset.bays || b.dataset.gas || b.dataset.opt || b.dataset.clearBay || b.dataset.decks || b.dataset.removeFit != null || b.dataset.removeEng || b.dataset.mount || b.dataset.accTool || b.dataset.acc === "standard" || b.dataset.acc === "clear") && blockedEdit()) return;
     if (b.dataset.bays) { d.bays = Math.max(2, Math.min(lim.maxBays, d.bays + b.dataset.bays * 0.5)); trimSystems(d); render(); kick(); return; }
     if (b.dataset.gas) { d.gas = b.dataset.gas; render(); return; }
     if (b.dataset.opt) { const [k, v] = b.dataset.opt.split(":"); d[k] = v; render(); return; }
@@ -983,6 +1104,7 @@ window.UpShip = window.UpShip || {};
   }
   function onInput(e) {
     const t = e.target;
+    if ((t.dataset.field === "D" || t.dataset.presetSelect != null) && t.value && tab !== "paint" && locked(U.state) && t.dataset.presetSelect == null) { t.value = draft(U.state).D; blockedEdit(); return; }
     if (tab === "paint") {
       const d = draft(U.state), lv = d.livery, redraw = () => { root.querySelector(".do-paintsheet").innerHTML = paintSvg(U.state, d, P().figures(U.state, d)); };
       if (t.dataset.pickInput != null && pop) { setColor(pop.dataset.target, t.value); redraw(); const chip = root.querySelector(`[data-color="${pop.dataset.target}"] span`); if (chip) chip.style.background = t.value; return; }
@@ -1013,7 +1135,10 @@ window.UpShip = window.UpShip || {};
   function startFrom(key) {
     const st = U.state, lim = P().limits(st), p = P().preset(st, key);
     const keep = st.drawing && st.drawing.livery;
-    p.livery = keep || U.livery.fresh(st);
+    p.livery = keep ? JSON.parse(JSON.stringify(keep)) : U.livery.fresh(st);
+    // A locked design is never overwritten: starting over makes a new design.
+    const e = openEntry(st);
+    if (e.locked) { const n = newDesign(st, p); st.openDesign = n.id; } else e.d = p;
     st.drawing = p; st.drawingNo = (st.drawingNo || 0) + 1;
     resetAnim(); render();
     if (p.trimmed) note(`Diameter trimmed to ${lim.maxD} m, the most your girders allow today.`);
@@ -1032,5 +1157,5 @@ window.UpShip = window.UpShip || {};
     clearTimeout(bannerTimer); bannerTimer = setTimeout(() => { b.hidden = true; }, 7000);
   }
 
-  U.designer = { open, close, isOpen, telegram };
+  U.designer = { open, close, isOpen, telegram, needsResearch, draft };
 })(window.UpShip);

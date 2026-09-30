@@ -208,17 +208,28 @@ window.UpShip = window.UpShip || {};
     }
     // The upper fin, seen edge-on, as a line along the spine.
     const spineFin = `<path d="M${X(fin.x0)},${Y(0)} L${X(fin.x1)},${Y(0)}" stroke="${lv.fins}" stroke-width="${Math.max(1, Y(R * 0.06) - Y(0))}"/>`;
-    // Emblems that show from above: high on the hull, or on the fins (both horizontal fins).
+    // Emblems as seen from above. One painted high on the flank is seen at a slant: squeezed across the hull
+    // (the steeper the flank, the more), with its top toward the spine, so the one on the far side appears turned around.
+    // Fin emblems sit flat on the horizontal fins, top outward, and are sized to fit.
+    // Bow on the left: the port side is at the bottom of the view, the starboard side at the top.
     const em = (U.state && U.state.company.emblem) || null;
-    let emblems = "";
+    let emblems = "", hullEmblems = "";
+    const placed = (cx, cy, sz, rot, squash) => `<g transform="translate(${cx.toFixed(1)} ${cy.toFixed(1)}) rotate(${rot}) scale(1 ${squash.toFixed(3)})">${U.emblem.svg(em, sz, `x="${(-sz / 2).toFixed(1)}" y="${(-sz / 2).toFixed(1)}" style="width:${sz.toFixed(1)}px;height:${sz.toFixed(1)}px"`)}</g>`;
     if (em) for (const e of lv.emblems) {
-      const sz = Y(R * 0.5 * e.size) - Y(0);
-      if (Math.abs(e.y) > 1) { const fx = fin.x0 + (fin.x1 - fin.x0) * 0.62, fy = r(fx) + fin.proj * 0.45; for (const s of [-1, 1]) emblems += U.emblem.svg(em, sz, `x="${X(fx) - sz / 2}" y="${Y(s * fy) - sz / 2}" style="width:${sz}px;height:${sz}px"`); }
-      else if (e.y < -0.45) { const x = L * e.x, w = lateral(e.y) * r(x); for (const s of [-1, 1]) emblems += U.emblem.svg(em, sz * 0.8, `x="${X(x) - sz * 0.4}" y="${Y(s * w) - sz * 0.4}" style="width:${sz * 0.8}px;height:${sz * 0.8}px"`); }
+      const sz = Y(R * 0.55 * e.size) - Y(0);
+      if (Math.abs(e.y) > 1) {
+        // The horizontal fin's middle, and room enough for the emblem to lie within it.
+        const fx = fin.x0 + (fin.x1 - fin.x0) * 0.58, root = r(fx), span = fin.proj;
+        const fs = Math.min(sz, (Y(span * 0.8) - Y(0)), (X(fin.x1) - X(fin.x0)) * 0.45);
+        for (const side of [1, -1]) emblems += placed(X(fx), Y(side * (root + span * 0.5)), fs, side > 0 ? 180 : 0, 1);
+      } else if (e.y < -0.3) {
+        const x = L * e.x, up = -e.y, w = lateral(e.y) * r(x);                  // up: how near the top of the hull it sits
+        for (const side of [1, -1]) hullEmblems += placed(X(x), Y(side * w), sz, side > 0 ? 0 : 180, Math.max(0.15, up));
+      }
     }
     const shade = `<linearGradient id="${id}s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0.3"/><stop offset="0.35" stop-color="#fff" stop-opacity="0.18"/><stop offset="0.5" stop-color="#fff" stop-opacity="0.3"/><stop offset="0.65" stop-color="#fff" stop-opacity="0.18"/><stop offset="1" stop-color="#000" stop-opacity="0.3"/></linearGradient>`;
     return `<defs><clipPath id="${id}c"><path d="${outline}"/></clipPath>${shade}</defs>${fins}
-      <g clip-path="url(#${id}c)">${body}<path d="${outline}" fill="url(#${id}s)"/></g><path d="${outline}" class="lv-outline"/>${spineFin}${emblems}`;
+      <g clip-path="url(#${id}c)">${body}${hullEmblems}<path d="${outline}" fill="url(#${id}s)"/></g><path d="${outline}" class="lv-outline"/>${spineFin}${emblems}`;
   }
   // On the hull, y is a share of the local radius; beyond +/-1 it is on a fin, measured out from the hull's surface in radii.
   const emblemY = (e, rx, R) => Math.abs(e.y) <= 1 ? e.y * rx : Math.sign(e.y) * (rx + (Math.abs(e.y) - 1) * R);
