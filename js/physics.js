@@ -103,7 +103,11 @@ window.UpShip = window.UpShip || {};
     f.empty = f.structure + f.engineWeight + modWeight;
     f.useful = f.gross - f.empty;
     // Crew grows with the ship's size, its engines, and its passengers.
-    f.berths = decks * Math.round(12 * k);
+    // The painted deck plan decides the berths once there is one; until then, an estimate from the decks.
+    const plan = U.decks && d.plan ? U.decks.stats(d) : null;
+    f.planned = !!(plan && plan.laidOut);
+    f.berths = f.planned ? plan.berths : decks * Math.round(12 * k);
+    f.firstBerths = f.planned ? plan.first : 0; f.comfort = f.planned ? plan.comfort : null; f.plan = plan;
     f.cargoCap = holds * 6 * k2;
     f.crew = Math.round(4 + 2 * engines + f.berths / 5 + holds + L / 50);
     f.crewBerths = crewBays * Math.round(14 * k) + 8;
@@ -166,6 +170,8 @@ window.UpShip = window.UpShip || {};
     if (f.crewBerths < f.crewNeedBerths) f.notes.push(`Berths for ${f.crewNeedBerths} crew needed (they sleep in watches), but only ${f.crewBerths}.`);
     if (fin > 9) f.notes.push("Very long and slender: more drag from its skin, and hard to handle.");
     if (fin < 4) f.notes.push("Short and fat: a lot of drag for its size.");
+    if (f.planned) { f.notes.push(...plan.notes); if (plan.empty.length) f.notes.push(`Not laid out yet: the ${plan.empty.join(", ")}.`); }
+    else if (decks) f.notes.push("The passenger decks are not laid out yet; passenger figures are estimates.");
     if (f.status === "fly" && f.notes.length === 0) f.notes.push("Flies, and everyone has a berth.");
     return f;
   }
@@ -189,6 +195,7 @@ window.UpShip = window.UpShip || {};
     p.trimmed = p.D > lim.maxD;
     p.D = Math.min(p.D, lim.maxD);
     p.gas = "hydrogen"; p.key = key;
+    if (U.decks) U.decks.standardLayout(p);
     return p;
   }
 

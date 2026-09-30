@@ -30,6 +30,7 @@ window.UpShip = window.UpShip || {};
 
   function draft(state) {
     if (!state.drawing) state.drawing = U.physics.preset(state, "blank");
+    if (!state.drawing.livery) state.drawing.livery = U.livery.fresh(state);
     return state.drawing;
   }
 
@@ -61,6 +62,27 @@ window.UpShip = window.UpShip || {};
       if (h && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); selBay = +h.dataset.bay; refresh(); root.querySelector(`[data-bay="${selBay}"]`)?.focus(); }
     });
     root.addEventListener("pointerdown", onPointerDown);
+    root.addEventListener("keydown", e => {
+      if (tab !== "paint" || !paintSel || e.target.closest("input, select, textarea")) return;
+      const k = { ArrowLeft: [-0.004, 0], ArrowRight: [0.004, 0], ArrowUp: [0, -0.03], ArrowDown: [0, 0.03] }[e.key];
+      if (!k) return;
+      e.preventDefault();
+      const lv = draft(U.state).livery, it = paintSel === "name" ? lv.name : lv.emblems[+paintSel.split(":")[1]];
+      if (!it) return;
+      it.x = Math.max(0.02, Math.min(0.98, it.x + k[0])); it.y += k[1];
+      root.querySelector(".do-paintsheet").innerHTML = paintSvg(U.state, draft(U.state), P().figures(U.state, draft(U.state)));
+    });
+    root.addEventListener("keydown", e => {
+      const h = e.target.closest && e.target.closest("[data-handle]");
+      if (!h) return;
+      const d = draft(U.state), lim = P().limits(U.state), k = h.dataset.handle;
+      const up = e.key === "ArrowRight" || e.key === "ArrowUp", down = e.key === "ArrowLeft" || e.key === "ArrowDown";
+      if (!up && !down) return;
+      e.preventDefault();
+      if (k === "length") { d.bays = Math.max(2, Math.min(lim.maxBays, d.bays + (up ? 1 : -1))); trimSystems(d); }
+      else d.D = Math.max(lim.minD, Math.min(lim.maxD, d.D + (up ? 0.5 : -0.5)));
+      render(); root.querySelector(`[data-handle="${k}"]`)?.focus();
+    });
     window.addEventListener("pointermove", moveGhost);
     window.addEventListener("pointerup", onPointerUp);
     root.addEventListener("input", onInput);
@@ -110,7 +132,7 @@ window.UpShip = window.UpShip || {};
       </header>
       <div class="do-banner" hidden></div>
       <div class="do-body">
-        <main class="do-main">${tab === "hull" ? hullTab(st, d, f) : tab === "systems" ? systemsTab(st, d, f) : laterTab()}</main>
+        <main class="do-main">${tab === "hull" ? hullTab(st, d, f) : tab === "systems" ? systemsTab(st, d, f) : tab === "accommodation" ? accTab(st, d, f) : paintTab(st, d, f)}</main>
         <aside class="do-figures" aria-label="Figures">${figuresPanel(st, d, f)}</aside>
       </div>`;
     clock();
@@ -151,8 +173,10 @@ window.UpShip = window.UpShip || {};
   function blueprint(st, d, f) {
     const W = 1200, H = 660, ref = REFS.find(r => r.id === compare);
     const L = f.L, D = d.D, fitL = Math.max(L, ref ? ref.L : 0), fitD = Math.max(D, ref ? ref.D : 0);
-    const s = Math.min(1000 / fitL, 200 / fitD);                  // pixels per metre
-    const x0 = 130 + (1000 - L * s) / 2, cy = 190;
+    // While a handle is being dragged, the scale and the bow stay put, so the ship grows under the pointer.
+    const s = hullDrag ? hullDrag.s : Math.min(1000 / fitL, 200 / fitD);        // pixels per metre
+    const x0 = hullDrag ? hullDrag.x0 : 130 + (1000 - L * s) / 2, cy = 190;
+    bpGeom = { s, x0, cy };
     const X = x => x0 + x * s, Y = y => cy + y * s;
     const r = x => P().radius(d, x);
     // Hull outline.
@@ -222,9 +246,17 @@ window.UpShip = window.UpShip || {};
       ${keel}${fins}<path d="${outline}" class="bp-outline"/>${car}${engines}${refDraw}
       <line x1="${X(-6)}" y1="${cy}" x2="${X(L + 8)}" y2="${cy}" class="bp-centre"/>
       ${dims}${bays}
+      ${handle("length", X(L) + 18, cy, "Drag to lengthen or shorten the ship, a bay at a time")}
+      ${handle("diameter", X(f.ln + f.mid * 0.5), Y(-D / 2), "Drag up or down to change the diameter")}
       <line x1="16" y1="392" x2="${W - 16}" y2="392" class="bp-rule"/>
       ${crossSection(d, f)}${baySection(d, f)}${scaleAndTitle(st, d, f, s)}
     </svg>`;
+  }
+  // A drag handle: a brass knob with arrows showing which way it moves.
+  function handle(kind, x, y, label) {
+    const arrows = kind === "length" ? `<path d="M-15,0 L-9,-5 L-9,5 Z M15,0 L9,-5 L9,5 Z"/>` : `<path d="M0,-15 L-5,-9 L5,-9 Z M0,15 L-5,9 L5,9 Z"/>`;
+    return `<g class="bp-handle${hullDrag && hullDrag.kind === kind ? " active" : ""}" data-handle="${kind}" transform="translate(${x.toFixed(1)} ${y.toFixed(1)})" tabindex="0" role="slider" aria-label="${label}">
+      <circle r="17" class="bp-handle-hit"/><circle r="8" class="bp-handle-knob"/><g class="bp-handle-arrows">${arrows}</g><title>${label}</title></g>`;
   }
   function finsDrawing(d, f, X, Y, r, s) {
     const L = f.L, D = d.D;
@@ -333,7 +365,7 @@ window.UpShip = window.UpShip || {};
         ${row("Engines", f.engines ? `${f.engines} × ${fmt(f.hpEach)} hp` : "None")}${row("Cruising speed", `${fmt(f.speed)} km/h`)}${row("Range", `${fmt(Math.round(f.range / 50) * 50)} km`)}</dl>
       ${trimGauge(f)}
       <h3>Capacity</h3><dl>
-        ${row("Passengers", f.berths)}${row("Cargo", `${fmt(f.cargoCap, 1)} t`)}${row("Crew", `${f.crew} needed, ${f.crewBerths} berths`)}</dl>
+        ${row("Passengers", f.planned ? `${f.berths} (${f.firstBerths} first class)` : `about ${f.berths}`)}${f.planned && f.berths ? row("Comfort", `${f.comfort} of 100`) : ""}${row("Cargo", `${fmt(f.cargoCap, 1)} t`)}${row("Crew", `${f.crew} needed, ${f.crewBerths} berths`)}</dl>
       <h3>Cost and building</h3><dl>
         ${row("Price", money(f.price))}${row("Build time", `${fmt(f.buildDays / 30.4, 1)} months`)}${row("Running cost", `${money(f.daily)} a day`)}${row("Shed needed", f.shed ? f.shed.name : "None large enough")}</dl>
       <h3>Notes</h3><ul class="do-notes">${f.notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul>
@@ -344,16 +376,18 @@ window.UpShip = window.UpShip || {};
   function trimGauge(f) {
     const P_ = P(), deg = Math.max(-12, Math.min(12, f.trim * 100 * 1.2)), off = Math.abs(f.trim);
     const state = off <= P_.LEVEL ? ["ok", "Level"] : off <= P_.LIMIT ? ["warn", `${fmt(Math.abs(deg), 1)}° ${f.trim > 0 ? "nose-up" : "nose-down"}`] : ["bad", "Cannot fly level"];
-    const pos = Math.max(-1, Math.min(1, f.trim / (P_.LIMIT * 1.3)));          // bubble position along the tube
+    // Reads like a see-saw: the heavy end dips, and the weight slides toward it. Bow on the left, as in the drawings.
+    const pos = Math.max(-1, Math.min(1, f.trim / (P_.LIMIT * 1.3)));          // below 0: toward the bow
     return `<div class="do-trim"><div class="do-trim-head"><span>Trim</span><span class="do-trim-${state[0]}">${state[1]}</span></div>
       <svg viewBox="0 0 240 46" width="100%" height="46" aria-hidden="true">
-        <g transform="rotate(${(-deg * 0.6).toFixed(1)} 120 26)">
+        <g transform="rotate(${Math.max(-5, Math.min(5, deg * 0.45)).toFixed(1)} 120 28)">
           <rect x="10" y="16" width="220" height="20" rx="10" class="tg-tube"/>
           <rect x="${120 - 110 * P_.LEVEL / (P_.LIMIT * 1.3)}" y="16" width="${220 * P_.LEVEL / (P_.LIMIT * 1.3)}" height="20" class="tg-ok"/>
           <rect x="${120 - 110 / 1.3}" y="16" width="3" height="20" class="tg-limit"/><rect x="${120 + 110 / 1.3 - 3}" y="16" width="3" height="20" class="tg-limit"/>
-          <ellipse cx="${120 - pos * 100}" cy="26" rx="14" ry="7" class="tg-bubble tg-${state[0]}"/>
+          <circle cx="${120 + pos * 100}" cy="26" r="8" class="tg-bubble tg-${state[0]}"/>
           <line x1="120" y1="12" x2="120" y2="40" class="tg-mark"/></g>
-        <text x="12" y="10" class="tg-lab">Bow</text><text x="228" y="10" class="tg-lab end">Stern</text></svg></div>`;
+        <text x="12" y="10" class="tg-lab">Bow</text><text x="228" y="10" class="tg-lab end">Stern</text></svg>
+      <p class="do-trim-note">The heavy end dips.</p></div>`;
   }
 
   // The Systems tab ---------------------------------------------------------------------------
@@ -369,7 +403,7 @@ window.UpShip = window.UpShip || {};
     { id: "ballast", name: "Water ballast", kind: "fitting", file: "water-ballast", about: "Needed to land. Shares a bay; good for trimming." }
   ];
   const MODULE_NAMES = { control: "Control car", passenger: "Passenger decks", cargo: "Cargo hold", crew: "Crew quarters" };
-  let selBay = null, drag = null, cutGeom = null;
+  let selBay = null, drag = null, cutGeom = null, hullDrag = null, bpGeom = null;
 
   function systemsTab(st, d, f) {
     return `<div class="do-sheet do-cutaway">${cutaway(st, d, f)}</div>
@@ -554,6 +588,27 @@ window.UpShip = window.UpShip || {};
 
   // Dragging, with pointer events so it works with a mouse, a pen, or a finger.
   function onPointerDown(e) {
+    if (pop && !e.target.closest(".do-pop") && !e.target.closest("[data-color]")) closePalette();
+    if (tab === "accommodation" && e.target.closest && e.target.closest("svg.do-deck")) {
+      const d = draft(U.state);
+      accCtx = U.decks.context(d, accDeck);
+      const cell = accCell(e); if (!cell) return;
+      e.preventDefault();
+      U.decks.paintStart(accCtx, cell.r, cell.c, accTool);
+      accRedraw();
+      if (accTool === "first") { accCtx = null; refreshFigures(); }
+      return;
+    }
+    if (tab === "paint" && e.target.closest && e.target.closest("[data-drag]")) {
+      paintDrag = { item: e.target.closest("[data-drag]").dataset.drag };
+      paintSel = paintDrag.item; e.preventDefault(); return;
+    }
+    const h = e.target.closest && e.target.closest("[data-handle]");
+    if (h && tab === "hull") {
+      const d = draft(U.state), svg = root.querySelector("svg.bp");
+      hullDrag = { kind: h.dataset.handle, x0: bpGeom.x0, s: bpGeom.s, cx: e.clientX, cy: e.clientY, bays: d.bays, D: d.D, unit: svg.getScreenCTM().a };
+      e.preventDefault(); refresh(); return;
+    }
     if (tab !== "systems") return;
     const card = e.target.closest("[data-card]"), item = e.target.closest("[data-item]");
     if (!card && !item) return;
@@ -583,6 +638,9 @@ window.UpShip = window.UpShip || {};
     return b >= 1 && b <= cutGeom.bays ? b : null;
   }
   function moveGhost(e) {
+    if (hullDrag) { dragHull(e); return; }
+    if (accCtx && U.decks.painting()) { const cell = accCell(e); if (cell) { U.decks.paintAt(accCtx, cell.r, cell.c); accRedraw(); } return; }
+    if (paintDrag) { paintMove(e); return; }
     if (!drag) return;
     if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 4) drag.moved = true;
     drag.ghost.style.left = e.clientX + "px"; drag.ghost.style.top = e.clientY + "px";
@@ -592,6 +650,9 @@ window.UpShip = window.UpShip || {};
     root.querySelectorAll(".cw-hit").forEach(h => h.classList.toggle("over", +h.dataset.bay === b));
   }
   function onPointerUp(e) {
+    if (hullDrag) { hullDrag = null; refresh(); return; }
+    if (accCtx) { U.decks.paintEnd(); accCtx = null; refreshFigures(); return; }
+    if (paintDrag) { paintDrag = null; render(); return; }
     if (!drag) return;
     const dd = drag; drag = null; dd.ghost.remove();
     root.querySelectorAll(".cw-hit.over").forEach(h => h.classList.remove("over"));
@@ -606,12 +667,181 @@ window.UpShip = window.UpShip || {};
     else if (dd.from) remove(dd.from);                // dragged out of the hull: removed
     refresh();
   }
+  // Dragging the stern handle adds or removes whole bays; dragging the top handle changes the diameter.
+  function dragHull(e) {
+    const st = U.state, d = draft(st), lim = P().limits(st), g = hullDrag;
+    const metres = px => px / g.unit / g.s;
+    if (g.kind === "length") {
+      const bays = Math.max(2, Math.min(lim.maxBays, g.bays + Math.round(metres(e.clientX - g.cx) / 15)));
+      if (bays === d.bays) return;
+      d.bays = bays; trimSystems(d);
+    } else {
+      const D = Math.max(lim.minD, Math.min(lim.maxD, Math.round((g.D - 2 * metres(e.clientY - g.cy)) * 2) / 2));
+      if (D === d.D) return;
+      d.D = D;
+    }
+    refresh();
+    const big = root.querySelector(".do-big"); if (big) big.textContent = `${fmt(d.D, 1)} m`;
+  }
+  function refreshFigures() { const st = U.state, d = draft(st); root.querySelector(".do-figures").innerHTML = figuresPanel(st, d, P().figures(st, d)); }
   // Redraw the cutaway, the bay panel, and the figures without rebuilding the whole office.
   function refresh() {
     const st = U.state, d = draft(st), f = P().figures(st, d);
     const sheet = root.querySelector(".do-sheet"); if (sheet) sheet.innerHTML = tab === "systems" ? cutaway(st, d, f) : blueprint(st, d, f);
     const bp = root.querySelector(".do-bay"); if (bp) bp.innerHTML = bayPanel(st, d, f);
     root.querySelector(".do-figures").innerHTML = figuresPanel(st, d, f);
+  }
+
+  // The Accommodation tab -------------------------------------------------------------------
+  let accDeck = "lower", accTool = "cabin", accGrid = false, accCtx = null;
+  function accTab(st, d, f) {
+    const D = U.decks, lower = D.context(d, "lower"), upper = D.context(d, "upper");
+    if (accDeck === "upper" && !upper.cols.length) accDeck = "lower";
+    const ctx = accDeck === "upper" ? upper : lower;
+    const tools = Object.entries(D.TYPES).map(([k, t]) => `<button data-acc-tool="${k}" aria-pressed="${accTool === k}"><span class="sw" style="background:${t.sw}"></span>${t.name}</button>`).join("")
+      + `<button data-acc-tool="first" aria-pressed="${accTool === "first"}" title="Click a cabin to make it first class, or back"><span class="sw sw-first">1</span>First class</button>`
+      + `<button data-acc-tool="erase" aria-pressed="${accTool === "erase"}"><span class="sw" style="background:#e4d8bb"></span>Clear a square</button>`;
+    const head = `<div class="do-acc-bar">
+        <div class="do-seg" role="group" aria-label="Deck"><button data-acc-deck="lower" aria-pressed="${accDeck === "lower"}">Lower deck</button><button data-acc-deck="upper" aria-pressed="${accDeck === "upper"}" ${upper.cols.length ? "" : "disabled"}>Upper deck</button></div>
+        <span class="do-acc-info">${ctx.cols.length ? `${ctx.bays.length} bay${ctx.bays.length > 1 ? "s" : ""}, ${ctx.rows} squares wide. Each stroke paints one room; start inside a room to extend it.` : ""}</span>
+        <button class="btn-quiet" data-acc="grid" aria-pressed="${accGrid}">Show the grid</button><button class="btn-quiet" data-acc="standard">Standard layout</button><button class="btn-quiet" data-acc="clear">Clear this deck</button></div>`;
+    if (!ctx.cols.length) return `<div class="do-sheet do-later"><p>This ship has no passenger decks. Place a passenger deck module in a bay on the Systems tab, then lay it out here.</p></div>`;
+    return `${head}<div class="do-sheet do-accsheet">${accSvg(ctx)}</div><div class="do-palette" role="group" aria-label="Room type">${tools}</div>`;
+  }
+  function accSvg(ctx) {
+    const W = ctx.width, H = ctx.rows * U.decks.S, pad = 40;
+    return `<svg viewBox="${-pad - 30} ${-pad} ${W + pad * 2 + 60} ${H + pad * 2}" class="bp do-deck" data-deck="${ctx.deck}" aria-label="Deck plan, seen from above: bow to the left">
+      <defs>${U.decks.defs()}</defs>
+      ${U.decks.render(ctx, { grid: accGrid })}
+      <text x="${W / 2}" y="${-24}" class="bp-small mid">Port side</text><text x="${W / 2}" y="${H + 30}" class="bp-small mid">Starboard side</text>
+      <text x="-22" y="${H / 2}" class="bp-small mid" transform="rotate(-90 -22 ${H / 2})">Bow</text><text x="${W + 22}" y="${H / 2}" class="bp-small mid" transform="rotate(90 ${W + 22} ${H / 2})">Stern</text></svg>`;
+  }
+  function accCell(e) {
+    const svg = root.querySelector("svg.do-deck"); if (!svg || !accCtx) return null;
+    const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+    const p = pt.matrixTransform(svg.getScreenCTM().inverse()), S = U.decks.S;
+    const r = Math.floor(p.y / S), c = accCtx.cols.findIndex((col, i) => p.x >= accCtx.colX(i) && p.x < accCtx.colX(i) + S);
+    return r >= 0 && r < accCtx.rows && c >= 0 ? { r, c } : null;
+  }
+  function accRedraw() { const sh = root.querySelector(".do-accsheet"); if (sh && accCtx) sh.innerHTML = accSvg(accCtx); }
+
+  // The Paint tab ---------------------------------------------------------------------------
+  let paintSel = null, paintDrag = null, paintGeom = null, pop = null;
+  function paintTab(st, d, f) {
+    const lv = d.livery, L = U.livery;
+    const chip = (target, color, label, nullable) => `<button class="do-chip" data-color="${target}" ${nullable ? 'data-nullable="1"' : ""} aria-label="${label}: ${color || "none"}"><span style="background:${color || "transparent"}" class="${color ? "" : "none"}"></span>${label}</button>`;
+    const presets = Object.entries(L.presets(st)).map(([k, p]) => `<button class="do-preset" data-livery="${k}" aria-pressed="${lv.preset === k}">
+      <span class="do-preset-bar"><i style="background:${p.hull}"></i><i style="background:${p.fins}"></i>${(p.decorations || []).slice(0, 2).map(x => `<i style="background:${x.color}"></i>`).join("")}</span>${p.label}</button>`).join("");
+    const decos = lv.decorations.map((dc, i) => {
+      const T = L.DECOR[dc.type];
+      return `<li class="do-deco"><div class="do-deco-head">${chip("deco:" + i, dc.color, T.name)}<button class="btn-quiet" data-deco-remove="${i}" aria-label="Remove ${T.name}">✕</button></div>
+        ${T.params.map(([k, n, lo, hi, def, step]) => `<label class="do-slider"><span>${n}</span><input type="range" min="${lo}" max="${hi}" step="${step || (hi - lo) / 100}" value="${dc[k] ?? def}" data-deco="${i}:${k}"></label>`).join("")}
+        ${T.flag ? `<label class="do-check"><input type="checkbox" data-deco-flag="${i}" ${dc.flag ? "checked" : ""}> ${T.flag}</label>` : ""}</li>`;
+    }).join("");
+    const addable = Object.entries(L.DECOR).filter(([k, T]) => !T.max || !lv.decorations.some(x => x.type === k));
+    return `<div class="do-sheet do-paintsheet">${paintSvg(st, d, f)}</div>
+      <section class="do-paint" aria-label="Paint">
+        <div class="do-pcol"><h2 class="do-config-title">Livery presets</h2><div class="do-presets">${presets}</div></div>
+        <div class="do-pcol"><h2 class="do-config-title">Paint</h2><div class="do-chips">
+          ${chip("hull", lv.hull, "Hull")}${chip("fins", lv.fins, "Fins")}${chip("rudders", lv.rudders, "Rudders")}
+          ${chip("nose", lv.nose, "Nose cap", true)}${chip("tail", lv.tail, "Tail cone", true)}${chip("car", lv.car, "Control car")}${chip("engines", lv.engines, "Engine cars")}
+          ${chip("gondolas", lv.gondolas, "Passenger gondolas")}</div>
+          <label class="do-check"><input type="checkbox" data-twotone ${lv.twoTone ? "checked" : ""}> Two-tone hull</label>
+          ${lv.twoTone ? `<div class="do-row">${chip("lower", lv.lower, "Lower hull")}<label class="do-slider"><span>Split</span><input type="range" min="-0.6" max="0.8" step="0.01" value="${lv.split}" data-split></label></div>` : ""}</div>
+        <div class="do-pcol do-pdeco"><h2 class="do-config-title">Decorations <span>${lv.decorations.length} of 6</span></h2>
+          <ul class="do-decos">${decos || `<li class="do-hint">None yet.</li>`}</ul>
+          ${lv.decorations.length < 6 ? `<select data-deco-add><option value="">Add a decoration…</option>${addable.map(([k, T]) => `<option value="${k}">${T.name}</option>`).join("")}</select>` : ""}</div>
+        <div class="do-pcol"><h2 class="do-config-title">Name and emblem</h2>
+          <label class="do-field-s"><span>Ship's name</span><input type="text" maxlength="24" value="${esc(lv.name.text)}" data-name-text placeholder="Name this design's ships"></label>
+          <div class="do-seg" role="group" aria-label="Lettering">${Object.entries(L.FONTS).map(([k, F]) => `<button data-font="${k}" aria-pressed="${lv.name.font === k}" style="font-family:${F.css.replace(/"/g, "'")};font-weight:${F.weight}">${F.name}</button>`).join("")}</div>
+          <div class="do-row">${chip("name", lv.name.color, "Lettering")}<label class="do-slider"><span>Size</span><input type="range" min="0.5" max="2" step="0.05" value="${lv.name.size}" data-name-size></label></div>
+          <div class="do-row"><span class="do-label">Emblems: ${lv.emblems.length} of 3</span>${lv.emblems.length < 3 ? `<button class="btn-quiet" data-emblem-add>Add</button>` : ""}${paintSel && paintSel.startsWith("emblem") ? `<button class="btn-quiet" data-emblem-remove>Remove selected</button>` : ""}</div>
+          ${paintSel && paintSel.startsWith("emblem") && lv.emblems[+paintSel.split(":")[1]] ? `<label class="do-slider"><span>Size</span><input type="range" min="0.4" max="2" step="0.05" value="${lv.emblems[+paintSel.split(":")[1]].size}" data-emblem-size></label>` : ""}
+          <p class="do-hint">Drag the name and emblems on the ship. They snap to guide lines; hold Alt to place freely. Arrow keys nudge the selected one.</p></div>
+      </section>`;
+  }
+  function paintSvg(st, d, f) {
+    const W = 1200, H = 540, L = f.L, D = d.D;
+    const s = Math.min(1000 / L, 230 / D), x0 = 100 + (1000 - L * s) / 2, cy = 200;
+    const X = x => x0 + x * s, Y = y => cy + y * s;
+    paintGeom = { s, x0, cy, L, D };
+    const s2 = Math.min(760 / L, 70 / D), tx0 = 220 + (760 - L * s2) / 2, tcy = 478;
+    const TX = x => tx0 + x * s2, TY = y => tcy + y * s2;
+    const sel = paintSel ? selectionBox(d, f, X, Y) : "";
+    const guides = paintDrag && paintDrag.guides ? paintDrag.guides.map(g => g.x != null ? `<line x1="${X(g.x)}" y1="${Y(-D * 0.8)}" x2="${X(g.x)}" y2="${Y(D * 0.8)}" class="lv-guide"/>` : `<path d="${guidePath(d, f, X, Y, g.y)}" class="lv-guide"/>`).join("") : "";
+    return `<svg viewBox="0 0 ${W} ${H}" class="bp lv-view" aria-label="Exterior view of the design in its livery, and as seen from above">
+      <defs><linearGradient id="lv-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9fbad0"/><stop offset="0.7" stop-color="#e9e2cf"/><stop offset="1" stop-color="#e2d6b8"/></linearGradient></defs>
+      <rect x="6" y="6" width="${W - 12}" height="404" fill="url(#lv-sky)"/>
+      <path d="M6,330 C200,300 380,318 560,306 C760,292 940,316 1194,300 L1194,410 L6,410 Z" fill="#b9c2c4" opacity="0.6"/>
+      <path d="M6,372 C300,360 800,366 1194,356 L1194,410 L6,410 Z" fill="#a9a877" opacity="0.7"/>
+      <image href="img/paint-backdrop.png" x="6" y="6" width="${W - 12}" height="404" preserveAspectRatio="xMidYMid slice" onerror="this.remove()"/>
+      <rect x="6" y="6" width="${W - 12}" height="${H - 12}" class="bp-frame"/>
+      <text x="30" y="34" class="bp-title">Exterior view <tspan class="bp-sub">(port side)</tspan></text>
+      <g class="lv-ship">${U.livery.side(d, f, X, Y)}</g>${guides}${sel}
+      <rect x="6" y="410" width="${W - 12}" height="${H - 416}" fill="#ebe0c4"/><line x1="16" y1="410" x2="${W - 16}" y2="410" class="bp-rule"/>
+      <text x="30" y="438" class="bp-title">Seen from above <tspan class="bp-sub">(as on the map)</tspan></text>
+      <g>${U.livery.top(d, f, TX, TY)}</g></svg>`;
+  }
+  function guidePath(d, f, X, Y, fy) {
+    const pts = []; for (let i = 0; i <= 60; i++) { const x = f.L * i / 60; pts.push(`${X(x).toFixed(1)},${Y(P().radius(d, x) * fy).toFixed(1)}`); }
+    return "M" + pts.join(" L");
+  }
+  function selectionBox(d, f, X, Y) {
+    const lv = d.livery, R = d.D / 2;
+    if (paintSel === "name" && lv.name.text) { const x = f.L * lv.name.x, y = lv.name.y * P().radius(d, x), h = R * 0.4 * lv.name.size;
+      return `<rect x="${X(x) - 6}" y="${Y(y - h / 2) - 4}" width="${(Y(h) - Y(0)) * lv.name.text.length * 0.72 + 12}" height="${Y(h) - Y(0) + 8}" class="lv-sel"/>`; }
+    if (paintSel && paintSel.startsWith("emblem")) { const e = lv.emblems[+paintSel.split(":")[1]]; if (!e) return "";
+      const x = f.L * e.x, y = U.livery.emblemY(e, P().radius(d, x), R), sz = Y(R * 0.55 * e.size) - Y(0);
+      return `<rect x="${X(x) - sz / 2 - 4}" y="${Y(y) - sz / 2 - 4}" width="${sz + 8}" height="${sz + 8}" class="lv-sel"/>`; }
+    return "";
+  }
+  // Dragging the name and emblems, with snapping to the centre line, the two-tone split, and the middle of each bay.
+  function paintMove(e) {
+    const st = U.state, d = draft(st), f = P().figures(st, d), lv = d.livery, g = paintGeom, svg = root.querySelector("svg.lv-view");
+    const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+    const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+    const xm = Math.max(0.02 * f.L, Math.min(0.98 * f.L, (p.x - g.x0) / g.s)), ym = (p.y - g.cy) / g.s, r = P().radius(d, xm), R = d.D / 2;
+    let fx = xm / f.L, fy, guides = [];
+    const fin = U.livery.finShapes(d, f);
+    const onFin = paintDrag.item !== "name" && Math.abs(ym) > r && xm >= fin.x0 && xm <= fin.x1;
+    if (onFin) { const out = Math.min(fin.proj * 0.95, Math.abs(ym) - r) / R; fy = Math.sign(ym) * (1 + Math.max(0.02, out)); }
+    else fy = Math.max(-0.95, Math.min(0.95, ym / Math.max(0.1, r)));
+    if (!e.altKey) {
+      if (!onFin && Math.abs(fy) < 0.07) { fy = 0; guides.push({ y: 0 }); }
+      if (!onFin && lv.twoTone && Math.abs(fy - lv.split) < 0.07) { fy = lv.split; guides.push({ y: lv.split }); }
+      for (let b = 1; b <= d.bays; b++) { const bx = (f.ln + (b - 0.5) * 15) / f.L; if (Math.abs(fx - bx) < 0.008) { fx = bx; guides.push({ x: bx * f.L }); break; } }
+    }
+    if (paintDrag.item === "name") { lv.name.x = fx; lv.name.y = fy; }
+    else { const em = lv.emblems[+paintDrag.item.split(":")[1]]; em.x = fx; em.y = fy; }
+    paintDrag.guides = guides;
+    root.querySelector(".do-paintsheet").innerHTML = paintSvg(st, d, f);
+  }
+  // The colour palette: the period colours, and a picker for anything else.
+  function openPalette(btn) {
+    closePalette();
+    const target = btn.dataset.color, lv = draft(U.state).livery, cur = colorOf(lv, target) || "#c9cbc8";
+    pop = document.createElement("div");
+    pop.className = "do-pop"; pop.setAttribute("role", "dialog"); pop.setAttribute("aria-label", "Choose a colour");
+    pop.innerHTML = `<div class="do-swatches">${U.livery.PALETTE.map(c => `<button data-pick="${c}" style="background:${c}" aria-label="${c}" ${c === cur ? 'aria-pressed="true"' : ""}></button>`).join("")}</div>
+      <label class="do-picker"><span>Any colour</span><input type="color" value="${cur}" data-pick-input></label>
+      ${btn.dataset.nullable ? `<button class="btn-quiet" data-pick="">None (hull colour)</button>` : ""}`;
+    pop.dataset.target = target;
+    root.appendChild(pop);
+    const b = btn.getBoundingClientRect(), rr = root.getBoundingClientRect();
+    pop.style.left = Math.min(b.left - rr.left, rr.width - 250) + "px"; pop.style.top = (b.top - rr.top - 8) + "px"; pop.style.transform = "translateY(-100%)";
+  }
+  function closePalette() { if (pop) { pop.remove(); pop = null; } }
+  function colorOf(lv, t) {
+    if (t.startsWith("deco:")) return lv.decorations[+t.split(":")[1]].color;
+    if (t === "name") return lv.name.color;
+    return lv[t];
+  }
+  function setColor(t, c) {
+    const lv = draft(U.state).livery;
+    if (t.startsWith("deco:")) lv.decorations[+t.split(":")[1]].color = c;
+    else if (t === "name") lv.name.color = c;
+    else lv[t] = c || null;
+    lv.preset = null;
   }
 
   // Small drawings: the office's logo, the speed icons, and a hull silhouette for each option.
@@ -649,7 +879,22 @@ window.UpShip = window.UpShip || {};
     if (b.dataset.do === "back") { close(); return; }
     if (b.dataset.do === "dismiss") { root.querySelector(".do-banner").hidden = true; return; }
     if (b.dataset.speed != null) { U.game && U.game.setAuto(+b.dataset.speed); clock(); return; }
-    if (b.dataset.tab) { tab = b.dataset.tab; render(); return; }
+    if (b.dataset.tab) { tab = b.dataset.tab; closePalette(); render(); return; }
+    // Accommodation
+    if (b.dataset.accTool) { accTool = b.dataset.accTool; render(); return; }
+    if (b.dataset.accDeck) { accDeck = b.dataset.accDeck; render(); return; }
+    if (b.dataset.acc === "grid") { accGrid = !accGrid; render(); return; }
+    if (b.dataset.acc === "standard") { if (!d.plan || !Object.keys(d.plan.cells).length || confirm("Replace both decks with the standard layout?")) { U.decks.standardLayout(d); render(); } return; }
+    if (b.dataset.acc === "clear") { if (confirm("Clear everything painted on this deck?")) { for (const k of Object.keys((d.plan || {}).cells || {})) if (k.startsWith(accDeck + ":")) delete d.plan.cells[k]; render(); } return; }
+    // Paint
+    const lv = d.livery;
+    if (b.dataset.color) { if (pop && pop.dataset.target === b.dataset.color) closePalette(); else openPalette(b); return; }
+    if (b.dataset.pick != null) { setColor(pop.dataset.target, b.dataset.pick); closePalette(); render(); return; }
+    if (b.dataset.livery) { U.livery.applyPreset(st, lv, b.dataset.livery); render(); return; }
+    if (b.dataset.decoRemove) { lv.decorations.splice(+b.dataset.decoRemove, 1); lv.preset = null; render(); return; }
+    if (b.dataset.font) { lv.name.font = b.dataset.font; render(); return; }
+    if (b.dataset.emblemAdd != null) { lv.emblems.push({ x: 0.5, y: -0.6, size: 1 }); paintSel = "emblem:" + (lv.emblems.length - 1); render(); return; }
+    if (b.dataset.emblemRemove != null) { lv.emblems.splice(+paintSel.split(":")[1], 1); paintSel = null; render(); return; }
     const sys = d.systems;
     if (b.dataset.clearBay) { remove({ type: "module", bay: +b.dataset.clearBay }); refresh(); return; }
     if (b.dataset.decks) { sys.deckCount = sys.deckCount || {}; sys.deckCount[selBay] = +b.dataset.decks; refresh(); return; }
@@ -664,6 +909,23 @@ window.UpShip = window.UpShip || {};
   }
   function onInput(e) {
     const t = e.target;
+    if (tab === "paint") {
+      const d = draft(U.state), lv = d.livery, redraw = () => { root.querySelector(".do-paintsheet").innerHTML = paintSvg(U.state, d, P().figures(U.state, d)); };
+      if (t.dataset.pickInput != null && pop) { setColor(pop.dataset.target, t.value); redraw(); const chip = root.querySelector(`[data-color="${pop.dataset.target}"] span`); if (chip) chip.style.background = t.value; return; }
+      if (t.dataset.deco) { const [i, k] = t.dataset.deco.split(":"); lv.decorations[+i][k] = +t.value; lv.preset = null; redraw(); return; }
+      if (t.dataset.decoFlag) { lv.decorations[+t.dataset.decoFlag].flag = t.checked; redraw(); return; }
+      if (t.dataset.decoAdd != null && t.value) {
+        const T = U.livery.DECOR[t.value], dc = { type: t.value, color: (U.state.company.emblem || {}).c1 || "#9b2a24" };
+        for (const [k, , , , def] of T.params) dc[k] = def;
+        if (T.flag) dc.flag = false;
+        lv.decorations.push(dc); lv.preset = null; render(); return;
+      }
+      if (t.dataset.twotone != null) { lv.twoTone = t.checked; render(); return; }
+      if (t.dataset.split != null) { lv.split = +t.value; redraw(); return; }
+      if (t.dataset.nameText != null) { lv.name.text = t.value; redraw(); return; }
+      if (t.dataset.nameSize != null) { lv.name.size = +t.value; redraw(); return; }
+      if (t.dataset.emblemSize != null && paintSel) { lv.emblems[+paintSel.split(":")[1]].size = +t.value; redraw(); return; }
+    }
     if (t.dataset.presetSelect != null && t.value) { startFrom(t.value); return; }
     if (t.dataset.field === "D") {
       draft(U.state).D = +t.value;
@@ -676,6 +938,8 @@ window.UpShip = window.UpShip || {};
   }
   function startFrom(key) {
     const st = U.state, lim = P().limits(st), p = P().preset(st, key);
+    const keep = st.drawing && st.drawing.livery;
+    p.livery = keep || U.livery.fresh(st);
     st.drawing = p; st.drawingNo = (st.drawingNo || 0) + 1;
     render();
     if (p.trimmed) note(`Diameter trimmed to ${lim.maxD} m, the most your girders allow today.`);
