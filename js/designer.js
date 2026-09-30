@@ -37,6 +37,7 @@ window.UpShip = window.UpShip || {};
   // Opening and closing ----------------------------------------------------------------
   function open() {
     if (!U.state) return;
+    resetAnim();
     if (!root) build();
     root.hidden = false;
     document.body.classList.add("office-open");
@@ -79,7 +80,7 @@ window.UpShip = window.UpShip || {};
       const up = e.key === "ArrowRight" || e.key === "ArrowUp", down = e.key === "ArrowLeft" || e.key === "ArrowDown";
       if (!up && !down) return;
       e.preventDefault();
-      if (k === "length") { d.bays = Math.max(2, Math.min(lim.maxBays, d.bays + (up ? 1 : -1))); trimSystems(d); }
+      if (k === "length") { d.bays = Math.max(2, Math.min(lim.maxBays, d.bays + (up ? 0.5 : -0.5))); trimSystems(d); kick(); }
       else d.D = Math.max(lim.minD, Math.min(lim.maxD, d.D + (up ? 0.5 : -0.5)));
       render(); root.querySelector(`[data-handle="${k}"]`)?.focus();
     });
@@ -154,7 +155,7 @@ window.UpShip = window.UpShip || {};
           <input id="do-dia" type="range" min="${lim.minD}" max="${lim.maxD}" step="0.5" value="${d.D}" data-field="D">
           <small>Up to ${lim.maxD} m with today's girders</small></div>
         <div class="do-field"><span class="do-label">Number of bays</span>
-          <div class="do-stepper"><button data-bays="-1" aria-label="One bay fewer">−</button><span>${d.bays}</span><button data-bays="1" aria-label="One bay more">+</button></div>
+          <div class="do-stepper"><button data-bays="-1" aria-label="Half a bay fewer">−</button><span>${bayText(d.bays)}</span><button data-bays="1" aria-label="Half a bay more">+</button></div>
           <small>15 m per bay (${fmt(f.L)} m overall)</small></div>
         <div class="do-field"><span class="do-label">Lifting gas</span>
           <div class="do-seg">${["hydrogen", "helium"].concat(U.aether && U.aether.discovered(st) ? ["aetherium"] : []).map(g =>
@@ -170,12 +171,18 @@ window.UpShip = window.UpShip || {};
   }
 
   // The blueprint: side elevation above; cross-section, bay section, scale, and title block below.
-  function blueprint(st, d, f) {
+  function blueprint(st, d0, f0) {
+    // The drawing follows animated values, so the framework stretches and swells into place.
+    const A = animFor(d0), d = { ...d0, bays: A.B, D: A.D }, hl = P().hullLengths(d), f = { ...f0, ...hl };
     const W = 1200, H = 660, ref = REFS.find(r => r.id === compare);
     const L = f.L, D = d.D, fitL = Math.max(L, ref ? ref.L : 0), fitD = Math.max(D, ref ? ref.D : 0);
-    // While a handle is being dragged, the scale and the bow stay put, so the ship grows under the pointer.
-    const s = hullDrag ? hullDrag.s : Math.min(1000 / fitL, 200 / fitD);        // pixels per metre
-    const x0 = hullDrag ? hullDrag.x0 : 130 + (1000 - L * s) / 2, cy = 190;
+    // While a handle is being dragged, the scale and the bow stay put, so the ship grows under the pointer;
+    // afterwards the view eases back to fit the ship.
+    const sFit = Math.min(1000 / fitL, 200 / fitD), xFit = 130 + (1000 - L * sFit) / 2;
+    if (hullDrag) { A.s = hullDrag.s; A.x0 = hullDrag.x0; }
+    else if (A.s == null) { A.s = sFit; A.x0 = xFit; }
+    A.sFit = sFit; A.xFit = xFit;
+    const s = A.s, x0 = A.x0, cy = 190;
     bpGeom = { s, x0, cy };
     const X = x => x0 + x * s, Y = y => cy + y * s;
     const r = x => P().radius(d, x);
@@ -183,14 +190,33 @@ window.UpShip = window.UpShip || {};
     const N = 160, top = [], bot = [];
     for (let i = 0; i <= N; i++) { const x = L * i / N; top.push(`${X(x).toFixed(1)},${Y(-r(x)).toFixed(1)}`); bot.push(`${X(x).toFixed(1)},${Y(r(x)).toFixed(1)}`); }
     const outline = `M${top.join(" L")} L${bot.reverse().join(" L")} Z`;
-    // Rings: main rings at every bay and through the nose and tail; lighter rings between.
+    // Rings: through the nose, at each whole bay, at a finished half bay, the ring still being pulled out, and through the tail.
+    // The stretch not yet a half or full bay is unfinished: pale brass hatching, dashed ring and bracing.
+    const halves = Math.floor(d.bays * 2 + 1e-6), done = halves / 2, moving = d.bays - done > 0.004 ? f.ln + d.bays * 15 : null;
     const main = [], light = [];
-    for (let i = 0; i <= d.bays; i++) main.push(f.ln + i * 15);
     for (let t = 0.3; t < 1; t += 0.35) main.push(f.ln * t);
+    main.push(f.ln);
+    for (let i = 1; i <= Math.floor(done); i++) main.push(f.ln + i * 15);
+    if (done % 1) main.push(f.ln + done * 15);
+    if (moving) main.push(moving);
     for (let x = f.ln + f.mid + 15; x < L - 4; x += 15) main.push(x);
     main.sort((a, b) => a - b);
-    for (let i = 0; i < main.length - 1; i++) light.push((main[i] + main[i + 1]) / 2);
-    const ring = (x, cls) => `<line x1="${X(x).toFixed(1)}" y1="${Y(-r(x)).toFixed(1)}" x2="${X(x).toFixed(1)}" y2="${Y(r(x)).toFixed(1)}" class="${cls}"/>`;
+    for (let i = 0; i < main.length - 1; i++) if (!(moving && Math.abs(main[i + 1] - moving) < 1e-6)) light.push((main[i] + main[i + 1]) / 2);
+    const now = performance.now();
+    // Freshly finished members glow brass and cool to ink over a second or so.
+    const glow = x => { const step = Math.round((x - f.ln) / 7.5); if (Math.abs(x - (f.ln + step * 7.5)) > 0.1 || A.fresh[step] == null) return 0; return Math.max(0, 1 - (now - A.fresh[step]) / 1200); };
+    const ring = (x, cls) => {
+      if (moving && Math.abs(x - moving) < 1e-6) return `<line x1="${X(x).toFixed(1)}" y1="${Y(-r(x)).toFixed(1)}" x2="${X(x).toFixed(1)}" y2="${Y(r(x)).toFixed(1)}" class="bp-ring-unfin"/>`;
+      const gl = cls === "bp-ring" ? Math.max(glow(x), A.glow) : 0;
+      return `<line x1="${X(x).toFixed(1)}" y1="${Y(-r(x)).toFixed(1)}" x2="${X(x).toFixed(1)}" y2="${Y(r(x)).toFixed(1)}" class="${cls}"${gl > 0.02 ? ` style="stroke:${mixHex("#2d2418", "#b8862e", gl)}"` : ""}/>`;
+    };
+    let unfin = "";
+    if (moving) {
+      const a = f.ln + done * 15, pts = [];
+      for (let i = 0; i <= 12; i++) { const x = a + (moving - a) * i / 12; pts.push(`${X(x).toFixed(1)},${Y(-r(x)).toFixed(1)}`); }
+      for (let i = 12; i >= 0; i--) { const x = a + (moving - a) * i / 12; pts.push(`${X(x).toFixed(1)},${Y(r(x)).toFixed(1)}`); }
+      unfin = `<path d="M${pts.join(" L")} Z" fill="url(#bp-unfin)"/>`;
+    }
     // Longitudinals, and diagonal bracing in each panel between main rings.
     const K = 9, lon = [];
     for (let k = 1; k < K; k++) {
@@ -198,13 +224,17 @@ window.UpShip = window.UpShip || {};
       for (let i = 0; i <= N; i++) { const x = L * i / N; pts.push(`${X(x).toFixed(1)},${Y(r(x) * c).toFixed(1)}`); }
       lon.push(`<polyline points="${pts.join(" ")}" class="bp-lon"/>`);
     }
-    let diag = "";
+    let diag = "", diagHot = "";
     for (let i = 0; i < main.length - 1; i++) {
-      const a = main[i], b = main[i + 1];
+      const a = main[i], b = main[i + 1], isUnfin = moving && Math.abs(b - moving) < 1e-6, gl = isUnfin ? 0 : glow(b);
+      let seg = "";
       for (let k = 0; k < K; k++) {
         const c1 = Math.cos(k * Math.PI / K), c2 = Math.cos((k + 1) * Math.PI / K);
-        diag += `<path d="M${X(a).toFixed(1)},${Y(r(a) * c1).toFixed(1)} L${X(b).toFixed(1)},${Y(r(b) * c2).toFixed(1)} M${X(a).toFixed(1)},${Y(r(a) * c2).toFixed(1)} L${X(b).toFixed(1)},${Y(r(b) * c1).toFixed(1)}"/>`;
+        seg += `M${X(a).toFixed(1)},${Y(r(a) * c1).toFixed(1)} L${X(b).toFixed(1)},${Y(r(b) * c2).toFixed(1)} M${X(a).toFixed(1)},${Y(r(a) * c2).toFixed(1)} L${X(b).toFixed(1)},${Y(r(b) * c1).toFixed(1)} `;
       }
+      if (isUnfin) diagHot += `<path d="${seg}" class="bp-diag-unfin"/>`;
+      else if (gl > 0.02) diagHot += `<path d="${seg}" style="stroke:${mixHex("#2d2418", "#b8862e", gl)};stroke-width:${0.3 + 0.4 * gl};opacity:${0.45 + 0.45 * gl};fill:none"/>`;
+      else diag += `<path d="${seg}"/>`;
     }
     // The keel, running inside the bottom of the hull from the control car to the tail.
     const kx0 = f.ln * 0.6, kx1 = L - f.lt * 0.5, kpts = [];
@@ -212,7 +242,7 @@ window.UpShip = window.UpShip || {};
     const keel = `<polyline points="${kpts.join(" ")}" class="bp-keel"/>`;
     const fins = finsDrawing(d, f, X, Y, r, s);
     const car = carDrawing(d, f, X, Y, r, s);
-    const engines = d.systems.engines.map(e => e.mount === "sides" ? engineCar(f.ln + (e.bay - 0.5) * 15, "sides", r, X, Y, s, D).replace(/cw-nacelle/g, "bp-car").replace(/cw-strut/g, "bp-strut").replace(/cw-prop/g, "bp-prop") : engineDrawing(f.ln + (e.bay - 0.5) * 15, r, X, Y, s, D)).join("");
+    const engines = d.systems.engines.map(e => { const ex = P().bayCentre(d, f.ln, e.bay); return e.mount === "sides" ? engineCar(ex, "sides", r, X, Y, s, D).replace(/cw-nacelle/g, "bp-car").replace(/cw-strut/g, "bp-strut").replace(/cw-prop/g, "bp-prop") : engineDrawing(ex, r, X, Y, s, D); }).join("");
     // The comparison ship, dashed, aligned at the bow.
     let refDraw = "";
     if (ref) {
@@ -231,27 +261,57 @@ window.UpShip = window.UpShip || {};
       <rect x="${xL - 30}" y="${cy - 17}" width="60" height="34" class="bp-paper"/><text x="${xL}" y="${cy - 2}" class="bp-dimtext">${fmt(D, 1)} m</text><text x="${xL}" y="${cy + 13}" class="bp-small mid">diameter</text>`;
     const yB = Math.max(Y(D / 2) + 64, 330);
     let bays = "";
-    for (let i = 1; i <= d.bays; i++) {
-      const x = X(f.ln + (i - 0.5) * 15);
-      bays += `<line x1="${x}" y1="${Y(D / 2) + 8}" x2="${x}" y2="${yB - 14}" class="bp-lead"/><text x="${x}" y="${yB}" class="bp-small mid">${i}</text>`;
+    const numbered = Math.ceil(done - 1e-6), half = done % 1 > 0.25;
+    for (let i = 1; i <= numbered; i++) {
+      const x = X(f.ln + (i - 1) * 15 + (half && i === numbered ? 3.75 : 7.5));
+      bays += `<line x1="${x}" y1="${Y(D / 2) + 8}" x2="${x}" y2="${yB - 14}" class="bp-lead"/><text x="${x}" y="${yB}" class="bp-small mid">${half && i === numbered ? (i - 1) + "½" : i}</text>`;
     }
     bays += `<text x="${X(f.ln + f.mid / 2)}" y="${yB + 22}" class="bp-label mid">Bays, numbered from the bow</text>`;
     return `<svg viewBox="0 0 ${W} ${H}" class="bp" role="img" aria-label="Blueprint of the hull: side elevation, cross-section, bay section, and title block">
-      <defs><marker id="bp-arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L10,5 L0,9" fill="none" stroke="#2d2418" stroke-width="1.4"/></marker>
+      <defs><pattern id="bp-unfin" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)"><rect width="7" height="7" fill="#e8cf95" opacity="0.55"/><line x1="0" y1="0" x2="0" y2="7" stroke="#b8862e" stroke-width="1.2" opacity="0.6"/></pattern>
+        <marker id="bp-arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L10,5 L0,9" fill="none" stroke="#2d2418" stroke-width="1.4"/></marker>
         <pattern id="bp-hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="5" stroke="#2d2418" stroke-width="0.6"/></pattern></defs>
       <rect x="6" y="6" width="${W - 12}" height="${H - 12}" class="bp-frame"/>
       <text x="30" y="36" class="bp-title">Side elevation <tspan class="bp-sub">(port side)</tspan></text>
       <path d="${outline}" class="bp-skin"/>
-      <g class="bp-diag">${diag}</g>${lon.join("")}${light.map(x => ring(x, "bp-ring-l")).join("")}${main.map(x => ring(x, "bp-ring")).join("")}
+      ${unfin}<g class="bp-diag">${diag}</g>${diagHot}${lon.join("")}${light.map(x => ring(x, "bp-ring-l")).join("")}${main.map(x => ring(x, "bp-ring")).join("")}
       ${keel}${fins}<path d="${outline}" class="bp-outline"/>${car}${engines}${refDraw}
       <line x1="${X(-6)}" y1="${cy}" x2="${X(L + 8)}" y2="${cy}" class="bp-centre"/>
       ${dims}${bays}
       ${handle("length", X(L) + 18, cy, "Drag to lengthen or shorten the ship, a bay at a time")}
       ${handle("diameter", X(f.ln + f.mid * 0.5), Y(-D / 2), "Drag up or down to change the diameter")}
       <line x1="16" y1="392" x2="${W - 16}" y2="392" class="bp-rule"/>
-      ${crossSection(d, f)}${baySection(d, f)}${scaleAndTitle(st, d, f, s)}
+      ${crossSection(d0, f0)}${baySection(d0, f0)}${scaleAndTitle(st, d0, f0, s)}
     </svg>`;
   }
+  // Animation of the framework: the drawn length and diameter ease toward the design's, following the pointer while dragging.
+  let anim = null, animRaf = null;
+  function animFor(d) {
+    if (!anim) anim = { B: d.bays, D: d.D, fresh: {}, glow: 0, s: null, x0: null };
+    return anim;
+  }
+  function resetAnim() { anim = null; }
+  function kick() { if (!animRaf) { animLast = performance.now(); animRaf = requestAnimationFrame(animTick); } }
+  let animLast = 0;
+  function animTick(now) {
+    animRaf = null;
+    if (!isOpen() || tab !== "hull" || !anim) return;
+    const d = draft(U.state), dt = Math.min(0.05, (now - animLast) / 1000); animLast = now;
+    const target = hullDrag && hullDrag.kind === "length" ? hullDrag.cont : d.bays, before = anim.B;
+    anim.B += (target - anim.B) * (1 - Math.exp(-dt * (hullDrag ? 18 : 4.5))); if (Math.abs(target - anim.B) < 0.002) anim.B = target;
+    for (let h = Math.floor(before * 2 + 1e-6) + 1; h <= Math.floor(anim.B * 2 + 1e-6); h++) anim.fresh[h] = now;
+    const dB = anim.D; anim.D += (d.D - anim.D) * (1 - Math.exp(-dt * 5)); if (Math.abs(d.D - anim.D) < 0.01) anim.D = d.D;
+    anim.glow = Math.max(0, Math.min(1, Math.abs(anim.D - dB) * 12 + anim.glow * 0.9)); if (anim.glow < 0.02) anim.glow = 0;
+    if (!hullDrag && anim.sFit != null) { anim.s += (anim.sFit - anim.s) * 0.12; anim.x0 += (anim.xFit - anim.x0) * 0.12; }
+    const sheet = root.querySelector(".do-sheet");
+    if (sheet) sheet.innerHTML = blueprint(U.state, d, P().figures(U.state, d));
+    const busy = anim.B !== target || anim.D !== d.D || anim.glow > 0 || Object.values(anim.fresh).some(t => now - t < 1300)
+      || (!hullDrag && anim.sFit != null && (Math.abs(anim.s - anim.sFit) > 0.002 || Math.abs(anim.x0 - anim.xFit) > 0.3)) || !!hullDrag;
+    if (busy) animRaf = requestAnimationFrame(animTick);
+  }
+  const mixHex = (a, b, t) => { const p = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)); const A = p(a), B = p(b); return "#" + A.map((v, i) => Math.round(v + (B[i] - v) * t).toString(16).padStart(2, "0")).join(""); };
+
+  const bayText = n => Math.floor(n) + (n % 1 > 0.25 ? "½" : "");
   // A drag handle: a brass knob with arrows showing which way it moves.
   function handle(kind, x, y, label) {
     const arrows = kind === "length" ? `<path d="M-15,0 L-9,-5 L-9,5 Z M15,0 L9,-5 L9,5 Z"/>` : `<path d="M0,-15 L-5,-9 L5,-9 Z M0,15 L-5,9 L5,9 Z"/>`;
@@ -350,7 +410,7 @@ window.UpShip = window.UpShip || {};
     const bar = marks.map((m, i) => `<line x1="${x0 + m * s}" y1="${y0 + 20}" x2="${x0 + m * s}" y2="${y0 + 30}" class="bp-dim"/><text x="${x0 + m * s}" y="${y0 + 16}" class="bp-small mid">${m}${i === marks.length - 1 ? " m" : ""}</text>`).join("")
       + `<rect x="${x0}" y="${y0 + 24}" width="${10 * s}" height="5" class="bp-barfill"/><rect x="${x0 + 10 * s}" y="${y0 + 24}" width="${10 * s}" height="5" class="bp-barempty"/><rect x="${x0 + 20 * s}" y="${y0 + 24}" width="${30 * s}" height="5" class="bp-barfill"/>`;
     const date = U.sim.dateOf(st.tick).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
-    const rows = [["Type", d.type || "Design study"], ["Length", `${fmt(f.L)} m`], ["Diameter", `${fmt(d.D, 1)} m`], ["Bays", `${d.bays} (15 m each)`],
+    const rows = [["Type", d.type || "Design study"], ["Length", `${fmt(f.L)} m`], ["Diameter", `${fmt(d.D, 1)} m`], ["Bays", d.bays % 1 ? `${bayText(d.bays)} (15 m; the last 7.5 m)` : `${d.bays} (15 m each)`],
       ["Lifting gas", (d.gas || "hydrogen").replace(/^./, c => c.toUpperCase())], ["Date", date]];
     const ty = 470;
     return `<text x="${x0}" y="${y0 - 2}" class="bp-title">Scale</text>${bar}
@@ -435,8 +495,8 @@ window.UpShip = window.UpShip || {};
     const N = 160, top = [], bot = [];
     for (let i = 0; i <= N; i++) { const x = L * i / N; top.push(`${X(x).toFixed(1)},${Y(-r(x)).toFixed(1)}`); bot.push(`${X(x).toFixed(1)},${Y(r(x)).toFixed(1)}`); }
     const outline = `M${top.join(" L")} L${bot.slice().reverse().join(" L")} Z`;
-    const sys = d.systems, bay0 = b => f.ln + (b - 1) * 15;
-    cutGeom = { x0, s, ln: f.ln, bays: d.bays, top: Y(-D / 2) - 30, bottom: Y(D / 2) + 40 };
+    const sys = d.systems, bay0 = b => f.ln + (b - 1) * 15, NB = P().bayCount(d), BL = b => P().bayLen(d, b);
+    cutGeom = { x0, s, ln: f.ln, bays: NB, end: f.ln + d.bays * 15, top: Y(-D / 2) - 30, bottom: Y(D / 2) + 40 };
     // Gas cells: one to a bay, and more through the nose and tail; they fill the bay where it is clear to gas.
     const cell = (a, b, lowShare) => {
       // A soft bag: its top and bottom swell toward the middle and round off at the ends.
@@ -448,34 +508,34 @@ window.UpShip = window.UpShip || {};
     let cells = "";
     const nosePieces = Math.max(1, Math.round(f.ln / 12));
     for (let i = 0; i < nosePieces; i++) cells += cell(f.ln * i / nosePieces + (i ? 0.5 : f.ln * 0.08), f.ln * (i + 1) / nosePieces - 0.5, 0.86);
-    for (let b = 1; b <= d.bays; b++) cells += cell(bay0(b) + 0.6, bay0(b) + 14.4, sys.modules[b] ? 0.36 : 0.86);
+    for (let b = 1; b <= NB; b++) cells += cell(bay0(b) + 0.6, bay0(b) + BL(b) - 0.6, sys.modules[b] ? 0.36 : 0.86);
     for (let x = f.ln + f.mid; x < L - 6; x += 15) cells += cell(x + 0.6, Math.min(L - 3, x + 14.4), 0.86);
     // Framework, drawn light over the cells.
     let frame = "";
-    for (let b = 0; b <= d.bays; b++) { const x = f.ln + b * 15; frame += `<line x1="${X(x)}" y1="${Y(-r(x))}" x2="${X(x)}" y2="${Y(r(x))}" class="cw-ring"/>`; }
+    for (let b = 0; b <= NB; b++) { const x = Math.min(f.ln + b * 15, f.ln + d.bays * 15); frame += `<line x1="${X(x)}" y1="${Y(-r(x))}" x2="${X(x)}" y2="${Y(r(x))}" class="cw-ring"/>`; }
     for (let k = 1; k < 9; k++) { const c = Math.cos(k * Math.PI / 9), pts = []; for (let i = 0; i <= N; i += 2) { const x = L * i / N; pts.push(`${X(x).toFixed(1)},${Y(r(x) * c).toFixed(1)}`); } frame += `<polyline points="${pts.join(" ")}" class="cw-lon"/>`; }
     // Modules in the keel space, and fittings in two slots along the keel.
     let mods = "", fits = "";
-    for (let b = 1; b <= d.bays; b++) {
-      const a = bay0(b) + 0.8, e = bay0(b) + 14.2, yt = r(a) * 0.4, yb = r(a) * 0.82, m = sys.modules[b];
+    for (let b = 1; b <= NB; b++) {
+      const a = bay0(b) + 0.8, e = bay0(b) + BL(b) - 0.8, yt = r(a) * 0.4, yb = r(a) * 0.82, m = sys.modules[b];
       if (m) mods += `<g data-item="module:${b}" class="cw-mod">${moduleDrawing(m, X(a), Y(yt), (e - a) * s, (yb - yt) * s, (sys.deckCount || {})[b] || 1, f.twoDecksOk)}</g>`;
       (sys.fittings[b] || []).forEach((k, i) => {
-        const fa = bay0(b) + 1 + i * 6.8, fw = 6, fy = r(a) * 0.84, fh = Math.max(1.4, D * 0.07);
+        const fw = BL(b) === 15 ? 6 : 2.8, fa = bay0(b) + 1 + i * (fw + 0.8), fy = r(a) * 0.84, fh = Math.max(1.4, D * 0.07);
         fits += `<g data-item="fit:${b}:${i}" class="cw-fit"><rect x="${X(fa)}" y="${Y(fy)}" width="${fw * s}" height="${fh * s}" rx="${fh * s / 2}" class="cw-${k}"/>
           <line x1="${X(fa) + fh * s * 0.5}" y1="${Y(fy) + fh * s * 0.3}" x2="${X(fa + fw) - fh * s * 0.5}" y2="${Y(fy) + fh * s * 0.3}" class="cw-shine"/></g>`;
       });
     }
     // Engines: under the hull, or on outriggers at the sides.
-    const engs = sys.engines.map(en => `<g data-item="eng:${en.bay}" class="cw-eng">${engineCar(f.ln + (en.bay - 0.5) * 15, en.mount, r, X, Y, s, D)}</g>`).join("");
+    const engs = sys.engines.map(en => `<g data-item="eng:${en.bay}" class="cw-eng">${engineCar(P().bayCentre(d, f.ln, en.bay), en.mount, r, X, Y, s, D)}</g>`).join("");
     const car = carDrawing(d, f, X, Y, r, s).replace(/class="bp-car"/g, 'class="cw-car"').replace(/class="bp-win"/g, 'class="cw-win"');
     const finsD = finsDrawing(d, f, X, Y, r, s);
     // Bays you can drop onto, numbered below.
     let hits = "", nums = "";
     const yB = Y(D / 2) + 46;
-    for (let b = 1; b <= d.bays; b++) {
+    for (let b = 1; b <= NB; b++) {
       const a = bay0(b), sel = selBay === b;
-      hits += `<rect x="${X(a)}" y="${Y(-D / 2) - 6}" width="${15 * s}" height="${D * s + 40}" class="cw-hit${sel ? " sel" : ""}" data-bay="${b}" tabindex="0" role="button" aria-label="Bay ${b}${sys.modules[b] ? ", " + (MODULE_NAMES[sys.modules[b]] || sys.modules[b]) : ", clear to gas"}"/>`;
-      nums += `<text x="${X(a + 7.5)}" y="${yB}" class="bp-small mid${sel ? " cw-selnum" : ""}">${b}</text>`;
+      hits += `<rect x="${X(a)}" y="${Y(-D / 2) - 6}" width="${BL(b) * s}" height="${D * s + 40}" class="cw-hit${sel ? " sel" : ""}" data-bay="${b}" tabindex="0" role="button" aria-label="Bay ${b}${sys.modules[b] ? ", " + (MODULE_NAMES[sys.modules[b]] || sys.modules[b]) : ", clear to gas"}"/>`;
+      nums += `<text x="${X(a + BL(b) / 2)}" y="${yB}" class="bp-small mid${sel ? " cw-selnum" : ""}">${P().isHalf(d, b) ? (b - 1) + "½" : b}</text>`;
     }
     return `<svg viewBox="0 0 ${W} ${H}" class="bp cw" role="img" aria-label="Cutaway of the ship showing gas cells, modules, fittings, and engines">
       <defs>${cutawayDefs()}</defs>
@@ -552,10 +612,10 @@ window.UpShip = window.UpShip || {};
   }
   // The panel for the selected bay: what is there, and what can be changed.
   function bayPanel(st, d, f) {
-    if (!selBay || selBay > d.bays) return `<h3>Selected bay</h3><p class="do-hint">Click a bay to see what is in it. Drag a module onto a bay to place it there, or drag anything out of the hull to remove it.</p>`;
+    if (!selBay || selBay > P().bayCount(d)) return `<h3>Selected bay</h3><p class="do-hint">Click a bay to see what is in it. Drag a module onto a bay to place it there, or drag anything out of the hull to remove it.</p>`;
     const b = selBay, sys = d.systems, m = sys.modules[b], fits = sys.fittings[b] || [], eng = sys.engines.find(e => e.bay === b);
     const decks = (sys.deckCount || {})[b] || 1;
-    return `<h3>Bay ${b}</h3>
+    return `<h3>${P().isHalf(d, b) ? `Half bay ${b - 1}½` : `Bay ${b}`}</h3>${P().isHalf(d, b) ? `<p class="do-hint">A half bay holds gas, fittings, and engines, but no module.</p>` : ""}
       <p class="do-bay-mod">${m ? MODULE_NAMES[m] : "Clear to gas"}${m && m !== "control" ? ` <button class="btn-quiet" data-clear-bay="${b}">Clear</button>` : ""}</p>
       ${m === "passenger" ? `<div class="do-seg" role="group" aria-label="Decks">${[1, 2].map(n => `<button data-decks="${n}" aria-pressed="${decks === n}" ${n === 2 && !f.twoDecksOk ? "disabled" : ""}>${n === 1 ? "One deck" : "Two decks"}</button>`).join("")}</div>
         ${!f.twoDecksOk ? `<small class="do-hint">Two decks need a hull at least ${P().TWO_DECKS} m wide.</small>` : ""}` : ""}
@@ -574,6 +634,7 @@ window.UpShip = window.UpShip || {};
     if (!card || card.fixed) return;
     if (card.kind === "module") {
       if (bay === 1) { note("Bay 1 holds the control car."); if (from) undoRemove(from); return; }
+      if (P().isHalf(d, bay)) { note("A half bay holds gas, fittings, and engines, but no module."); if (from) undoRemove(from); return; }
       if (kind === "clear") { delete sys.modules[bay]; if (sys.deckCount) delete sys.deckCount[bay]; }
       else sys.modules[bay] = kind;
     }
@@ -618,8 +679,8 @@ window.UpShip = window.UpShip || {};
     const h = e.target.closest && e.target.closest("[data-handle]");
     if (h && tab === "hull") {
       const d = draft(U.state), svg = root.querySelector("svg.bp");
-      hullDrag = { kind: h.dataset.handle, x0: bpGeom.x0, s: bpGeom.s, cx: e.clientX, cy: e.clientY, bays: d.bays, D: d.D, unit: svg.getScreenCTM().a };
-      e.preventDefault(); refresh(); return;
+      hullDrag = { kind: h.dataset.handle, x0: bpGeom.x0, s: bpGeom.s, cx: e.clientX, cy: e.clientY, bays: d.bays, cont: d.bays, D: d.D, unit: svg.getScreenCTM().a };
+      e.preventDefault(); kick(); return;
     }
     if (tab !== "systems") return;
     const card = e.target.closest("[data-card]"), item = e.target.closest("[data-item]");
@@ -646,7 +707,9 @@ window.UpShip = window.UpShip || {};
     const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
     const p = pt.matrixTransform(svg.getScreenCTM().inverse());
     if (p.y < cutGeom.top || p.y > cutGeom.bottom) return null;
-    const b = Math.floor(((p.x - cutGeom.x0) / cutGeom.s - cutGeom.ln) / 15) + 1;
+    const xm = (p.x - cutGeom.x0) / cutGeom.s;
+    if (xm > cutGeom.end) return null;
+    const b = Math.floor((xm - cutGeom.ln) / 15) + 1;
     return b >= 1 && b <= cutGeom.bays ? b : null;
   }
   function moveGhost(e) {
@@ -662,7 +725,7 @@ window.UpShip = window.UpShip || {};
     root.querySelectorAll(".cw-hit").forEach(h => h.classList.toggle("over", +h.dataset.bay === b));
   }
   function onPointerUp(e) {
-    if (hullDrag) { hullDrag = null; refresh(); return; }
+    if (hullDrag) { const d = draft(U.state); if (hullDrag.kind === "length") d.bays = Math.round(hullDrag.cont * 2) / 2; hullDrag = null; trimSystems(d); render(); kick(); return; }
     if (accCtx) { U.decks.paintEnd(); accCtx = null; refreshFigures(); return; }
     if (paintDrag) { paintDrag = null; render(); return; }
     if (!drag) return;
@@ -684,15 +747,14 @@ window.UpShip = window.UpShip || {};
     const st = U.state, d = draft(st), lim = P().limits(st), g = hullDrag;
     const metres = px => px / g.unit / g.s;
     if (g.kind === "length") {
-      const bays = Math.max(2, Math.min(lim.maxBays, g.bays + Math.round(metres(e.clientX - g.cx) / 15)));
-      if (bays === d.bays) return;
-      d.bays = bays; trimSystems(d);
-    } else {
-      const D = Math.max(lim.minD, Math.min(lim.maxD, Math.round((g.D - 2 * metres(e.clientY - g.cy)) * 2) / 2));
-      if (D === d.D) return;
-      d.D = D;
+      g.cont = Math.max(2, Math.min(lim.maxBays, g.bays + metres(e.clientX - g.cx) / 15));
+      const snapped = Math.round(g.cont * 2) / 2;
+      if (snapped !== d.bays) { d.bays = snapped; refreshFigures(); }
+      kick(); return;
     }
-    refresh();
+    const D = Math.max(lim.minD, Math.min(lim.maxD, Math.round((g.D - 2 * metres(e.clientY - g.cy)) * 2) / 2));
+    if (D === d.D) return;
+    d.D = D; refreshFigures(); kick();
     const big = root.querySelector(".do-big"); if (big) big.textContent = `${fmt(d.D, 1)} m`;
   }
   function refreshFigures() { const st = U.state, d = draft(st); root.querySelector(".do-figures").innerHTML = figuresPanel(st, d, P().figures(st, d)); }
@@ -821,7 +883,7 @@ window.UpShip = window.UpShip || {};
     if (!e.altKey) {
       if (!onFin && Math.abs(fy) < 0.07) { fy = 0; guides.push({ y: 0 }); }
       if (!onFin && lv.twoTone && Math.abs(fy - lv.split) < 0.07) { fy = lv.split; guides.push({ y: lv.split }); }
-      for (let b = 1; b <= d.bays; b++) { const bx = (f.ln + (b - 0.5) * 15) / f.L; if (Math.abs(fx - bx) < 0.008) { fx = bx; guides.push({ x: bx * f.L }); break; } }
+      for (let b = 1; b <= P().bayCount(d); b++) { const bx = P().bayCentre(d, f.ln, b) / f.L; if (Math.abs(fx - bx) < 0.008) { fx = bx; guides.push({ x: bx * f.L }); break; } }
     }
     if (paintDrag.item === "name") { lv.name.x = fx; lv.name.y = fy; }
     else { const em = lv.emblems[+paintDrag.item.split(":")[1]]; em.x = fx; em.y = fy; }
@@ -914,7 +976,7 @@ window.UpShip = window.UpShip || {};
     if (b.dataset.removeEng) { remove({ type: "eng", bay: +b.dataset.removeEng }); refresh(); return; }
     if (b.dataset.mount) { const en = sys.engines.find(x => x.bay === selBay); if (en) en.mount = b.dataset.mount; refresh(); return; }
     if (b.dataset.preset) { startFrom(b.dataset.preset); return; }
-    if (b.dataset.bays) { d.bays = Math.max(2, Math.min(lim.maxBays, d.bays + +b.dataset.bays)); trimSystems(d); render(); return; }
+    if (b.dataset.bays) { d.bays = Math.max(2, Math.min(lim.maxBays, d.bays + b.dataset.bays * 0.5)); trimSystems(d); render(); kick(); return; }
     if (b.dataset.gas) { d.gas = b.dataset.gas; render(); return; }
     if (b.dataset.opt) { const [k, v] = b.dataset.opt.split(":"); d[k] = v; render(); return; }
     if (b.dataset.compare) { compare = b.dataset.compare; render(); return; }
@@ -940,7 +1002,7 @@ window.UpShip = window.UpShip || {};
     }
     if (t.dataset.presetSelect != null && t.value) { startFrom(t.value); return; }
     if (t.dataset.field === "D") {
-      draft(U.state).D = +t.value;
+      draft(U.state).D = +t.value; kick();
       // Redraw without rebuilding the slider, so dragging stays smooth.
       const st = U.state, d = draft(st), f = P().figures(st, d);
       root.querySelector(".do-sheet").innerHTML = blueprint(st, d, f);
@@ -953,15 +1015,16 @@ window.UpShip = window.UpShip || {};
     const keep = st.drawing && st.drawing.livery;
     p.livery = keep || U.livery.fresh(st);
     st.drawing = p; st.drawingNo = (st.drawingNo || 0) + 1;
-    render();
+    resetAnim(); render();
     if (p.trimmed) note(`Diameter trimmed to ${lim.maxD} m, the most your girders allow today.`);
   }
   // When bays are removed, anything placed in them goes.
   function trimSystems(d) {
-    const s = d.systems;
-    s.engines = s.engines.filter(e => e.bay <= d.bays);
-    for (const k of Object.keys(s.modules)) if (+k > d.bays) delete s.modules[k];
-    for (const k of Object.keys(s.fittings)) if (+k > d.bays) delete s.fittings[k];
+    // Modules need a whole bay; fittings and engines can use a half bay at the stern.
+    const s = d.systems, whole = Math.floor(d.bays + 1e-6), all = P().bayCount(d);
+    s.engines = s.engines.filter(e => e.bay <= all);
+    for (const k of Object.keys(s.modules)) if (+k > whole) delete s.modules[k];
+    for (const k of Object.keys(s.fittings)) if (+k > all) delete s.fittings[k];
   }
   function note(text) {
     const b = root.querySelector(".do-banner");

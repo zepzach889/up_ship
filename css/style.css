@@ -871,3 +871,5 @@ body.office-open { overflow: hidden; }
 .dp-dimtext.start { text-anchor: start; }
 .bp-deck { stroke: #7a3a2e; stroke-width: 2.2; } .bp-deck.up { stroke-dasharray: 5 3; }
 .bp-decklabel { fill: #7a3a2e; font-weight: 600; paint-order: stroke; stroke: #ebe0c4; stroke-width: 3px; }
+.bp-ring-unfin { stroke: #b8862e; stroke-width: 2.2; stroke-dasharray: 6 3; }
+.bp-diag-unfin { fill: none; stroke: #b8862e; stroke-width: 0.7; stroke-dasharray: 4 3; opacity: 0.55; }

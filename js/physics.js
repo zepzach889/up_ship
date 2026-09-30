@@ -35,6 +35,11 @@ window.UpShip = window.UpShip || {};
     return sizes.find(s => L <= s.L && D <= s.D) || null;
   }
 
+  // Bays are 15 m, except that the last may be a half bay of 7.5 m (holding gas, fittings, and engines, but no module).
+  const bayCount = d => Math.ceil(d.bays - 1e-6);
+  const isHalf = (d, b) => b === bayCount(d) && d.bays % 1 > 0.25;
+  const bayLen = (d, b) => isHalf(d, b) ? BAY / 2 : BAY;
+  const bayCentre = (d, ln, b) => ln + (b - 1) * BAY + bayLen(d, b) / 2;
   function hullLengths(d) {
     const ln = NOSE[d.nose] * d.D, lt = TAIL[d.tail] * d.D, mid = d.bays * BAY;
     return { ln, lt, mid, L: ln + mid + lt };
@@ -78,7 +83,7 @@ window.UpShip = window.UpShip || {};
     f.engineWeight = engines * (0.3 + hpEach / 450);
     // Modules and fittings scale with the hull: a bay of a big ship holds more, and weighs more.
     // Every tonne is placed at its bay, so the balance can be worked out: mass list of [tonnes, x].
-    const at = bay => ln + (bay - 0.5) * BAY, masses = [], put = (t, x) => { if (t) masses.push([t, x]); };
+    const at = bay => bayCentre(d, ln, +bay), masses = [], put = (t, x) => { if (t) masses.push([t, x]); };
     const carW = 0.5 + D / 12 + (opt("car").weight || 0);
     let modWeight = carW, decks = 0, holds = 0, crewBays = 0;
     put(carW, ln + 6);
@@ -199,5 +204,5 @@ window.UpShip = window.UpShip || {};
     return p;
   }
 
-  U.physics = { BAY, TWO_DECKS, LEVEL, LIMIT, figures, radius, hullLengths, limits, shedNeeded, preset, PRESETS };
+  U.physics = { bayCount, isHalf, bayLen, bayCentre, BAY, TWO_DECKS, LEVEL, LIMIT, figures, radius, hullLengths, limits, shedNeeded, preset, PRESETS };
 })(window.UpShip);

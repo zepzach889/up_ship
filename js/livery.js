@@ -135,7 +135,7 @@ window.UpShip = window.UpShip || {};
     }).join("") : "";
     // Gondolas in their colors.
     const car = carShape(d, f, X, Y, r, lv.car);
-    const engines = d.systems.engines.map(e => engineShape(f.ln + (e.bay - 0.5) * 15, e.mount, r, X, Y, D, lv.engines)).join("");
+    const engines = d.systems.engines.map(e => engineShape(P().bayCentre(d, f.ln, e.bay), e.mount, r, X, Y, D, lv.engines)).join("");
     return `<defs><clipPath id="${id}c"><path d="${outline}"/></clipPath>${shade}</defs>
       ${fins}${finDeco}
       <g clip-path="url(#${id}c)">${body}<path d="${outline}" fill="url(#${id}s)"/><g class="lv-seams">${seams}</g></g>
