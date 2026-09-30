@@ -65,6 +65,8 @@ window.UpShip = window.UpShip || {};
     else if (U.turnActive) frozen = true;
   }
   function toggleAuto() { setAuto(auto ? 0 : lastAuto); }
+  // The Drawing Office runs the clock from its own header.
+  U.game = { setAuto: s => { if (s && !U.turnActive && !auto) { setAuto(s); } else setAuto(s); }, auto: () => (frozen && !auto ? 0 : auto) };
 
   function newGame() {
     if (!confirm("Start a new game? Your current game will be lost.")) return;
@@ -81,6 +83,7 @@ window.UpShip = window.UpShip || {};
     for (const t of due) {
       st.telegrams.push(t);
       U.ui.showTelegram(t);
+      if (U.designer && U.designer.isOpen()) U.designer.telegram(t);
       if (t.major) { if (auto || U.turnActive) { lastAuto = auto || lastAuto; auto = 0; slowedFrom = 0; if (U.turnActive) frozen = true; } }
       else if (auto > 1) { slowedFrom = auto; auto = 1; if (U.turnActive) setTurnLength(U.TIME.msPerTurn[1]); }
     }

@@ -45,6 +45,7 @@ window.UpShip = window.UpShip || {};
     $("#company").addEventListener("click", () => select({ type: "company" }));
     $("#telegrams .tg-all").addEventListener("click", dismissAll);
     document.querySelectorAll("[data-open]").forEach(b => b.addEventListener("click", () => select({ type: b.dataset.open })));
+    document.querySelectorAll("[data-office]").forEach(b => b.addEventListener("click", () => U.designer.open()));
     $("#draft-undo").addEventListener("click", () => { draft.pop(); updateDraft(); });
     $("#draft-cancel").addEventListener("click", () => endDraft());
     $("#draft-circuit").addEventListener("change", () => updateDraft());
