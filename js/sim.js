@@ -101,7 +101,7 @@ window.UpShip = window.UpShip || {};
       condition: surplus ? E().surplusStartCondition : 1,
       lifeYears: surplus ? E().lifeYears.surplus : E().lifeYears.built,
       overhaulAt: E().defaultOverhaulAt, overhaulUntil: null, endWarned: false,
-      fitted: state.research ? U.research.builtWith(state) : [], refitPlan: [],
+      fitted: state.research ? U.research.builtWith(state) : [], refitPlan: [], art: c.designed ? c.art : undefined,
       config: c.passengers ? config : null, reconfigTo: null,
       gas, gasTo: null, gasLeft: U.facilities.GAS[gas].range, sinceTopUp: 0,
       stats: blankStats()
@@ -367,7 +367,9 @@ window.UpShip = window.UpShip || {};
   function finishOverhaul(state, ship) {
     const frac = ageYears(state, ship) / ship.lifeYears;
     ship.condition = frac > 0.8 ? Math.max(0.75, 1 - (frac - 0.8)) : 1;
-    telegram(state, ship.overhaulUntil, `${ship.name} overhaul complete stop condition ${Math.round(ship.condition * 100)} percent stop`, false, { type: "ship", id: ship.id });
+    const cc = U.SHIP_CLASSES[ship.classId], repaint = cc.designed && ship.art !== cc.art;
+    if (repaint) ship.art = cc.art;
+    telegram(state, ship.overhaulUntil, `${ship.name} overhaul complete stop condition ${Math.round(ship.condition * 100)} percent stop${repaint ? " repainted in the new livery stop" : ""}`, false, { type: "ship", id: ship.id });
     ship.overhaulUntil = null;
   }
 
@@ -614,7 +616,7 @@ window.UpShip = window.UpShip || {};
     try { for (const k of ["upship.save.v1", "upship.save.v2", "upship.save.v3", "upship.save.v4", "upship.save.v5", "upship.save.v6", "upship.save.v7", "upship.save.v8", "upship.save.v9", "upship.save.v10", SAVE_KEY]) localStorage.removeItem(k); } catch (e) {}
   }
 
-  U.sim = { telegram, addGeneral, addIncome, nearestCity, distanceKm, fare, freightRate, dailyPassengers, dailyFreight, start, advance, beginTurn, dateOf, dateAtHour, H,
+  U.sim = { finishOverhaul, telegram, addGeneral, addIncome, nearestCity, distanceKm, fare, freightRate, dailyPassengers, dailyFreight, start, advance, beginTurn, dateOf, dateAtHour, H,
     routeSummary, save, load, clearSave, editRoute, routeOf, routeName, routeLegs, createRoute, deleteRoute, canAssign, assign,
     order, policyGas, heliumFill, rename, suggestName, longestLeg, catalog, orderTerms, saleValue, canSell, sell, positionAt, ageYears, roman };
 })(window.UpShip);

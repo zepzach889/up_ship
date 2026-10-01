@@ -180,5 +180,5 @@ window.UpShip = window.UpShip || {};
     return `<svg class="ship-art" viewBox="${VIEW[art]}" width="${width}" height="${Math.round(width * h / w)}" aria-hidden="true"><use href="#art-${art}"/></svg>`;
   }
 
-  U.shipArt = { DEFS, illustration, SHADOW };
+  U.shipArt = { DEFS, illustration, SHADOW, VIEW };
 })(window.UpShip);

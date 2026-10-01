@@ -237,6 +237,9 @@ window.UpShip = window.UpShip || {};
   // Cabin layout, comfort, and changing the layout at the next overhaul.
   function cabinRows(state, ship) {
     const P = U.passengers, b = P.berths(state, ship), now = P.comfort(ship), fresh = P.comfortNew(ship);
+    if (U.SHIP_CLASSES[ship.classId].designed) return `${row("Layout", "From the deck plan")}
+      ${row("Berths", b.first && b.second ? `${b.total}: ${b.first} first, ${b.second} second` : `${b.total}`)}
+      ${row("Comfort", `${now} of 100${now < fresh ? ` (${fresh} when overhauled)` : ""}`)}`;
     const cost = Math.round(U.SHIP_CLASSES[ship.classId].price * P.RECONFIG_SHARE / 100) * 100;
     return `${row("Layout", P.configOf(ship).name)}
       ${row("Berths", b.first && b.second ? `${b.total}: ${b.first} first, ${b.second} second` : `${b.total}`)}
@@ -451,6 +454,47 @@ window.UpShip = window.UpShip || {};
       <b>${GAS_NAMES[k]}</b><span>${about[k]}</span></button>`).join("")}</div>`;
   }
 
+  // Your own designs, from the Drawing Office: ordered like the builders' ships. The first ship names the class.
+  function designCards(state) {
+    const list = (state.designs || []).filter(e => !(e.classId && U.SHIP_CLASSES[e.classId] && U.SHIP_CLASSES[e.classId].retired));
+    const head = `<h3 class="yard-head">Your designs</h3>`;
+    if (!list.length) return `${head}<p class="note">Designs from the Drawing Office appear here. <button class="btn-quiet" data-office-open>Open the Drawing Office</button></p>`;
+    return head + list.map(e => {
+      const cls = e.classId ? U.SHIP_CLASSES[e.classId] : null, f = U.physics.figures(state, e.d), need = U.designer.needsResearch(state, e.d);
+      const price = cls ? U.sim.orderTerms(state, cls.id).price : f.price, days = cls ? U.sim.orderTerms(state, cls.id).days : f.buildDays;
+      const shedOk = cls ? !!U.facilities.deliveryCity(state, cls.id) : !!f.shed && hasShed(state, f.shed.n);
+      const blocked = need.length || f.status === "sink" || state.money < price || !shedOk;
+      const sketch = designSketch(state, e, f);
+      return `<section class="card${need.length ? " needs" : ""}">
+        <h4>${esc(e.name)}${cls ? ` <small>class</small>` : ""}</h4>${sketch}
+        <p class="card-role">${cls ? `${cls.basis}.` : "Not yet built. Ordering locks the design; its first ship names the class."}</p>
+        <dl>${row("Passengers", f.planned ? `${f.berths} (${f.firstBerths} first class)` : f.berths ? `about ${f.berths}` : "None")}${row("Cargo", `${Math.round(f.cargoCap * 10) / 10} tons`)}
+          ${row("Speed", `${Math.round(cls ? cls.speedKmh : f.speed)} km/h`)}${row("Range", km(cls ? cls.rangeKm : Math.round(f.range / 100) * 100))}
+          ${row("Running cost", money((cls ? cls.dailyCost : f.daily) * U.ECONOMY.costFactor) + " a day")}${row("Delivery", `${Math.round(days / 30 * 2) / 2} months`)}</dl>
+        <div class="card-foot"><span class="price">${money(price)}</span><button class="btn" data-order-design="${e.id}" ${blocked ? "disabled" : ""}>Order</button></div>
+        ${need.length ? `<p class="note">Needs research: ${need.map(esc).join("; ")}.</p>` : f.status === "sink" ? `<p class="note">It cannot fly as drawn.</p>`
+          : !shedOk ? `<p class="note">Needs a ${f.shed ? f.shed.name.toLowerCase() : "larger"} shed.</p>` : state.money < price ? `<p class="note">Not enough funds.</p>` : ""}
+      </section>`;
+    }).join("");
+  }
+  const hasShed = (state, n) => U.CITIES.some(c => (U.facilities.ownLevel(state, c.id, "shed") || 0) >= n) || (n <= 2 && U.facilities.hasPublic(state.company.home));
+  function designSketch(state, e, f) {
+    const L = f.L, k = 250 / L, X = x => 8 + x * k, Y = y => 26 + y * k, h = Math.max(52, e.d.D * k * 2.2);
+    return `<svg class="ship-art" viewBox="0 ${-h / 2 + 26} 266 ${h}" width="266" height="${Math.round(h)}" aria-hidden="true">${U.livery.side(e.d, f, X, Y)}</svg>`;
+  }
+  function orderDesign(s, id) {
+    const e = s.designs.find(x => x.id === id);
+    const first = !e.classId, suggestion = first ? (e.d.livery.name.text || "") : U.sim.suggestName(s, e.classId);
+    const name = (prompt(first ? "Name the first ship of this design. The class will take its name:" : "Name the new ship:", suggestion) || "").trim();
+    if (!name) return;
+    if (first) { e.name = name; }
+    const c = U.designClass.ensure(s, e);
+    if (first) { c.name = name; c.names = [name]; }
+    const ship = U.sim.order(s, c.id, name, null, c.gas);
+    if (!ship) { notify("The order could not be placed."); return; }
+    h.changed(); render();
+    notify(`${ship.name} ordered${first ? `: the first of the ${name} class` : ""}.`);
+  }
   function shipyardPanel(state) {
     const home = city(state.company.home), nation = U.NATIONS[state.company.nation];
     return `
@@ -489,6 +533,7 @@ window.UpShip = window.UpShip || {};
             : deliverAt !== state.company.home ? `<p class="note">Delivered at ${city(deliverAt).name}, where your shed is big enough.</p>` : ""}
         </section>`;
       }).join("")}
+      ${designCards(state)}
       ${U.research.builtWith(state).length ? `<p class="note">New ships are built with: ${U.research.builtWith(state).map(id => U.research.techById[id].name).join(", ")}.</p>` : ""}
       ${lockedClassCards(state)}`;
   }
@@ -900,6 +945,8 @@ window.UpShip = window.UpShip || {};
       h.changed(); render(); return;
     }
     if (b.dataset.openPanel) { select({ type: b.dataset.openPanel }); return; }
+    if (b.dataset.officeOpen != null) { U.designer.open(); return; }
+    if (b.dataset.orderDesign) { orderDesign(s, +b.dataset.orderDesign); return; }
     if (b.dataset.order) {
       const ship = U.sim.order(s, b.dataset.order, undefined, yardConfig[b.dataset.order] || "two", yardGas[b.dataset.order] || "hydrogen");
       if (ship) { notify(`Ordered ${ship.name}, ${U.SHIP_CLASSES[ship.classId].name}. Delivery ${shortDate(U.sim.dateOf(ship.deliveryTick))}.`); h.changed(); render(); }

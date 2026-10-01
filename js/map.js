@@ -250,14 +250,25 @@ window.UpShip = window.UpShip || {};
       if (!n) {
         const g = el("g", { class: "ship", tabindex: 0, role: "button" }, layers.ships);
         el("ellipse", { rx: 58, ry: 22, class: "ship-hit" }, g);
-        const c0 = U.SHIP_CLASSES[ship.classId], art = c0.art || c0.kind, [srx, sry] = U.shipArt.SHADOW[art];
+        const c0 = U.SHIP_CLASSES[ship.classId], SH = U.shipArt.SHADOW;
+        // A designed ship's drawing may not exist for a moment while the game starts; a stock ship stands in until it does.
+        const art = [ship.art, c0.art, c0.kind, "passenger"].find(k => k && SH[k]), [srx, sry] = SH[art];
         // In flight: a shadow on the ground and the top view. At a mast: the side view.
         const shadow = el("ellipse", { rx: srx, ry: sry, class: "ship-shadow" }, g);
         const top = el("use", { href: "#art-top-" + art, class: "ship-top" }, g);
         const body = el("use", { href: "#art-" + art, class: "ship-side" }, g);
         g.addEventListener("click", e => { e.stopPropagation(); onSelect({ type: "ship", id: ship.id }); });
         g.addEventListener("keydown", e => { if (e.key === "Enter") onSelect({ type: "ship", id: ship.id }); });
-        n = shipNodes[ship.id] = { g, body, top, shadow };
+        n = shipNodes[ship.id] = { g, body, top, shadow, art };
+      }
+      // A repaint at overhaul, or a designed drawing arriving after the stand-in, switches the drawing in place.
+      {
+        const c0 = U.SHIP_CLASSES[ship.classId], SH = U.shipArt.SHADOW;
+        const art = [ship.art, c0.art, c0.kind, "passenger"].find(k => k && SH[k]);
+        if (art !== n.art) {
+          n.art = art; n.top.setAttribute("href", "#art-top-" + art); n.body.setAttribute("href", "#art-" + art);
+          n.shadow.setAttribute("rx", SH[art][0]); n.shadow.setAttribute("ry", SH[art][1]);
+        }
       }
       n.g.setAttribute("aria-label", "Ship " + ship.name);
       const p = shipPosition(ship, progress);

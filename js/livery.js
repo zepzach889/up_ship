@@ -58,6 +58,7 @@ window.UpShip = window.UpShip || {};
   }
 
   let uid = 0;
+  const span = (a, b) => { const lo = Math.min(a, b), hi = Math.max(a, b); return `x="${lo.toFixed(1)}" width="${Math.max(0.5, hi - lo).toFixed(1)}"`; };
   // The side view. Returns SVG elements drawn with X(metres) and Y(metres) supplied by the caller.
   function side(d, f, X, Y, opts = {}) {
     const lv = d.livery, L = f.L, D = d.D, R = D / 2, r = x => P().radius(d, x), id = "lv" + (++uid);
@@ -69,7 +70,7 @@ window.UpShip = window.UpShip || {};
       for (let i = 0; i <= N; i++) { const x = L * i / N; a.push(`${X(x).toFixed(1)},${Y(r(x) * fy0).toFixed(1)}`); b.push(`${X(x).toFixed(1)},${Y(r(x) * fy1).toFixed(1)}`); }
       return `M${a.join(" L")} L${b.reverse().join(" L")} Z`;
     };
-    const vband = (x0, x1, c) => `<rect x="${X(x0)}" y="${Y(-R * 1.05)}" width="${Math.max(0.5, X(x1) - X(x0))}" height="${Y(R * 1.05) - Y(-R * 1.05)}" fill="${c}"/>`;
+    const vband = (x0, x1, c) => `<rect ${span(X(x0), X(x1))} y="${Y(-R * 1.05)}" height="${Y(R * 1.05) - Y(-R * 1.05)}" fill="${c}"/>`;
     // Fins first, so the hull overlaps their roots.
     const fin = finShapes(d, f), finC = lv.fins, rudC = lv.rudders || lv.fins;
     let fins = "";
@@ -85,13 +86,13 @@ window.UpShip = window.UpShip || {};
       const g = fin.side(s), clip = `${id}f${s}`;
       finDeco += `<clipPath id="${clip}"><path d="M${g.fin.map(p => `${X(p[0])},${Y(p[1])}`).join(" L")} Z"/></clipPath><g clip-path="url(#${clip})">`;
       for (let i = 0; i < dc.n; i++) {
-        if (dc.flag) { const yy = g.root + s * (g.span * (0.35 + i * 0.22)); finDeco += `<rect x="${X(g.x0 - 5)}" y="${Math.min(Y(yy), Y(yy + s * g.span * dc.w))}" width="${X(g.x1 + 5) - X(g.x0 - 5)}" height="${Math.abs(Y(g.span * dc.w) - Y(0))}" fill="${dc.color}"/>`; }
-        else { const xx = g.x0 + (g.x1 - g.x0) * (0.3 + i * 0.18); finDeco += `<rect x="${X(xx)}" y="${Y(-R * 2)}" width="${X(xx + (g.x1 - g.x0) * dc.w) - X(xx)}" height="${Y(R * 2) - Y(-R * 2)}" fill="${dc.color}"/>`; }
+        if (dc.flag) { const yy = g.root + s * (g.span * (0.35 + i * 0.22)); finDeco += `<rect ${span(X(g.x0 - 5), X(g.x1 + 5))} y="${Math.min(Y(yy), Y(yy + s * g.span * dc.w))}" height="${Math.abs(Y(g.span * dc.w) - Y(0))}" fill="${dc.color}"/>`; }
+        else { const xx = g.x0 + (g.x1 - g.x0) * (0.3 + i * 0.18); finDeco += `<rect ${span(X(xx), X(xx + (g.x1 - g.x0) * dc.w))} y="${Y(-R * 2)}" height="${Y(R * 2) - Y(-R * 2)}" fill="${dc.color}"/>`; }
       }
       finDeco += `</g>`;
     }
     // The hull body: base color, a two-tone lower half, nose cap and tail cone, then decorations, all clipped to the hull.
-    let body = `<rect x="${X(-2)}" y="${Y(-R * 1.1)}" width="${X(L + 2) - X(-2)}" height="${Y(R * 1.1) - Y(-R * 1.1)}" fill="${lv.hull}"/>`;
+    let body = `<rect ${span(X(-2), X(L + 2))} y="${Y(-R * 1.1)}" height="${Y(R * 1.1) - Y(-R * 1.1)}" fill="${lv.hull}"/>`;
     if (lv.twoTone) body += `<path d="${band(lv.split, 1.05)}" fill="${lv.lower}"/>`;
     if (lv.nose) body += vband(-2, f.ln * 0.42, lv.nose);
     if (lv.tail) body += vband(L - f.lt * 0.3, L + 2, lv.tail);
@@ -126,7 +127,8 @@ window.UpShip = window.UpShip || {};
     // The name and the emblems, placed where they were dragged.
     const nm = lv.name, font = FONTS[nm.font] || FONTS.deco;
     const nameSize = R * 0.34 * nm.size, nx = L * nm.x, ny = nm.y * r(nx);
-    const nameSvg = nm.text ? `<text x="${X(nx)}" y="${Y(ny)}" class="lv-name" data-drag="name" fill="${nm.color}" font-family="${font.css}" font-weight="${font.weight}"
+    const flipped = X(1) < X(0);
+    const nameSvg = nm.text ? `<text x="${X(nx)}" y="${Y(ny)}" class="lv-name"${flipped ? ' text-anchor="end"' : ""} data-drag="name" fill="${nm.color}" font-family="${font.css}" font-weight="${font.weight}"
       font-size="${(Y(nameSize) - Y(0)).toFixed(1)}" letter-spacing="${((Y(nameSize) - Y(0)) * font.spacing).toFixed(1)}" dominant-baseline="middle">${esc(nm.text.toUpperCase())}</text>` : "";
     const em = (U.state && U.state.company.emblem) || null;
     const emblems = em ? lv.emblems.map((e, i) => {
@@ -158,16 +160,16 @@ window.UpShip = window.UpShip || {};
   function carShape(d, f, X, Y, r, color) {
     const D = d.D, a = f.ln + 1, b = f.ln + Math.min(14, f.mid - 1), h = Math.max(2.4, D * 0.11), yb = r(a + 3);
     const top = d.car === "recessed" ? yb - h * 0.5 : yb, bottom = top + h;
-    const wins = Array.from({ length: Math.max(3, Math.floor((b - a) / 2.2)) }, (_, i) => `<rect x="${X(a + 1.5 + i * 2.2)}" y="${Y(top + h * 0.25)}" width="${Math.max(1.5, X(1.2) - X(0))}" height="${Math.max(1.5, Y(h * 0.3) - Y(0))}" class="lv-win"/>`).join("");
+    const wins = Array.from({ length: Math.max(3, Math.floor((b - a) / 2.2)) }, (_, i) => `<rect x="${Math.min(X(a + 1.5 + i * 2.2), X(a + 2.7 + i * 2.2))}" y="${Y(top + h * 0.25)}" width="${Math.max(1.5, Math.abs(X(1.2) - X(0)))}" height="${Math.max(1.5, Y(h * 0.3) - Y(0))}" class="lv-win"/>`).join("");
     if (d.car === "streamlined") return `<path d="M${X(a)},${Y(top)} C${X(a - 2)},${Y(bottom)} ${X(a + 4)},${Y(bottom + 1)} ${X(a + 8)},${Y(bottom)} L${X(b)},${Y(top + h * 0.45)} L${X(b)},${Y(top)} Z" fill="${color}" class="lv-edge"/>`;
-    return `<rect x="${X(a)}" y="${Y(top)}" width="${X(b) - X(a)}" height="${Y(h) - Y(0)}" rx="${Math.min(6, (Y(h) - Y(0)) * 0.35)}" fill="${color}" class="lv-edge"/>${wins}`;
+    return `<rect ${span(X(a), X(b))} y="${Y(top)}" height="${Y(h) - Y(0)}" rx="${Math.min(6, (Y(h) - Y(0)) * 0.35)}" fill="${color}" class="lv-edge"/>${wins}`;
   }
   function engineShape(x, mount, r, X, Y, D, color) {
     const len = Math.max(5, D * 0.26), h = Math.max(1.8, D * 0.08), yb = mount === "sides" ? r(x) * 0.5 : r(x) + D * 0.1;
     const s0 = mount === "sides" ? r(x) * 0.3 : r(x) * 0.98;
     return `<line x1="${X(x - len * 0.2)}" y1="${Y(s0)}" x2="${X(x - len * 0.2)}" y2="${Y(yb)}" class="lv-strut"/><line x1="${X(x + len * 0.25)}" y1="${Y(s0)}" x2="${X(x + len * 0.25)}" y2="${Y(yb)}" class="lv-strut"/>
       <path d="M${X(x - len / 2)},${Y(yb + h / 2)} C${X(x - len / 2)},${Y(yb - h * 0.2)} ${X(x + len * 0.3)},${Y(yb - h * 0.1)} ${X(x + len / 2)},${Y(yb + h / 2)} C${X(x + len * 0.3)},${Y(yb + h * 1.1)} ${X(x - len / 2)},${Y(yb + h * 1.2)} ${X(x - len / 2)},${Y(yb + h / 2)} Z" fill="${color}" class="lv-edge"/>
-      <ellipse cx="${X(x - len / 2 - 0.6)}" cy="${Y(yb + h / 2)}" rx="${Math.max(0.8, X(0.35) - X(0))}" ry="${Y(h * 1.4) - Y(0)}" class="lv-prop"/>`;
+      <ellipse cx="${X(x - len / 2 - 0.6)}" cy="${Y(yb + h / 2)}" rx="${Math.max(0.8, Math.abs(X(0.35) - X(0)))}" ry="${Y(h * 1.4) - Y(0)}" class="lv-prop"/>`;
   }
 
   // The top view, as seen on the map: only what shows from above.
@@ -176,7 +178,7 @@ window.UpShip = window.UpShip || {};
     const a = [], b = [];
     for (let i = 0; i <= N; i++) { const x = L * i / N; a.push(`${X(x).toFixed(1)},${Y(-r(x)).toFixed(1)}`); b.push(`${X(x).toFixed(1)},${Y(r(x)).toFixed(1)}`); }
     const outline = `M${a.join(" L")} L${b.slice().reverse().join(" L")} Z`;
-    const vband = (x0, x1, c) => `<rect x="${X(x0)}" y="${Y(-R * 1.05)}" width="${Math.max(0.5, X(x1) - X(x0))}" height="${Y(R * 1.05) - Y(-R * 1.05)}" fill="${c}"/>`;
+    const vband = (x0, x1, c) => `<rect ${span(X(x0), X(x1))} y="${Y(-R * 1.05)}" height="${Y(R * 1.05) - Y(-R * 1.05)}" fill="${c}"/>`;
     // Seen from above, a line at height y on the flank sits at +/- sqrt(1 - y^2) across the hull, if it is on the upper half.
     const lateral = y => Math.sqrt(Math.max(0, 1 - y * y));
     const pair = (y, t, c) => {
@@ -190,7 +192,7 @@ window.UpShip = window.UpShip || {};
     const rud = s => `M${g.rud.map(p => `${X(p[0])},${Y(s * Math.abs(p[1]))}`).join(" L")} Z`;
     let fins = `<path d="${finPath(-1)}" fill="${lv.fins}" class="lv-edge"/><path d="${finPath(1)}" fill="${lv.fins}" class="lv-edge"/>
       <path d="${rud(-1)}" fill="${lv.rudders || lv.fins}" class="lv-edge"/><path d="${rud(1)}" fill="${lv.rudders || lv.fins}" class="lv-edge"/>`;
-    let body = `<rect x="${X(-2)}" y="${Y(-R * 1.1)}" width="${X(L + 2) - X(-2)}" height="${Y(R * 1.1) - Y(-R * 1.1)}" fill="${lv.hull}"/>`;
+    let body = `<rect ${span(X(-2), X(L + 2))} y="${Y(-R * 1.1)}" height="${Y(R * 1.1) - Y(-R * 1.1)}" fill="${lv.hull}"/>`;
     if (lv.twoTone && lv.split < 0) body += pair(lv.split, 2, lv.lower);
     if (lv.nose) body += vband(-2, f.ln * 0.42, lv.nose);
     if (lv.tail) body += vband(L - f.lt * 0.3, L + 2, lv.tail);

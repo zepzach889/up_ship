@@ -206,7 +206,8 @@ window.UpShip = window.UpShip || {};
 
   // A ship's working figures after research.
   function stats(state, ship) {
-    const c = U.SHIP_CLASSES[ship.classId], f = new Set(ship.fitted || []), r = R(state);
+    const c = U.SHIP_CLASSES[ship.classId], r = R(state);
+    const f = new Set((ship.fitted || []).filter(t => !(c.baked || []).includes(t)));
     // The captain and crew: speed, turnarounds, fuel, running costs, wear, incidents.
     const cm = state.crew && U.crew ? U.crew.mods(state, ship) : { speed: 1, turnaround: 0, fuel: 1, cost: 1, wear: 1, incidents: 1 };
     // Helium lifts about 8% less: it comes out of cargo, since passenger ships fill their cabins before their lift.

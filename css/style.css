@@ -899,3 +899,6 @@ body.office-open { overflow: hidden; }
 .do-design-name { max-width: 14ch; }
 .do-close { white-space: nowrap; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.yard-head { font-family: var(--deco); font-weight: 400; color: var(--brass-hi); font-size: 20px; margin: 18px 0 6px; }
+.card.needs { opacity: 0.55; }
+.card h4 small { font-size: 12px; color: var(--ivory-dim); font-weight: 400; }

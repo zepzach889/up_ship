@@ -82,6 +82,7 @@ window.UpShip = window.UpShip || {};
     root.hidden = true;
     document.body.classList.remove("office-open");
     clearInterval(clockTimer);
+    U.designClass.syncLivery(U.state);
     U.sim.save(U.state);
   }
   function build() {

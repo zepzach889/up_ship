@@ -11,7 +11,10 @@ window.UpShip = window.UpShip || {};
     U.state = U.sim.load();
     U.progress = 0;
     U.turnActive = false;
+    // Designed classes live in the save: register them before anything draws a ship, then add their drawings to the map.
+    if (U.state) U.designClass.restore(U.state);
     U.map.init(document.getElementById("map"), { onSelect: sel => U.ui.select(sel) });
+    if (U.state) { U.designClass.restore(U.state); U.map.drawShips(U.state, 0, true); }
     U.ui.init({ nextTurn, setAuto, toggleAuto, newGame, changed });
     U.ui.onTelegramClosed(telegramClosed);
     U.setup.init();

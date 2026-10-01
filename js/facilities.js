@@ -33,6 +33,7 @@ window.UpShip = window.UpShip || {};
   // Ship sizes: 1919 purpose-built ships are small; surplus, medium passenger, and freighter medium; liners large.
   function shipSize(classId) {
     const c = U.SHIP_CLASSES[classId];
+    if (c.designed) return c.shedSize;
     if (c.liner || c.art === "skyfreighter") return 3;
     if (c.art === "express") return 2;
     if (c.kind === "surplus" || c.art === "medium" || c.art === "freighter") return 2;
