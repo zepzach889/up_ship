@@ -537,8 +537,12 @@ window.UpShip = window.UpShip || {};
     state.tick += 1;
     const now = H(state.tick);
     for (const ship of state.ships) {
-      if (ship.deliveryTick === state.tick)
-        telegram(state, now, `${ship.name} delivered at ${U.cityById[ship.location].name} stop ready for service stop`, false, { type: "ship", id: ship.id });
+      if (ship.deliveryTick === state.tick) {
+        // A new ship without a captain asks for one; otherwise she simply reports ready.
+        const noCaptain = U.crew && !ship.captainId;
+        if (noCaptain) telegram(state, now, `${ship.name} delivered at ${U.cityById[ship.location].name} stop no captain aboard stop hire or appoint one before she can fly stop`, true, { type: "crew" });
+        else telegram(state, now, `${ship.name} delivered at ${U.cityById[ship.location].name} stop ready for service stop`, false, { type: "ship", id: ship.id });
+      }
       if (!ship.endWarned && ship.deliveryTick <= state.tick && ageYears(state, ship) >= ship.lifeYears) {
         ship.endWarned = true;
         telegram(state, now, `${ship.name} has reached the end of its service life stop wear and costs will rise stop consider selling stop`, true, { type: "ship", id: ship.id });

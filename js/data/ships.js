@@ -108,7 +108,7 @@ UpShip.ECONOMY = {
   passengerWaitDays: 2,                   // unserved passengers give up after about this long
   freightWaitDays: 4,
   costFactor: 0.5,                        // multiplies every class's daily cost and fuel
-  maxStops: 5,
+  maxStops: 8,
   turnaroundHours: 3,
   minLoadToLeave: 0.6,                    // ships wait for about this share of a full load...
   maxWaitHours: 12,                       // ...but no longer than this after arriving

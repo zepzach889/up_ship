@@ -147,18 +147,23 @@ window.UpShip = window.UpShip || {};
       cost = repair; if (I.cover !== "none") paid = repair;
       ship.condition = Math.max(0.2, ship.condition - 0.3);
       ship.readyHour = t + rand(30, 60) * 24; ship.grounded = ship.readyHour;
+      S().addGeneral(state, cost - paid);
     } else {
-      cost = value + claims;
-      if (I.cover !== "none") paid += value;
-      if (I.cover === "full") paid += claims;
+      // Losing the ship costs the company the ship itself, not cash. The insurer pays its value in cash,
+      // and under full cover the passengers' claims as well; otherwise the company pays the claims.
+      const hull = I.cover !== "none" ? value : 0, claimsPaid = I.cover === "full" ? claims : 0;
+      paid = hull + claimsPaid;
+      cost = claims;
+      if (claims - claimsPaid > 0) S().addGeneral(state, claims - claimsPaid);
+      if (hull) S().addIncome(state, hull, "insurance");
     }
-    S().addGeneral(state, cost - paid);
     if (paid) I.factor = Math.min(3, I.factor * 1.5);
     const hit = kind === "disaster" ? 25 : kind === "wreck" ? 10 : 5;
     state.rep.standing = Math.max(0, state.rep.standing - hit);
     const money = n => "£" + Math.round(n).toLocaleString("en-GB");
     const cover = paid ? ` stop insurance paid ${money(paid)}` : I.cover === "none" ? " stop uninsured" : "";
-    const pays = cost - paid > 0 ? ` stop cost to the company ${money(cost - paid)}` : "";
+    const pays = kind === "damage" ? (cost - paid > 0 ? ` stop cost to the company ${money(cost - paid)}` : "")
+      : (I.cover === "full" || !claims ? "" : ` stop passenger claims cost the company ${money(claims)}`);
     let text;
     if (kind === "damage") text = `${ship.name} badly damaged in a forced landing near ${where} stop all aboard safe stop out of service for repairs${cover}${pays} stop`;
     else if (kind === "wreck") text = `${ship.name} wrecked near ${where} stop all aboard rescued stop the ship is lost${cover}${pays} stop`;

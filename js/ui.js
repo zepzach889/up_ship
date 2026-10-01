@@ -99,7 +99,7 @@ window.UpShip = window.UpShip || {};
     const live = $("#live-status");
     if (live && selection && selection.type === "ship") {
       const ship = state.ships.find(s => s.id === selection.id);
-      if (ship) live.textContent = shipStatus(state, ship, progress);
+      if (ship) (live.firstElementChild || live).textContent = shipStatus(state, ship, progress);
     }
   }
 
@@ -113,7 +113,16 @@ window.UpShip = window.UpShip || {};
   }
 
   // Selection and panels ----------------------------------------------------------
-  function select(sel) {
+  // Going from a list (fleet, routes, and so on) into a ship, route, or city remembers the way back.
+  const LISTS = new Set(["fleet", "routes", "crew", "shipyard", "finances", "contracts", "telegrams", "research", "company"]);
+  const DETAIL = new Set(["ship", "route", "city"]);
+  let navStack = [];
+  function select(sel, back) {
+    if (!back) {
+      const same = sel && selection && sel.type === selection.type && sel.id === selection.id;
+      if (sel && selection && !same && DETAIL.has(sel.type) && (LISTS.has(selection.type) || DETAIL.has(selection.type))) navStack.push(selection);
+      else if (!sel || LISTS.has(sel.type) || !DETAIL.has(sel.type)) navStack = [];
+    }
     if (U.setup && U.setup.handleSelect(sel)) return;
     if (sel && sel.type === "country") return;
     if (draft && sel && sel.type === "city") { addDraftStop(sel.id); return; }
@@ -136,11 +145,28 @@ window.UpShip = window.UpShip || {};
     const s = U.state;
     const views = { aetherdecision: aetherDecisionPanel, crew: crewPanel, settings: settingsPanel, gasdecision: gasDecisionPanel, research: researchPanel, city: cityPanel, ship: shipPanel, route: routePanel, shipyard: shipyardPanel, fleet: fleetPanel, routes: routesPanel,
       finances: financesPanel, company: companyPanel, telegrams: telegramsPanel, contracts: contractsPanel };
-    const html = views[selection.type](s, selection.id);
+    let html = views[selection.type](s, selection.id);
     if (html == null) { select(null); return; }
+    const prev = navStack[navStack.length - 1];
+    if (prev && DETAIL.has(selection.type)) html = `<button class="btn-quiet panel-back" data-back>← Back to ${esc(backLabel(prev))}</button>` + html;
+    // The panel is rebuilt as the game moves on; whatever is being typed survives it, with focus and cursor.
+    const a = document.activeElement, typing = a && body.contains(a) && a.id && /^(INPUT|TEXTAREA)$/.test(a.tagName) && a.type !== "checkbox" && a.type !== "range"
+      ? { id: a.id, value: a.value, start: safe(() => a.selectionStart), end: safe(() => a.selectionEnd) } : null;
     body.innerHTML = html;
+    if (typing) {
+      const el = document.getElementById(typing.id);
+      if (el) { el.value = typing.value; el.focus(); if (typing.start != null) safe(() => el.setSelectionRange(typing.start, typing.end)); }
+      return;
+    }
     const input = body.querySelector("input[autofocus]");
     if (input) { input.focus(); input.select(); }
+  }
+  const safe = f => { try { return f(); } catch (e) { return null; } };
+  function backLabel(sel) {
+    if (sel.type === "ship") { const s = U.state.ships.find(x => x.id === sel.id); return s ? s.name : "the ship"; }
+    if (sel.type === "route") { const r = U.state.routes.find(x => x.id === sel.id); return r ? r.name || "the route" : "the route"; }
+    if (sel.type === "city") return city(sel.id).name;
+    return { fleet: "the fleet", routes: "routes", crew: "crew", shipyard: "the Shipyard", finances: "finances", contracts: "contracts", telegrams: "telegrams", research: "research", company: "the company" }[sel.type] || "the list";
   }
 
   function cityPanel(state, id) {
@@ -186,6 +212,10 @@ window.UpShip = window.UpShip || {};
     return `<h3>Facilities</h3>
       <p class="small">${pub ? "A public mast, terminal, and shed (medium size) are open to any company here, for a fee. Your own avoid the fees." : "No public facilities here. You need your own mast to land."}</p>
       <ul class="facilities">${rows}</ul>
+      ${U.facilities.hasPublic(id) ? `<details class="fee-note"><summary>What the public facilities here cost</summary>
+        <p>Ships without your own facilities here use the city's: <b>£${U.facilities.FEES.mast} a landing</b> at the public mast,
+        <b>1s a passenger and 2s a ton</b> through the public terminal, and overhauls in the public shed cost <b>${Math.round(U.facilities.FEES.shed * 100)}% more</b>.
+        Your own facilities charge no fees; they cost ${Math.round(U.facilities.UPKEEP * 100)}% of their building price a year to keep up.</p></details>` : ""}
       <dl>${row("Gas supply", F.publicGas(id) ? "Public hydrogen and helium" : F.canTopUp(state, id, "hydrogen") ? "Your own" : "None")}
         ${row("Helium price", `${Math.round(F.heliumPrice(state, id) * 100)}% of the port price`)}
         ${U.aether.discovered(state) ? row("Aetherium", F.ownLevel(state, id, "refinery") ? "From your refinery" : state.aether.publicOpen != null && id === U.aether.capital(state) ? "From the government works, for a fee" : "None here") : ""}
@@ -218,7 +248,7 @@ window.UpShip = window.UpShip || {};
       ${c ? row("Traits", traitChips(c)) : ""}
       ${row("Crew", `${C.STAFFING[eff].name}, ${C.needFor(state, ship)} hands${eff !== want ? " (pool short-handed)" : ""}`)}
       </dl><div class="reconfig"><div class="btn-row">${Object.entries(C.STAFFING).map(([k, v]) => `<button class="${want === k ? "btn" : "btn-quiet"}" data-staffing="${ship.id}:${k}">${v.name}</button>`).join("")}</div>
-      ${spare.length ? `<p class="small">${c ? "Replace with" : "Appoint"}:</p><div class="btn-row">${spare.map(x => `<button class="btn-quiet" data-assign="${x.id}:${ship.id}">${esc(x.name)}</button>`).join("")}</div>` : !c ? `<p class="small">Hire a captain in the Crew panel.</p>` : ""}</div><dl>`;
+      ${spare.length ? `<p class="small">${c ? "Replace with" : "Appoint"}:</p><div class="btn-row">${spare.map(x => `<button class="btn-quiet" data-appoint="${x.id}:${ship.id}">${esc(x.name)}</button>`).join("")}</div>` : !c ? `<p class="small">Hire a captain in the Crew panel.</p>` : ""}</div><dl>`;
   }
 
   // Lifting gas, range left, and switching at the next overhaul.
@@ -303,7 +333,7 @@ window.UpShip = window.UpShip || {};
       <div class="title-row">${title}</div>
       <p class="sub">${cls.name}. ${cls.role}.</p>
       ${U.shipArt.illustration(cls.art || cls.kind, cls.liner ? 290 : 250)}
-      <p class="status" id="live-status">${shipStatus(state, ship, U.progress || 0)}</p>
+      <p class="status" id="live-status"><span>${shipStatus(state, ship, U.progress || 0)}</span></p>
       ${routeBlock}
       ${leg && !leg.ferry ? `<dl class="spaced">
         ${rs.passengers ? row("Passengers aboard", `${leg.pax} of ${leg.seats || U.passengers.berths(state, ship).total}${leg.p1 ? ` (${leg.p1} first)` : ""}`) : ""}
@@ -376,7 +406,20 @@ window.UpShip = window.UpShip || {};
         </form></details>`;
   }
 
-  function routePanel(state, id) {
+  function routePanel(state, id) { const base = routePanelBase(state, id); return base == null ? base : base + demandNote(state, id); }
+  function demandNote(state, id) {
+    const r = state.routes.find(x => x.id === id); if (!r) return "";
+    const stops = r.stops, C = U.competition, rows = [];
+    for (let i = 0; i < stops.length - 1; i++) {
+      const a = stops[i], b = stops[i + 1], m = C ? C.mult(state, a, b) : 1;
+      const pax = U.sim.dailyPassengers(a, b) * m, tons = U.sim.dailyFreight(a, b) * m;
+      rows.push(`<li><b>${city(a).name}–${city(b).name}</b>: about ${Math.round(pax)} passengers and ${Math.round(tons * 10) / 10} tons a day${m !== 1 ? ` <span class="small">(competition ${m > 1 ? "+" : "−"}${Math.round(Math.abs(m - 1) * 100)}%)</span>` : ""}</li>`);
+    }
+    return `<details class="demand-note"><summary>Demand along this route</summary>
+      <p class="small">Demand is how many travellers and how much freight a day would go by airship between two cities. It grows with the size and importance of both cities, and competing trains, steamers, and airplanes take a share or add to it. Each ship carries what fits; the rest wait for the next flight. Stops further apart along the route have demand of their own too.</p>
+      <ul class="plain-list">${rows.join("")}</ul></details>`;
+  }
+  function routePanelBase(state, id) {
     const route = state.routes.find(r => r.id === id);
     if (!route) return null;
     const legs = U.sim.routeLegs(route);
@@ -571,7 +614,7 @@ window.UpShip = window.UpShip || {};
       <div class="traits">${traitChips(c)}</div>${lines}
       ${hiring ? `<div class="btn-row"><button class="btn" data-hire="${c.id}" ${state.money < C.wage(c) * 2 ? "disabled" : ""}>Hire, ${money(C.wage(c) * 2)} to sign</button></div>`
         : `<p class="small">${ship ? `Commands ${shipLink(ship)}.` : "Without a ship."}</p><div class="btn-row">
-          ${!ship ? idle.map(x => `<button class="btn-quiet" data-assign="${c.id}:${x.id}">Take ${esc(x.name)}</button>`).join("") : ""}
+          ${!ship ? idle.map(x => `<button class="btn-quiet" data-appoint="${c.id}:${x.id}">Take ${esc(x.name)}</button>`).join("") : ""}
           <button class="btn-danger" data-dismiss="${c.id}">Dismiss</button></div>`}</li>`;
   }
   function crewPanel(state) {
@@ -877,7 +920,19 @@ window.UpShip = window.UpShip || {};
       <button class="btn" data-act="new-route">Draw a new route</button>`;
   }
 
-  function financesPanel(state) {
+  function financesPanel(state) { return debtNote(state) + financesPanelBase(state); }
+  function debtNote(state) {
+    if (state.money >= 0) return "";
+    const C = U.contracts, room = C.loanLimit(state) - state.loan, step = U.ECONOMY.loanStep, months = U.ECONOMY.bankruptMonths;
+    const d = U.sim.dateOf(state.tick), end = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+    const when = end.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+    if (room >= step) return `<div class="debt-note"><b>Overdrawn by ${money(-state.money)}.</b> You can still borrow up to ${money(Math.floor(room / step) * step)}. Borrow, or earn your way back above zero, before the month ends on ${when}.</div>`;
+    const strikes = state.bankruptStrikes || 0, left = months - strikes;
+    return `<div class="debt-note bad"><b>Overdrawn by ${money(-state.money)}, and the banks will lend no more.</b>
+      If you are still overdrawn when the month ends on ${when}, that is strike ${strikes + 1} of ${months}. ${left <= 1 ? "The next strike bankrupts the company." : `At the ${months === 3 ? "third" : months + "th"} strike in a row, the company is declared bankrupt.`}
+      Getting back above zero at any month's end clears the strikes.</div>`;
+  }
+  function financesPanelBase(state) {
     const y = state.year, net = y.revenue - y.costs - y.purchases + (y.sales || 0);
     const limit = U.contracts.loanLimit(state), step = U.ECONOMY.loanStep;
     return `
@@ -945,6 +1000,7 @@ window.UpShip = window.UpShip || {};
       h.changed(); render(); return;
     }
     if (b.dataset.openPanel) { select({ type: b.dataset.openPanel }); return; }
+    if (b.dataset.back != null) { const prev = navStack.pop(); if (prev) select(prev, true); return; }
     if (b.dataset.officeOpen != null) { U.designer.open(); return; }
     if (b.dataset.orderDesign) { orderDesign(s, +b.dataset.orderDesign); return; }
     if (b.dataset.order) {
@@ -952,6 +1008,7 @@ window.UpShip = window.UpShip || {};
       if (ship) { notify(`Ordered ${ship.name}, ${U.SHIP_CLASSES[ship.classId].name}. Delivery ${shortDate(U.sim.dateOf(ship.deliveryTick))}.`); h.changed(); render(); }
       return;
     }
+    if (b.dataset.appoint) { const [cid, sid] = b.dataset.appoint.split(":"); U.crew.assign(s, cid, sid); h.changed(); render(); return; }
     if (b.dataset.assign) {
       const [shipId, routeId] = b.dataset.assign.split(":");
       U.sim.assign(s, shipId, routeId || null);
@@ -982,7 +1039,6 @@ window.UpShip = window.UpShip || {};
       h.changed(); render(); return;
     }
     if (b.dataset.hire) { if (U.crew.hire(s, b.dataset.hire)) notify("Captain hired."); h.changed(); render(); return; }
-    if (b.dataset.assign) { const [cid, sid] = b.dataset.assign.split(":"); U.crew.assign(s, cid, sid); h.changed(); render(); return; }
     if (b.dataset.dismiss) { const c = s.captains.find(x => x.id === b.dataset.dismiss); if (c && confirm(`Dismiss Captain ${c.name}?`)) { U.crew.dismiss(s, c.id); h.changed(); render(); } return; }
     if (b.dataset.hands) { const n = +b.dataset.hands; if (n > 0) U.crew.hireHands(s, n); else U.crew.releaseHands(s, -n); h.changed(); render(); return; }
     if (b.dataset.staffing) { const [sid, k] = b.dataset.staffing.split(":"); s.ships.find(x => x.id === sid).staffing = k; h.changed(); render(); return; }
@@ -1204,11 +1260,17 @@ window.UpShip = window.UpShip || {};
     card.dataset.id = t.id;
     card.innerHTML = `<p class="tg-head">Telegram, ${shortDate(U.sim.dateAtHour(t.hour))}</p><p class="tg-text">${esc(t.text)}</p>
       <div class="tg-actions">${t.target ? `<button class="btn-quiet" data-tg-open>Open</button>` : ""}<button class="btn" data-tg-close>Dismiss</button></div>`;
-    card.querySelector("[data-tg-close]").addEventListener("click", () => closeTelegram(card, t));
+    card.querySelector("[data-tg-close]").addEventListener("click", () => { closeTelegram(card, t); resumeIfClear(); });
     const open = card.querySelector("[data-tg-open]");
+    if (open) open.addEventListener("click", () => U.game && U.game.keepPaused());
     if (open) open.addEventListener("click", () => { select({ type: t.target.type, id: t.target.id }); closeTelegram(card, t); });
     stack.insertBefore(card, stack.querySelector(".tg-all"));
     updateStack();
+  }
+  // Once no urgent telegram is left on screen, play resumes if a telegram paused it.
+  function resumeIfClear() {
+    if ($("#telegrams").querySelector(".telegram.is-major")) return;
+    if (U.game) U.game.resumeFromTelegram();
   }
   function closeTelegram(card, t) { card.remove(); updateStack(); onTelegramClosed(t); }
   function updateStack() {

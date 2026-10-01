@@ -199,4 +199,5 @@ window.UpShip = window.UpShip || {};
 
   U.facilities = { TYPES, GAS_TYPES, GAS, HELIUM_PORTS, publicGas, canTopUp, heliumPrice, gasGap, SIZE_NAMES, FEES, BASIC_ROOM, hasPublic, shipSize, init, ownLevel, effective, canLand, terminalLimits,
     demandBoost, nextCost, build, mastsNeeded, daily, roomToday, recordBoarding, dock, congested, shedFits, nearestShed, deliveryCity };
+  Object.assign(U.facilities, { hasPublic, FEES, UPKEEP });
 })(window.UpShip);

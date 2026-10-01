@@ -17,6 +17,9 @@ window.UpShip = window.UpShip || {};
     reckless: { name: "Reckless", good: "Never waits, always fastest", bad: "Serious risk in bad weather", speed: 1.04, forceBold: true, weatherRisk: 1.8 },
     brusque: { name: "Brusque", good: "A lean ship: lower crew costs", bad: "Passengers find it cold: comfort down", comfort: -8, cost: 0.9 }
   };
+  // Traits that cannot sit together in one captain.
+  const CLASHES = [["showman", "brusque"], ["careful", "reckless"], ["careful", "harddriving"], ["weatherwise", "reckless"]];
+  const clash = (a, b) => CLASHES.some(([x, y]) => (a === x && b === y) || (a === y && b === x));
   const GRADES = [
     { name: "Novice", hours: 0, wage: 40, risk: 1.2 },
     { name: "Seasoned", hours: 10000, wage: 60, risk: 1 },
@@ -53,7 +56,9 @@ window.UpShip = window.UpShip || {};
     const bg = BACKGROUNDS[bgKey], nation = state.company.nation, N = NAMES[nation] || NAMES.britain;
     const womanChance = Math.min(0.15, 0.03 + (year(state) - 1919) * 0.008);
     const female = Math.random() < womanChance;
-    const t1 = pick(bg.traits); let t2 = Math.random() < 0.55 ? pick(bg.traits) : null; if (t2 === t1) t2 = null;
+    // A second trait never contradicts the first: it is drawn from those that sit sensibly beside it.
+    const t1 = pick(bg.traits), fits = bg.traits.filter(t => t !== t1 && !clash(t1, t));
+    const t2 = Math.random() < 0.55 && fits.length ? pick(fits) : null;
     return { id: "c" + state.nextId++, name: `${pick(female ? N.f : N.m)} ${pick(N.s)}`, female, background: bgKey, traits: t2 ? [t1, t2] : [t1],
       hours: Math.round(rand(...bg.hours)), shipId: null, blamed: 0, cleared: 0, joined: now(state), serviceYears: Math.round(rand(20, 28)) };
   }
@@ -157,7 +162,8 @@ window.UpShip = window.UpShip || {};
       return ` stop inquiry blames captain ${c.name} stop keep or dismiss in the crew panel`;
     }
     c.cleared++;
-    if (kind !== "damage" && !c.traits.includes("careful") && c.traits.length < 2) c.traits.push("careful");   // shaken, and more careful since
+    // Shaken, and more careful since: any recklessness or hard driving goes.
+    if (kind !== "damage" && !c.traits.includes("careful")) { c.traits = c.traits.filter(t => !clash(t, "careful")); if (c.traits.length < 2) c.traits.push("careful"); }
     return ` stop inquiry clears captain ${c.name}`;
   }
 

@@ -69,7 +69,14 @@ window.UpShip = window.UpShip || {};
   }
   function toggleAuto() { setAuto(auto ? 0 : lastAuto); }
   // The Drawing Office runs the clock from its own header.
-  U.game = { setAuto: s => { if (s && !U.turnActive && !auto) { setAuto(s); } else setAuto(s); }, auto: () => (frozen && !auto ? 0 : auto) };
+  // Dismissing the telegram that paused the game carries on as before.
+  function resumeFromTelegram() {
+    const p = U.pausedByTelegram; if (!p) return;
+    U.pausedByTelegram = null;
+    if (frozen) frozen = false;
+    if (p.auto) setAuto(p.auto);
+  }
+  U.game = { resumeFromTelegram, keepPaused: () => { U.pausedByTelegram = null; }, setAuto: s => { if (s && !U.turnActive && !auto) { setAuto(s); } else setAuto(s); }, auto: () => (frozen && !auto ? 0 : auto) };
 
   function newGame() {
     if (!confirm("Start a new game? Your current game will be lost.")) return;
@@ -87,7 +94,7 @@ window.UpShip = window.UpShip || {};
       st.telegrams.push(t);
       U.ui.showTelegram(t);
       if (U.designer && U.designer.isOpen()) U.designer.telegram(t);
-      if (t.major) { if (auto || U.turnActive) { lastAuto = auto || lastAuto; auto = 0; slowedFrom = 0; if (U.turnActive) frozen = true; } }
+      if (t.major) { if (auto || U.turnActive) { U.pausedByTelegram = { auto: auto || 0 }; lastAuto = auto || lastAuto; auto = 0; slowedFrom = 0; if (U.turnActive) frozen = true; } }
       else if (auto > 1) { slowedFrom = auto; auto = 1; if (U.turnActive) setTurnLength(U.TIME.msPerTurn[1]); }
     }
     // Keep about three months of telegrams in the log.

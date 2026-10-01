@@ -17,7 +17,7 @@ window.UpShip = window.UpShip || {};
 
   function el(tag, attrs, parent) {
     const e = document.createElementNS(NS, tag);
-    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    for (const k in attrs) if (attrs[k] != null) e.setAttribute(k, attrs[k]);
     if (parent) parent.appendChild(e);
     return e;
   }
@@ -25,21 +25,28 @@ window.UpShip = window.UpShip || {};
   // Country labels are placed by hand. Countries not listed here are not labeled.
   const LABELS = {
     "United Kingdom": { lon: -1.9, lat: 54.45, size: 12 },
-    "Irish Free State": { lon: -8.3, lat: 52.5, size: 9.5, lines: ["Irish Free", "State"] },
+    "Irish Free State": { lon: -8.9, lat: 52.4, size: 8.5, lines: ["Irish Free", "State"] },
     "France": { lon: 2.3, lat: 46.4 },
     "Spain": { lon: -3.8, lat: 39.1 },
-    "Portugal": { lon: -7.85, lat: 40.7, size: 11, rotate: -80 },
-    "Germany": { lon: 9.2, lat: 51.6 },
-    "Poland": { lon: 19.8, lat: 51.0 },
+    "Portugal": { map: true, size: 11, rotate: -80 },
+    "Germany": { map: true },
+    "Poland": { lon: 20.6, lat: 50.75 },                                // clear of Warsaw, near the middle of 1920s Poland
     "Czechoslovakia": { lon: 17.2, lat: 49.25, size: 12 },
-    "Austria": { lon: 15.3, lat: 47.0, size: 12 },
+    "Austria": { lon: 14.7, lat: 47.1, size: 12 },
     "Hungary": { lon: 19.1, lat: 46.65, size: 12 },
     "Italy": { lon: 12.4, lat: 43.1 },
     "Yugoslavia": { lon: 19.6, lat: 43.7 },
     "Romania": { lon: 24.8, lat: 46.1 },
     "Bulgaria": { lon: 25.3, lat: 42.75, size: 13 },
     "Greece": { lon: 21.6, lat: 39.75, size: 11 },
-    "Turkey": { lon: 32.5, lat: 39.4 },
+    "Turkey": { map: true },
+    // Smaller countries, labelled small at their centres.
+    "Netherlands": { map: true, size: 8.5 },
+    "Belgium": { map: true, size: 8 },
+    "Luxembourg": { map: true, size: 5.5, lines: ["Lux."] },
+    "Switzerland": { map: true, size: 8 },
+    "Denmark": { map: true, size: 8.5 },
+    "Albania": { map: true, size: 7, rotate: -75 },
     "Soviet Union": { lon: 33, lat: 53.2 },
     "Lithuania": { lon: 23.9, lat: 55.35, size: 10 },
     "Latvia": { lon: 25.6, lat: 56.9, size: 10 },
@@ -103,16 +110,23 @@ window.UpShip = window.UpShip || {};
       });
       const o = LABELS[c.name];
       if (!o) continue;
-      const [x, y] = project(o.lon, o.lat);
-      const t = el("text", { x, y, class: "country-label" }, layers.countryLabels);
+      const [x, y] = o.map ? c.label : project(o.lon, o.lat);
+      // Wide letter spacing leaves a trailing space after the last letter; shifting by half of it centres the word.
+      const t = el("text", { x, y, dx: o.lines ? null : "0.16em", class: "country-label" }, layers.countryLabels);
       if (o.rotate) t.setAttribute("transform", `rotate(${o.rotate} ${x} ${y})`);
       t.dataset.size = o.size || 15;
       if (o.lines) {
         o.lines.forEach((line, i) => {
-          const ts = el("tspan", { x, dy: i ? "1.15em" : `${-(o.lines.length - 1) * 0.575}em` }, t);
+          const ts = el("tspan", { x, dx: "0.16em", dy: i ? "1.15em" : `${-(o.lines.length - 1) * 0.575}em` }, t);
           ts.textContent = line;
         });
       } else t.textContent = c.name;
+    }
+    // The Saar Territory, under the League of Nations from 1920 to 1935, is not drawn as its own shape; it is labelled where it lies.
+    {
+      const [x, y] = project(6.95, 49.38);
+      const t = el("text", { x, y, dx: "0.16em", class: "country-label" }, layers.countryLabels);
+      t.dataset.size = 5.5; t.textContent = "Saar";
     }
     const lines = el("g", {}, null);
     world.insertBefore(lines, layers.countryLabels);
@@ -239,6 +253,13 @@ window.UpShip = window.UpShip || {};
     return { x: c.x, y: c.y, angle: 0, flying: false, at: p.at, leg: p.leg || null, upcoming: p.upcoming || null, hour };
   }
 
+  let tip = null;
+  function shipTip(ship, e) {
+    if (!tip) { tip = document.createElement("div"); tip.className = "ship-tip"; tip.setAttribute("aria-hidden", "true"); document.body.appendChild(tip); }
+    if (!ship) { tip.hidden = true; return; }
+    tip.hidden = false; tip.textContent = ship.name;
+    tip.style.left = (e.clientX + 14) + "px"; tip.style.top = (e.clientY - 10) + "px";
+  }
   function drawShips(state, progress) {
     if (!state) return;
     const live = new Set();
@@ -249,6 +270,10 @@ window.UpShip = window.UpShip || {};
       let n = shipNodes[ship.id];
       if (!n) {
         const g = el("g", { class: "ship", tabindex: 0, role: "button" }, layers.ships);
+        // The ship's name appears beside the pointer as it passes over.
+        g.addEventListener("pointerenter", e => shipTip(ship, e));
+        g.addEventListener("pointermove", e => shipTip(ship, e));
+        g.addEventListener("pointerleave", () => shipTip(null));
         el("ellipse", { rx: 58, ry: 22, class: "ship-hit" }, g);
         const c0 = U.SHIP_CLASSES[ship.classId], SH = U.shipArt.SHADOW;
         // A designed ship's drawing may not exist for a moment while the game starts; a stock ship stands in until it does.
@@ -297,6 +322,7 @@ window.UpShip = window.UpShip || {};
 
   // Zoom and pan ------------------------------------------------------------
   function applyView() {
+    trafficDirty = true; if (U.state) requestAnimationFrame(() => drawTraffic());
     setTimeout(() => syncExtras(U.state), 0);
     svg.setAttribute("viewBox", `${view.x} ${view.y} ${view.w} ${view.h}`);
     // zoom = screen pixels per map unit, so labels and icons keep a fixed on-screen size.
@@ -603,6 +629,7 @@ window.UpShip = window.UpShip || {};
   const pt = id => { const c = U.cityById[id]; return [c.lat, c.lon]; };
 
   // Traffic and smoke are painted on a transparent canvas over the map, so their movement never repaints the map itself.
+  let trafficDirty = false;
   let trafficLast = 0, tcv = null, puffs = [], sprite = null, shadowSprite = null;
   function trafficCanvas() {
     if (tcv) return tcv;
@@ -642,8 +669,10 @@ window.UpShip = window.UpShip || {};
   }
   function drawTraffic() {
     const cv = trafficCanvas();
-    const now = performance.now(), dt = Math.min(0.1, (now - (trafficLast || now)) / 1000);
-    if (now - trafficLast < 33) return; trafficLast = now;
+    // Traffic and its smoke move only while time is passing; paused, everything holds still.
+    const now = performance.now(), dt = U.turnActive ? Math.min(0.1, (now - (trafficLast || now)) / 1000) : 0;
+    // Redrawn about 30 times a second, and at once whenever the map moves, so traffic never lags behind a pan or zoom.
+    if (now - trafficLast < 33 && !trafficDirty) return; trafficLast = now; trafficDirty = false;
     const w = svg.clientWidth, h = svg.clientHeight, dpr = window.devicePixelRatio || 1;
     if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); cv.style.width = w + "px"; cv.style.height = h + "px"; }
     const pb = svg.parentNode.getBoundingClientRect(), sb = svg.getBoundingClientRect();
