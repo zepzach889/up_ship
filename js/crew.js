@@ -125,6 +125,7 @@ window.UpShip = window.UpShip || {};
     let grads = 0, officer = false;
     for (const id in state.facilities) { const lvl = (state.facilities[id] || {}).school || 0; if (!lvl) continue;
       grads += SCHOOL_OUTPUT[lvl]; if (Math.random() < lvl * 0.15) officer = true; }
+    grads = Math.min(grads, Math.max(0, target(state) - state.crew.hands));          // no more than the reserve calls for
     if (grads) {
       const before = state.crew.hands; state.crew.hands += grads;
       state.crew.skill = (state.crew.skill * before + 0.6 * grads) / state.crew.hands;
@@ -184,11 +185,32 @@ window.UpShip = window.UpShip || {};
     ship.captainId = c.id; c.shipId = ship.id;
   }
   function dismiss(state, id) { const c = state.captains.find(x => x.id === id); if (c) retire(state, c, null); }
+  // Moving a captain to a ship that already has one swaps them; standing down leaves the ship without a captain.
+  function move(state, captainId, shipId) {
+    const c = state.captains.find(x => x.id === captainId); if (!c) return;
+    const from = c.shipId, other = state.captains.find(x => x.shipId === shipId && x.id !== c.id);
+    assign(state, c.id, shipId);
+    if (other && from) assign(state, other.id, from);
+    return other || null;
+  }
+  function standDown(state, captainId) {
+    const c = state.captains.find(x => x.id === captainId); if (!c) return;
+    const ship = state.ships.find(s => s.captainId === c.id); if (ship) ship.captainId = null;
+    c.shipId = null;
+  }
+  // The reserve: the share of spare hands kept above what the fleet needs. Schools train only up to it.
+  const reservePct = state => { state.crew.reserve = state.crew.reserve ?? 10; return state.crew.reserve; };
+  const target = state => Math.ceil(needed(state) * (1 + reservePct(state) / 100));
+  function hireToReserve(state) {
+    const n = Math.max(0, target(state) - state.crew.hands), afford = Math.floor(Math.max(0, state.money) / HAND_FEE), k = Math.min(n, afford);
+    if (k > 0) hireHands(state, k);
+    return k;
+  }
   function hireHands(state, n) { const fee = n * HAND_FEE; if (state.money < fee) return; state.money -= fee;
     const before = state.crew.hands; state.crew.hands += n; state.crew.skill = (state.crew.skill * before + 0.3 * n) / state.crew.hands; }
   function releaseHands(state, n) { state.crew.hands = Math.max(0, state.crew.hands - n); }
   const skillWord = s => s < 0.45 ? "Green" : s < 0.75 ? "Trained" : "Seasoned";
 
-  U.crew = { TRAITS, GRADES, BACKGROUNDS, STAFFING, SCHOOL_OUTPUT, HAND_WAGE, HAND_FEE, init, captainOf, mods, needFor, needed, effectiveStaffing, flew, monthly,
+  U.crew = { move, standDown, reservePct, target, hireToReserve, TRAITS, GRADES, BACKGROUNDS, STAFFING, SCHOOL_OUTPUT, HAND_WAGE, HAND_FEE, init, captainOf, mods, needFor, needed, effectiveStaffing, flew, monthly,
     afterAccident, hire, assign, dismiss, hireHands, releaseHands, grade, wage, skillWord };
 })(window.UpShip);

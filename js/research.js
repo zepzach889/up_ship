@@ -137,18 +137,28 @@ window.UpShip = window.UpShip || {};
     R(state).current = id;
     return true;
   }
-  function setFunding(state, level) { if (FUNDING[level]) R(state).funding = level; }
+  // Funding is a percentage of normal, 0 to 200. Speed grows a little slower than spending: more money cannot all
+  // be spent usefully at once, so rushing costs more for each step of progress. Laboratories (later) multiply the speed.
+  const PRESET_PCT = { low: 60, normal: 100, high: 150 };
+  function fundingPct(r) { if (r.fundingPct == null) r.fundingPct = PRESET_PCT[r.funding] || 100; return r.fundingPct; }
+  function rate(r) { const k = fundingPct(r) / 100; return { cost: k, speed: Math.pow(k, 0.8) * (r.labMult || 1) }; }
+  function setFunding(state, level) {
+    const r = R(state);
+    if (typeof level === "number" || /^\d+$/.test(level)) r.fundingPct = Math.max(0, Math.min(200, Math.round(+level / 10) * 10));
+    else if (PRESET_PCT[level]) r.fundingPct = PRESET_PCT[level];
+  }
   function monthlyCost(state) {
     const r = R(state);
     if (!r.current) return 0;
     const p = projectInfo(state, r.current);
-    return p.cost / p.days * 30 * FUNDING[r.funding].cost;
+    return p.cost / p.days * 30 * rate(r).cost;
   }
   function daysLeft(state) {
     const r = R(state);
     if (!r.current) return 0;
     const p = projectInfo(state, r.current);
-    return Math.ceil((1 - (r.progress[r.current] || 0)) * p.days / FUNDING[r.funding].speed);
+    const sp = rate(r).speed; if (!sp) return Infinity;
+    return Math.ceil((1 - (r.progress[r.current] || 0)) * p.days / sp);
   }
 
   // Called once a day from the simulation.
@@ -156,7 +166,7 @@ window.UpShip = window.UpShip || {};
     const r = R(state);
     if (!r.current) return;
     const p = projectInfo(state, r.current);
-    const f = FUNDING[r.funding];
+    const f = rate(r);
     const cost = p.cost / p.days * f.cost;
     U.sim.addGeneral(state, cost);
     state.year.research = (state.year.research || 0) + cost;
@@ -237,6 +247,6 @@ window.UpShip = window.UpShip || {};
     };
   }
 
-  U.research = { BRANCHES, TECHS, FUNDING, techById, init, has, available, projectInfo, choose, setFunding, monthlyCost, daysLeft,
+  U.research = { fundingPct, rate, BRANCHES, TECHS, FUNDING, techById, init, has, available, projectInfo, choose, setFunding, monthlyCost, daysLeft,
     daily, unlockedClasses, builtWith, refitOptions, applyRefits, stats, CLASS_UNLOCK };
 })(window.UpShip);

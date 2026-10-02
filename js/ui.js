@@ -46,6 +46,19 @@ window.UpShip = window.UpShip || {};
     $("#telegrams .tg-all").addEventListener("click", dismissAll);
     document.querySelectorAll("[data-open]").forEach(b => b.addEventListener("click", () => select({ type: b.dataset.open })));
     document.querySelectorAll("[data-office]").forEach(b => b.addEventListener("click", () => U.designer.open()));
+    $("#panel-body").addEventListener("change", e => {
+      const sel = e.target.closest && e.target.closest("[data-move-captain]");
+      if (!sel || !sel.value) return;
+      const s = U.state, c = s.captains.find(x => x.id === sel.dataset.moveCaptain);
+      if (sel.value === "__spare") { U.crew.standDown(s, c.id); notify(`Captain ${c.name} stands down and becomes a spare captain.`); }
+      else { const from = s.ships.find(x => x.id === c.shipId), to = s.ships.find(x => x.id === sel.value), other = U.crew.move(s, c.id, to.id);
+        notify(other ? `Captain ${c.name} takes ${to.name}; Captain ${other.name} ${from ? `takes ${from.name}` : "becomes a spare captain"}.` : `Captain ${c.name} takes command of ${to.name}.`); }
+      h.changed(); render();
+    });
+    $("#panel-body").addEventListener("input", e => {
+      if (e.target.id === "reserve-pct") { U.state.crew.reserve = +e.target.value; const rd = $("#reserve-read"); if (rd) rd.textContent = `${e.target.value}% above what the fleet needs`; h.changed(); return; }
+      if (e.target.id === "fund-pct") { U.research.setFunding(U.state, +e.target.value); const rd = $("#fund-read"); if (rd) rd.textContent = fundingText(U.state); h.changed(); }
+    });
     $("#draft-undo").addEventListener("click", () => { draft.pop(); updateDraft(); });
     $("#draft-cancel").addEventListener("click", () => endDraft());
     $("#draft-circuit").addEventListener("change", () => updateDraft());
@@ -130,6 +143,7 @@ window.UpShip = window.UpShip || {};
     U.map.highlight(sel);
     if (U.tutorial) U.tutorial.check(sel);
     $("#panel").hidden = !sel;
+    $("#panel").classList.toggle("panel-wide", !!sel && sel.type === "fleet");
     document.querySelectorAll("[data-open]").forEach(b => b.classList.toggle("is-active", !!sel && sel.type === b.dataset.open));
     render();
     $(".panel-inner").scrollTop = 0;    // a newly opened panel starts at its top
@@ -150,9 +164,11 @@ window.UpShip = window.UpShip || {};
     const prev = navStack[navStack.length - 1];
     if (prev && DETAIL.has(selection.type)) html = `<button class="btn-quiet panel-back" data-back>← Back to ${esc(backLabel(prev))}</button>` + html;
     // The panel is rebuilt as the game moves on; whatever is being typed survives it, with focus and cursor.
+    const openDetails = [...body.querySelectorAll("details")].map(d => d.open);
     const a = document.activeElement, typing = a && body.contains(a) && a.id && /^(INPUT|TEXTAREA)$/.test(a.tagName) && a.type !== "checkbox" && a.type !== "range"
       ? { id: a.id, value: a.value, start: safe(() => a.selectionStart), end: safe(() => a.selectionEnd) } : null;
     body.innerHTML = html;
+    body.querySelectorAll("details").forEach((d, i) => { if (openDetails[i]) d.open = true; });
     if (typing) {
       const el = document.getElementById(typing.id);
       if (el) { el.value = typing.value; el.focus(); if (typing.start != null) safe(() => el.setSelectionRange(typing.start, typing.end)); }
@@ -201,7 +217,8 @@ window.UpShip = window.UpShip || {};
           <small class="fac-next">${T.about[0]}${needsMast ? ". Needs a mast here first." : ""}</small></div></div>`}</li>`;
       }
       const needsMast = type !== "mast" && type !== "school" && type !== "refinery" && !hasMast;
-      const yours = lvl ? `${F.SIZE_NAMES[lvl]}: ${T.about[lvl - 1]}` : pub ? "Using the public one" : "None";
+      const fee = { mast: `£${F.FEES.mast} a landing`, terminal: "1s a passenger, 2s a ton", shed: `overhauls cost ${Math.round(F.FEES.shed * 100)}% more` }[type];
+      const yours = lvl ? `${F.SIZE_NAMES[lvl]}: ${T.about[lvl - 1]}` : pub && fee ? `Public: ${fee}` : pub ? "Using the public one" : "None";
       const now = lvl ? U.facArt.icon(type, lvl, true, 40) : pub ? U.facArt.icon(type, 2, false, 40) : "";
       const button = cost == null ? "" : `<div class="fac-buy">${U.facArt.icon(type, lvl + 1, true, 46)}<div>
         <button class="btn-quiet" data-build="${id}:${type}" ${state.money < cost || needsMast ? "disabled" : ""}>
@@ -210,12 +227,9 @@ window.UpShip = window.UpShip || {};
       return `<li><div class="fac-head">${now}<b>${T.name}</b><span>${yours}</span></div>${button}</li>`;
     }).join("");
     return `<h3>Facilities</h3>
-      <p class="small">${pub ? "A public mast, terminal, and shed (medium size) are open to any company here, for a fee. Your own avoid the fees." : "No public facilities here. You need your own mast to land."}</p>
+      <p class="small">${pub ? `A public mast, terminal, and shed (medium size) are open to any company here; their fees are shown beside each. Your own charge no fees, only upkeep of ${Math.round(F.UPKEEP * 100)}% of their building price a year.` : "No public facilities here. You need your own mast to land."}</p>
       <ul class="facilities">${rows}</ul>
-      ${U.facilities.hasPublic(id) ? `<details class="fee-note"><summary>What the public facilities here cost</summary>
-        <p>Ships without your own facilities here use the city's: <b>£${U.facilities.FEES.mast} a landing</b> at the public mast,
-        <b>1s a passenger and 2s a ton</b> through the public terminal, and overhauls in the public shed cost <b>${Math.round(U.facilities.FEES.shed * 100)}% more</b>.
-        Your own facilities charge no fees; they cost ${Math.round(U.facilities.UPKEEP * 100)}% of their building price a year to keep up.</p></details>` : ""}
+
       <dl>${row("Gas supply", F.publicGas(id) ? "Public hydrogen and helium" : F.canTopUp(state, id, "hydrogen") ? "Your own" : "None")}
         ${row("Helium price", `${Math.round(F.heliumPrice(state, id) * 100)}% of the port price`)}
         ${U.aether.discovered(state) ? row("Aetherium", F.ownLevel(state, id, "refinery") ? "From your refinery" : state.aether.publicOpen != null && id === U.aether.capital(state) ? "From the government works, for a fee" : "None here") : ""}
@@ -406,7 +420,18 @@ window.UpShip = window.UpShip || {};
         </form></details>`;
   }
 
-  function routePanel(state, id) { const base = routePanelBase(state, id); return base == null ? base : base + demandNote(state, id); }
+  function routePanel(state, id) { return routePanelBase(state, id); }
+  // Each stretch of the route: its length, and how many travellers and how much freight a day would go by airship.
+  function demandTable(state, legs) {
+    const C = U.competition;
+    const rows = legs.map(([a, b]) => {
+      const m = C ? C.mult(state, a, b) : 1, pax = U.sim.dailyPassengers(a, b) * m, tons = U.sim.dailyFreight(a, b) * m;
+      const comp = Math.abs(m - 1) < 0.005 ? "none" : `${m > 1 ? "+" : "−"}${Math.round(Math.abs(m - 1) * 100)}%`;
+      return `<tr><th scope="row">${city(a).name} to ${city(b).name}</th><td>${km(U.sim.distanceKm(a, b))}</td><td>${Math.round(pax)}</td><td>${Math.round(tons * 10) / 10}</td><td>${comp}</td></tr>`;
+    }).join("");
+    return `<p class="small demand-intro">Demand is how many people and how many tons a day would go by airship between two stops; it grows with the cities' size and importance, and competing trains, steamers, and airplanes take a share or add to it.</p>
+      <table class="demand-table"><thead><tr><th scope="col">Stretch</th><th scope="col">Distance</th><th scope="col">Passengers a day</th><th scope="col">Tons a day</th><th scope="col">Competition</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
   function demandNote(state, id) {
     const r = state.routes.find(x => x.id === id); if (!r) return "";
     const stops = r.stops, C = U.competition, rows = [];
@@ -442,9 +467,7 @@ window.UpShip = window.UpShip || {};
     return `
       <h2>${esc(U.sim.routeName(route.stops, route.circuit))}</h2>
       <p class="sub">${route.circuit ? "Circuit" : "Out and back"}. Ships leave as soon as they are ready.</p>
-      <dl>
-        ${legs.map(([a, b]) => row(`${city(a).name} to ${city(b).name}`, km(U.sim.distanceKm(a, b)))).join("")}
-      </dl>
+      ${demandTable(state, legs)}
       ${faresBlock(state, route)}
       ${competitionBlock(state, route)}
       <h3>Ships</h3>
@@ -506,7 +529,8 @@ window.UpShip = window.UpShip || {};
       const cls = e.classId ? U.SHIP_CLASSES[e.classId] : null, f = U.physics.figures(state, e.d), need = U.designer.needsResearch(state, e.d);
       const price = cls ? U.sim.orderTerms(state, cls.id).price : f.price, days = cls ? U.sim.orderTerms(state, cls.id).days : f.buildDays;
       const shedOk = cls ? !!U.facilities.deliveryCity(state, cls.id) : !!f.shed && hasShed(state, f.shed.n);
-      const blocked = need.length || f.status === "sink" || state.money < price || !shedOk;
+      const short = Math.max(0, Math.ceil(price - state.money)), room = U.contracts.loanLimit(state) - state.loan;
+      const blocked = need.length || f.status === "sink" || (state.money < price && short > room) || !shedOk;
       const sketch = designSketch(state, e, f);
       return `<section class="card${need.length ? " needs" : ""}">
         <h4>${esc(e.name)}${cls ? ` <small>class</small>` : ""}</h4>${sketch}
@@ -531,6 +555,9 @@ window.UpShip = window.UpShip || {};
     const name = (prompt(first ? "Name the first ship of this design. The class will take its name:" : "Name the new ship:", suggestion) || "").trim();
     if (!name) return;
     if (first) { e.name = name; }
+    // Short of funds but within credit: borrow the difference first.
+    const price = e.classId ? U.sim.orderTerms(s, e.classId).price : U.physics.figures(s, e.d).price, short = Math.ceil(price - s.money);
+    if (short > 0) { if (!confirm(`Borrow ${money(short)} to pay for her? It adds ${money(short * U.ECONOMY.loanRate / 12)} a month in interest.`)) return; U.contracts.borrow(s, short); }
     const c = U.designClass.ensure(s, e);
     if (first) { c.name = name; c.names = [name]; }
     const ship = U.sim.order(s, c.id, name, null, c.gas);
@@ -552,6 +579,8 @@ window.UpShip = window.UpShip || {};
         const weeks = t.days < 45 ? `${Math.round(t.days / 7)} weeks` : `${Math.round(t.days / 30 * 2) / 2} months`;
         const surplus = c.kind === "surplus", left = state.surplusLeft[id] || 0;
         const deliverAt = U.facilities.deliveryCity(state, id);
+        const short = Math.max(0, Math.ceil(t.price - state.money)), room = U.contracts.loanLimit(state) - state.loan;
+        const otherwiseOk = !(surplus && !left) && !!deliverAt, canBorrow = short > 0 && short <= room && otherwiseOk;
         const blocked = state.money < t.price || (surplus && !left) || !deliverAt;
         return `<section class="card">
           <h4>${c.name}</h4>
@@ -570,9 +599,12 @@ window.UpShip = window.UpShip || {};
             ${surplus ? row("Hulls left", left ? `${left} of ${U.ECONOMY.surplusStock}` : "None") : ""}
           </dl>
           <div class="card-foot"><span class="price">${money(t.price)}${grant ? ` <small class="was">${money(t.price + grant)}</small>` : ""}</span>
-            <button class="btn" data-order="${id}" ${blocked ? "disabled" : ""}>Order</button></div>
+            ${canBorrow ? `<button class="btn" data-borrow-order="${id}:${short}" title="Adds ${money(short * U.ECONOMY.loanRate / 12)} a month in interest">Borrow ${money(short)} and order</button>`
+              : `<button class="btn" data-order="${id}" ${blocked ? "disabled" : ""}>Order</button>`}</div>
           ${!deliverAt ? `<p class="note">Needs a ${U.facilities.SIZE_NAMES[U.facilities.shipSize(id)].toLowerCase()} shed or larger to be built in: build or enlarge your own shed${U.facilities.hasPublic(state.company.home) ? " (public sheds are medium)" : ""}.</p>`
-            : surplus && !left ? `<p class="note">Every surplus hull has been sold.</p>` : state.money < t.price ? `<p class="note">Not enough funds.</p>`
+            : surplus && !left ? `<p class="note">Every surplus hull has been sold.</p>`
+            : canBorrow ? `<p class="note">Borrowing the difference adds ${money(short * U.ECONOMY.loanRate / 12)} a month in interest.</p>`
+            : state.money < t.price ? `<p class="note">Not enough funds${short > room ? `, and your credit falls ${money(short - room)} short` : ""}.</p>`
             : deliverAt !== state.company.home ? `<p class="note">Delivered at ${city(deliverAt).name}, where your shed is big enough.</p>` : ""}
         </section>`;
       }).join("")}
@@ -613,29 +645,40 @@ window.UpShip = window.UpShip || {};
       <p class="small">${C.BACKGROUNDS[c.background].name}. ${Math.round(c.hours).toLocaleString("en-GB")} hours in command${c.blamed ? `. <span class="neg">Blamed by an inquiry${c.blamed > 1 ? ` ${c.blamed} times` : ""}</span>` : ""}${c.cleared ? `. Cleared by ${c.cleared > 1 ? c.cleared + " inquiries" : "an inquiry"}` : ""}.</p>
       <div class="traits">${traitChips(c)}</div>${lines}
       ${hiring ? `<div class="btn-row"><button class="btn" data-hire="${c.id}" ${state.money < C.wage(c) * 2 ? "disabled" : ""}>Hire, ${money(C.wage(c) * 2)} to sign</button></div>`
-        : `<p class="small">${ship ? `Commands ${shipLink(ship)}.` : "Without a ship."}</p><div class="btn-row">
-          ${!ship ? idle.map(x => `<button class="btn-quiet" data-appoint="${c.id}:${x.id}">Take ${esc(x.name)}</button>`).join("") : ""}
+        : `<p class="small">${ship ? `Commands ${shipLink(ship)}.` : "Spare: without a ship."}</p><div class="btn-row">
+          <select data-move-captain="${c.id}" aria-label="Move Captain ${esc(c.name)} to another ship"><option value="">${ship ? "Move to…" : "Appoint to…"}</option>
+            ${state.ships.filter(x => x.id !== c.shipId && x.deliveryTick <= state.tick).map(x => { const o = state.captains.find(k => k.shipId === x.id); return `<option value="${x.id}">${esc(x.name)}${o ? ` (swap with ${esc(o.name.split(" ").slice(-1)[0])})` : " (no captain)"}</option>`; }).join("")}
+            ${ship ? `<option value="__spare">Stand down to spare</option>` : ""}</select>
           <button class="btn-danger" data-dismiss="${c.id}">Dismiss</button></div>`}</li>`;
   }
+  let crewTab = "crew";
   function crewPanel(state) {
-    const C = U.crew, need = C.needed(state), cr = state.crew;
-    const schools = Object.entries(state.facilities).filter(([, f]) => f.school).map(([id, f]) => `${city(id).name} (${C.SCHOOL_OUTPUT[f.school]} a month)`);
+    const C = U.crew, need = C.needed(state), cr = state.crew, reserve = C.reservePct(state), tgt = C.target(state);
     const idleShips = state.ships.filter(x => !x.captainId && x.deliveryTick <= state.tick);
-    return `<h2>Crew</h2>
-      <p class="sub">${state.captains.length} captain${state.captains.length === 1 ? "" : "s"}, ${cr.hands} hands.</p>
+    const tabs = `<div class="seg tabs-seg" role="group" aria-label="Crew office"><button data-crew-tab="crew" aria-pressed="${crewTab === "crew"}">Your crew</button><button data-crew-tab="board" aria-pressed="${crewTab === "board"}">Hiring board (${state.board.length})</button></div>`;
+    if (crewTab === "board") return `<h2>Crew office</h2>${tabs}
+      <h3>Candidates this month</h3><p class="small">A new board is posted each month; most candidates take other posts if you wait.</p>
+      <ul class="cap-list">${state.board.map(c => captainCard(state, c, true)).join("") || `<li class="note">No candidates at the moment.</li>`}</ul>`;
+    const commanding = state.captains.filter(c => c.shipId), spare = state.captains.filter(c => !c.shipId);
+    const schools = Object.entries(state.facilities).filter(([, f]) => f.school).map(([id, f]) => `${city(id).name} (up to ${C.SCHOOL_OUTPUT[f.school]} a month)`);
+    const short = tgt - cr.hands;
+    return `<h2>Crew office</h2>${tabs}
       ${idleShips.length ? `<p class="status">${idleShips.map(x => esc(x.name)).join(", ")} ${idleShips.length === 1 ? "has" : "have"} no captain and cannot fly.</p>` : ""}
-      <h3>Hands</h3>
-      <dl>${row("Hands employed", `${cr.hands} for ${need} berths${need > cr.hands ? ` <span class="neg">(short)</span>` : ""}`)}
-        ${row("Skill", C.skillWord(cr.skill))}
-        ${row("Wages", `${money(cr.hands * C.HAND_WAGE)} a month`)}
+      <h3>Captains · ${commanding.length} commanding</h3>
+      <ul class="cap-list">${commanding.map(c => captainCard(state, c, false)).join("") || `<li class="note">None.</li>`}</ul>
+      <h3>Spare captains · ${spare.length}</h3>
+      <ul class="cap-list">${spare.map(c => captainCard(state, c, false)).join("") || `<li class="note">None. Hire from the Hiring board.</li>`}</ul>
+      <h3>Trained hands</h3>
+      <dl>${row("In the pool", cr.hands)}${row("Needed by the fleet", need)}
+        ${row("Your reserve", `${reserve}% spare: ${tgt} hands`)}
+        ${row(short > 0 ? "Short of the reserve" : "Above the reserve", `<span class="${short > 0 ? "neg" : "pos"}">${Math.abs(short)}</span>`)}
+        ${row("Skill", C.skillWord(cr.skill))}${row("Wages", `${money(cr.hands * C.HAND_WAGE)} a month`)}
         ${row("Training schools", schools.length ? schools.join(", ") : "None: build one in a city's panel")}</dl>
-      <div class="btn-row"><button class="btn-quiet" data-hands="5">Hire 5 hands, ${money(5 * C.HAND_FEE)}</button><button class="btn-quiet" data-hands="-5">Let 5 go</button></div>
-      <p class="small">Hands hired off the street are green: they raise the risk of incidents until they have flown a while. School graduates arrive trained.</p>
-      <h3>Captains</h3>
-      <ul class="cap-list">${state.captains.map(c => captainCard(state, c, false)).join("") || `<li class="note">No captains.</li>`}</ul>
-      <h3>Hiring board</h3>
-      <p class="small">A few candidates each month. Most take other posts if you wait.</p>
-      <ul class="cap-list">${state.board.map(c => captainCard(state, c, true)).join("")}</ul>`;
+      <label class="field-label" for="reserve-pct">Reserve of spare hands</label>
+      <div class="fund"><input type="range" id="reserve-pct" min="0" max="50" step="5" value="${reserve}"><span class="fund-read" id="reserve-read">${reserve}% above what the fleet needs</span></div>
+      <div class="btn-row">${short > 0 ? `<button class="btn" data-hands-reserve>Hire to reserve: ${short} hands, ${money(short * C.HAND_FEE)}</button>` : ""}
+        <button class="btn-quiet" data-hands="5">Hire 5</button><button class="btn-quiet" data-hands="-5">Let 5 go</button></div>
+      <p class="small">Training schools train only while you are below your reserve, and their graduates arrive trained. Hands hired off the street are green and raise the risk of incidents until they have flown a while.</p>`;
   }
 
   // Settings: the accident level, changeable at any time.
@@ -735,12 +778,22 @@ window.UpShip = window.UpShip || {};
     return `<svg class="research-diagram" viewBox="0 0 300 432" role="img" aria-label="Research tree">${heads}${eras}${lines}${nodes}</svg>`;
   }
 
+  // The funding slider's reading: the level, what it costs, and when the current project would finish.
+  function fundingText(state) {
+    const R = U.research, r = state.research, pct = R.fundingPct(r);
+    if (!pct) return "0%: research paused";
+    if (!r.current) return `${pct}% of normal${pct > 100 ? ": faster, but each step costs more" : pct < 100 ? ": slower, and cheaper" : ""}`;
+    const days = R.daysLeft(state), d = U.sim.dateOf(state.tick);
+    const end = new Date(d.getTime() + days * 86400000).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+    return `${pct}% · ${money(R.monthlyCost(state))} a month · finishes about ${end}`;
+  }
   function researchPanel(state) {
     const R = U.research, r = state.research;
     const cur = r.current ? R.projectInfo(state, r.current) : null;
     const pctDone = cur ? Math.round((r.progress[r.current] || 0) * 100) : 0;
     const days = cur ? R.daysLeft(state) : 0;
-    const funding = Object.entries(R.FUNDING).map(([k, f]) => `<button class="${r.funding === k ? "btn" : "btn-quiet"}" data-funding="${k}">${f.name}</button>`).join("");
+    const funding = `<div class="fund"><input type="range" id="fund-pct" min="0" max="200" step="10" value="${R.fundingPct(r)}" aria-label="Research funding, percent of normal">
+      <span class="fund-read" id="fund-read">${fundingText(state)}</span></div>`;
     const row2 = (t, status) => `<li class="rt-${status}"><div><b>${t.name}</b><small>${t.effect}</small></div>
       ${status === "open" ? `<button class="btn-quiet" data-research="${t.id}">Research</button>` : `<span class="rt-status">${{ done: "Done", current: "In progress", locked: "Locked" }[status]}</span>`}</li>`;
     const branches = R.BRANCHES.map(b => {
@@ -758,9 +811,9 @@ window.UpShip = window.UpShip || {};
       ${cur ? `<div class="status"><b>${cur.name}</b>: ${cur.effect}.
         <div class="meter"><span style="width:${pctDone}%"></span></div>
         ${pctDone}% done, about ${days < 60 ? days + " days" : Math.round(days / 30) + " months"} left at this funding. Costs ${money(R.monthlyCost(state))} a month.</div>
-        <p class="field-label">Funding</p><div class="btn-row">${funding}</div>`
+        <p class="field-label">Funding</p>${funding}`
         : `<p class="status">No project under way. Choose one from the diagram or the lists below.</p>
-        <p class="field-label">Funding for the next project</p><div class="btn-row">${funding}</div>`}
+        <p class="field-label">Funding for the next project</p>${funding}`}
       ${branches}`;
   }
 
@@ -786,6 +839,33 @@ window.UpShip = window.UpShip || {};
     return "moored";
   }
 
+  // The fleet list: each ship's picture, name, class, route, condition, and what it is doing; sorted or grouped by class.
+  let fleetSort = "class";
+  function fleetRows(state, shown) {
+    if (!shown.length) return `<p class="note">No ships in this group.</p>`;
+    const routeOf = s => { const r = U.sim.routeOf(state, s); return r ? U.sim.routeName(r.stops, r.circuit) : "No route"; };
+    const row = ({ s, g }) => {
+      const c = U.SHIP_CLASSES[s.classId], SH = U.shipArt.SHADOW, art = [s.art, c.art, c.kind, "passenger"].find(k => k && SH[k] && U.shipArt.VIEW[k]);
+      const muted = g === "building" || (s.overhaulUntil && s.overhaulUntil > U.sim.H(state.tick));
+      return `<button class="fleet-row${muted ? " muted" : ""}" data-go="ship:${s.id}">
+        <span class="fleet-art">${U.shipArt.illustration(art, 96)}</span>
+        <span class="fleet-info"><b>${esc(s.name)}</b><small><i>${esc(c.name)}${c.designed ? " (own design)" : ""}</i> · ${esc(routeOf(s))}</small></span>
+        <span class="fleet-right">${conditionDots(s.condition)}<small>${esc(shipStatus(state, s, U.progress || 0))}</small></span></button>`;
+    };
+    if (fleetSort === "class") {
+      const byClass = {};
+      for (const x of shown) (byClass[x.s.classId] = byClass[x.s.classId] || []).push(x);
+      return Object.entries(byClass).map(([id, list]) => `<p class="fleet-group">${esc(U.SHIP_CLASSES[id].name)} · ${list.length}</p>${list.map(row).join("")}`).join("");
+    }
+    const sorted = [...shown].sort(fleetSort === "name" ? (a, b) => a.s.name.localeCompare(b.s.name)
+      : fleetSort === "route" ? (a, b) => routeOf(a.s).localeCompare(routeOf(b.s)) : (a, b) => a.s.condition - b.s.condition);
+    return sorted.map(row).join("");
+  }
+  // Five dots, one for each fifth of condition: green, amber from three, red at one; the exact figure on hover.
+  function conditionDots(cond) {
+    const n = Math.max(cond > 0 ? 1 : 0, Math.round(cond * 5)), col = n >= 4 ? "ok" : n >= 2 ? "warn" : "bad";
+    return `<span class="cdots ${col}" title="Condition ${Math.round(cond * 100)}%" aria-label="Condition ${Math.round(cond * 100)} percent">${[0, 1, 2, 3, 4].map(i => `<i class="${i < n ? "on" : ""}"></i>`).join("")}</span>`;
+  }
   function fleetPanel(state) {
     const counts = {}, groups = { all: 0, flying: 0, moored: 0, out: 0, building: 0 };
     const list = state.ships.map(s => ({ s, g: shipGroup(state, s) }));
@@ -809,11 +889,9 @@ window.UpShip = window.UpShip || {};
     return `
       <h2>Fleet</h2>
       <p class="sub">${state.ships.length} ship${state.ships.length === 1 ? "" : "s"}</p>
-      <dl>${Object.keys(counts).map(id => row(U.SHIP_CLASSES[id].name, counts[id])).join("")}</dl>
       <div class="filters">${Object.keys(names).map(k => `<button class="${fleetFilter === k ? "btn" : "btn-quiet"}" data-filter="${k}">${names[k]} ${groups[k]}</button>`).join("")}</div>
-      <ul class="ledger">${shown.map(({ s, g }) => `<li><button class="ledger-item group-${g}" data-go="ship:${s.id}"><span>${esc(s.name)}</span>
-          <small>${U.SHIP_CLASSES[s.classId].name}, condition ${Math.round(s.condition * 100)}%. ${esc(shipStatus(state, s, U.progress || 0))}.</small></button></li>`).join("")
-        || `<li class="note">No ships in this group.</li>`}</ul>
+      <div class="seg fleet-sort" role="group" aria-label="Sort the fleet">${[["class", "By class"], ["name", "Name"], ["route", "Route"], ["cond", "Condition"]].map(([k, n]) => `<button data-fleet-sort="${k}" aria-pressed="${fleetSort === k}">${n}</button>`).join("")}</div>
+      ${fleetRows(state, shown)}
       <button class="btn" data-open-panel="shipyard">Order a ship</button>
       ${weatherPolicyBlock(state)}
       ${gasPolicyBlock(state)}
@@ -958,9 +1036,12 @@ window.UpShip = window.UpShip || {};
         ${row("Credit limit", money(limit))}
         ${row("Interest", `${Math.round(U.ECONOMY.loanRate * 100)}% a year, ${money(state.loan * U.ECONOMY.loanRate / 12)} a month`)}
       </dl>
-      <div class="btn-row">
-        <button class="btn" data-loan="borrow" ${state.loan + step > limit ? "disabled" : ""}>Borrow ${money(step)}</button>
-      </div>
+      ${limit - state.loan > 0 ? `<form class="loan-form" data-loan-form="borrow">
+        <label for="borrow-amount" class="field-label">Borrow an amount</label>
+        <div class="field"><span class="pound">£</span><input id="borrow-amount" name="amount" type="number" min="0" step="any" max="${Math.floor(limit - state.loan)}" placeholder="${Math.min(step, Math.floor(limit - state.loan))}" inputmode="numeric">
+          <button type="submit" class="btn">Borrow</button></div>
+        <p class="small">Up to ${money(limit - state.loan)}. Each £1,000 borrowed adds ${money(1000 * U.ECONOMY.loanRate / 12)} a month in interest.</p></form>`
+        : `<p class="note">You have borrowed all the banks will lend.</p>`}
       ${state.loan ? `<form class="loan-form" data-loan-form="repay">
         <label for="repay-amount" class="field-label">Repay an amount</label>
         <div class="field"><span class="pound">£</span><input id="repay-amount" name="amount" type="number" min="0" step="any"
@@ -1000,9 +1081,19 @@ window.UpShip = window.UpShip || {};
       h.changed(); render(); return;
     }
     if (b.dataset.openPanel) { select({ type: b.dataset.openPanel }); return; }
+    if (b.dataset.fleetSort) { fleetSort = b.dataset.fleetSort; render(); return; }
+    if (b.dataset.crewTab) { crewTab = b.dataset.crewTab; render(); return; }
+    if (b.dataset.handsReserve != null) { const n = U.crew.hireToReserve(s); if (n) notify(`Hired ${n} hands.`); h.changed(); render(); return; }
     if (b.dataset.back != null) { const prev = navStack.pop(); if (prev) select(prev, true); return; }
     if (b.dataset.officeOpen != null) { U.designer.open(); return; }
     if (b.dataset.orderDesign) { orderDesign(s, +b.dataset.orderDesign); return; }
+    if (b.dataset.borrowOrder) {
+      const [id, amt] = b.dataset.borrowOrder.split(":");
+      if (!U.contracts.borrow(s, +amt)) return;
+      const ship = U.sim.order(s, id, undefined, yardConfig[id] || "two", yardGas[id] || "hydrogen");
+      if (ship) notify(`Borrowed ${money(+amt)} and ordered ${ship.name}, ${U.SHIP_CLASSES[ship.classId].name}. Delivery ${shortDate(U.sim.dateOf(ship.deliveryTick))}.`);
+      h.changed(); render(); return;
+    }
     if (b.dataset.order) {
       const ship = U.sim.order(s, b.dataset.order, undefined, yardConfig[b.dataset.order] || "two", yardGas[b.dataset.order] || "hydrogen");
       if (ship) { notify(`Ordered ${ship.name}, ${U.SHIP_CLASSES[ship.classId].name}. Delivery ${shortDate(U.sim.dateOf(ship.deliveryTick))}.`); h.changed(); render(); }
@@ -1119,8 +1210,11 @@ window.UpShip = window.UpShip || {};
     }
     if (f.dataset.loanForm) {
       const amount = +f.elements.amount.value;
-      if (!(amount > 0) && f.dataset.loanForm === "repay") return;
-      if (f.dataset.loanForm === "repay") {
+      if (!(amount > 0) && (f.dataset.loanForm === "repay" || f.dataset.loanForm === "borrow")) return;
+      if (f.dataset.loanForm === "borrow") {
+        const got = U.contracts.borrow(U.state, amount);
+        if (got) notify(`Borrowed ${money(got)}. ${money(U.state.loan)} now owed, at ${money(U.state.loan * U.ECONOMY.loanRate / 12)} a month in interest.`);
+      } else if (f.dataset.loanForm === "repay") {
         const paid = U.contracts.repay(U.state, amount);
         if (paid) notify(`Repaid ${money(paid)}. ${U.state.loan ? money(U.state.loan) + " still owed." : "The loan is paid off."}`);
       } else U.contracts.setInstallment(U.state, amount);

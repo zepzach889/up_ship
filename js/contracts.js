@@ -303,10 +303,13 @@ window.UpShip = window.UpShip || {};
     const ships = state.ships.filter(s => s.deliveryTick <= state.tick).reduce((a, s) => a + S().saleValue(state, s), 0);
     return Math.floor((E().loanBase + ships * E().loanShipShare) / E().loanStep) * E().loanStep;
   }
-  function borrow(state) {
-    if (state.loan + E().loanStep > loanLimit(state)) return false;
-    state.loan += E().loanStep; state.money += E().loanStep;
-    return true;
+  // Borrow any amount up to the remaining credit (a standard step if none is given). Returns what was lent.
+  function borrow(state, amount) {
+    const room = loanLimit(state) - state.loan;
+    amount = Math.floor(Math.min(amount == null ? E().loanStep : amount, room));
+    if (!(amount > 0)) return 0;
+    state.loan += amount; state.money += amount;
+    return amount;
   }
   // Repay any amount up to what is owed and what the account holds.
   function repay(state, amount) {
