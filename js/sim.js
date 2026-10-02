@@ -615,12 +615,24 @@ window.UpShip = window.UpShip || {};
       return s;
     } catch (e) { return null; }
   }
+  // A whole game as a file, for backups or moving it to another computer; loading checks it is one this version can read.
+  function exportGame(state) {
+    return JSON.stringify({ format: "upship-game", version: VERSION, savedAt: new Date().toISOString(), company: state.company.name, state });
+  }
+  function importGame(text) {
+    let data; try { data = JSON.parse(text); } catch (e) { return "That file could not be read as an Up, Ship! game."; }
+    if (!data || data.format !== "upship-game" || !data.state) return "That file is not an Up, Ship! saved game.";
+    if (data.version !== VERSION) return `That game was saved by a different version of Up, Ship! (save version ${data.version}; this one reads ${VERSION}).`;
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(data.state)); } catch (e) { return "There was not enough room in the browser to load that game."; }
+    saving = false;                               // the game playing now must not save over the one just loaded as the page reloads
+    return null;
+  }
   function clearSave() {
     saving = false;
     try { for (const k of ["upship.save.v1", "upship.save.v2", "upship.save.v3", "upship.save.v4", "upship.save.v5", "upship.save.v6", "upship.save.v7", "upship.save.v8", "upship.save.v9", "upship.save.v10", SAVE_KEY]) localStorage.removeItem(k); } catch (e) {}
   }
 
-  U.sim = { finishOverhaul, telegram, addGeneral, addIncome, nearestCity, distanceKm, fare, freightRate, dailyPassengers, dailyFreight, start, advance, beginTurn, dateOf, dateAtHour, H,
+  U.sim = { exportGame, importGame, finishOverhaul, telegram, addGeneral, addIncome, nearestCity, distanceKm, fare, freightRate, dailyPassengers, dailyFreight, start, advance, beginTurn, dateOf, dateAtHour, H,
     routeSummary, save, load, clearSave, editRoute, routeOf, routeName, routeLegs, createRoute, deleteRoute, canAssign, assign,
     order, policyGas, heliumFill, rename, suggestName, longestLeg, catalog, orderTerms, saleValue, canSell, sell, positionAt, ageYears, roman };
 })(window.UpShip);

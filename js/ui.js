@@ -46,7 +46,13 @@ window.UpShip = window.UpShip || {};
     $("#telegrams .tg-all").addEventListener("click", dismissAll);
     document.querySelectorAll("[data-open]").forEach(b => b.addEventListener("click", () => select({ type: b.dataset.open })));
     document.querySelectorAll("[data-office]").forEach(b => b.addEventListener("click", () => U.designer.open()));
-    $("#panel-body").addEventListener("change", e => {
+    $("#panel-body").addEventListener("change", async e => {
+      if (e.target.id === "game-file" && e.target.files[0]) {
+        if (!confirm("Load this game? It replaces the game you are playing now.")) { e.target.value = ""; return; }
+        const err = U.sim.importGame(await e.target.files[0].text());
+        if (err) { notify(err); e.target.value = ""; return; }
+        location.reload(); return;
+      }
       const sel = e.target.closest && e.target.closest("[data-move-captain]");
       if (!sel || !sel.value) return;
       const s = U.state, c = s.captains.find(x => x.id === sel.dataset.moveCaptain);
@@ -178,6 +184,28 @@ window.UpShip = window.UpShip || {};
     if (input) { input.focus(); input.select(); }
   }
   const safe = f => { try { return f(); } catch (e) { return null; } };
+  // The whole game to a file, and back.
+  function saveToFile(state) {
+    U.sim.save(state);
+    const d = U.sim.dateOf(state.tick), stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const data = { format: "upship-save", version: state.version, savedAt: new Date().toISOString(), state };
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: "application/json" }));
+    a.download = `${state.company.name.replace(/[^\w\- ]+/g, "").trim() || "Up Ship"} ${stamp}.upship-save.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    notify("A copy of this game is saved in your downloads.");
+  }
+  async function loadFromFile(file) {
+    if (!file) return;
+    let data;
+    try { data = JSON.parse(await file.text()); } catch (e) { notify("That file could not be read as a saved game."); return; }
+    if (!data || data.format !== "upship-save" || !data.state || !data.state.company) { notify("That file is not an Up, Ship! saved game."); return; }
+    if (data.state.version !== U.state?.version && data.state.version !== 11) { notify("That game was saved by a different version of Up, Ship! and cannot be loaded."); return; }
+    if (!confirm(`Load ${data.state.company.name}, saved at ${U.sim.dateOf(data.state.tick).toLocaleDateString("en-GB", { month: "long", year: "numeric" })}? It replaces the game you are playing now.`)) return;
+    try { localStorage.setItem("upship.save.v11", JSON.stringify(data.state)); } catch (e) { notify("There was not room to load that game."); return; }
+    location.reload();
+  }
   function backLabel(sel) {
     if (sel.type === "ship") { const s = U.state.ships.find(x => x.id === sel.id); return s ? s.name : "the ship"; }
     if (sel.type === "route") { const r = U.state.routes.find(x => x.id === sel.id); return r ? r.name || "the route" : "the route"; }
@@ -693,7 +721,15 @@ window.UpShip = window.UpShip || {};
       <ul class="choice-list">${opts.map(([k, n, d]) => `<li><button class="${cur === k ? "btn" : "btn-quiet"}" data-accidents="${k}">${n}</button><small>${d}</small></li>`).join("")}</ul>
       <h3>Map</h3>
       <div class="btn-row"><button class="${(state.settings || {}).traffic !== false ? "btn" : "btn-quiet"}" data-traffic="on">Show traffic</button><button class="${(state.settings || {}).traffic === false ? "btn" : "btn-quiet"}" data-traffic="off">Hide traffic</button></div>
-      <p class="small">Trains, steamers, and airplanes moving along the railways and steamer lanes, on the Normal and Competition layers.</p>`;
+      <p class="small">Trains, steamers, and airplanes moving along the railways and steamer lanes, on the Normal and Competition layers.</p>
+      <h3>Saved game</h3>
+      <p class="small">The game saves itself in this browser. Save a copy to a file to keep a backup, move the game to another computer, or send it to someone.</p>
+      <div class="btn-row"><button class="btn" data-save-file>Save a copy to a file</button><button class="btn-quiet" data-load-file>Load a game from a file</button></div>
+      <input type="file" accept=".json,application/json" hidden id="load-game-file">
+      <h3>This game</h3>
+      <p class="small">Save a copy of this game to a file, to keep as a backup or move to another computer. Loading a game from a file replaces the one you are playing.</p>
+      <div class="btn-row"><button class="btn-quiet" data-game-export>Save a copy to a file</button><button class="btn-quiet" data-game-import>Load a game from a file</button></div>
+      <input type="file" accept=".json,application/json" hidden id="game-file">`;
   }
   // Aetherium discovered: convert now, or wait for refining to bring the price down.
   function aetherDecisionPanel(state) {
@@ -1081,6 +1117,16 @@ window.UpShip = window.UpShip || {};
       h.changed(); render(); return;
     }
     if (b.dataset.openPanel) { select({ type: b.dataset.openPanel }); return; }
+    if (b.dataset.saveFile != null) { saveToFile(s); return; }
+    if (b.dataset.loadFile != null) { const inp = $("#load-game-file"); inp.onchange = () => loadFromFile(inp.files[0]); inp.click(); return; }
+    if (b.dataset.gameExport != null) {
+      const a = document.createElement("a"), d = U.sim.dateOf(s.tick);
+      a.href = URL.createObjectURL(new Blob([U.sim.exportGame(s)], { type: "application/json" }));
+      a.download = `${s.company.name.replace(/[^\w\- ]+/g, "").trim() || "Up Ship"} ${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}.upship-game.json`;
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      notify("Saved a copy of this game to a file."); return;
+    }
+    if (b.dataset.gameImport != null) { $("#game-file").click(); return; }
     if (b.dataset.fleetSort) { fleetSort = b.dataset.fleetSort; render(); return; }
     if (b.dataset.crewTab) { crewTab = b.dataset.crewTab; render(); return; }
     if (b.dataset.handsReserve != null) { const n = U.crew.hireToReserve(s); if (n) notify(`Hired ${n} hands.`); h.changed(); render(); return; }
