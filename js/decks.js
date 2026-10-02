@@ -11,14 +11,15 @@ window.UpShip = window.UpShip || {};
     promenade: { name: "Promenade",   sw: "#c9a86c", floor: "url(#dp-deckPlanks)" },
     galley:    { name: "Galley",      sw: "#8c8f8a", floor: "url(#dp-tiles)" },
     wash:      { name: "Washroom",    sw: "#dfe3e0", floor: "url(#dp-whiteTiles)" },
-    corridor:  { name: "Corridor",    sw: "#2d3f66", floor: "url(#dp-runner)" }
+    corridor:  { name: "Corridor",    sw: "#2d3f66", floor: "url(#dp-runner)" },
+    saloon:    { name: "Seating saloon", sw: "#6b5a8a", floor: "url(#dp-carpetPlum)" }
   };
   // How many squares wide a deck is: a little over half the hull's diameter.
   // The decks sit in the lower hull, where it is still nearly full width: about 72% of the diameter.
   const DECK_SHARE = 0.72;
   const widthSq = D => Math.max(3, Math.floor(DECK_SHARE * D / 2.5));
 const OPP = { n: "s", s: "n", e: "w", w: "e" };
-const OPEN = new Set(["dining", "lounge", "promenade", "corridor"]);
+const OPEN = new Set(["dining", "lounge", "promenade", "corridor", "saloon"]);
 function frame(rect, back) {
   const x = rect.c * S, y = rect.r * S, cw = rect.w * S, ch = rect.h * S;
   if (back === "n") return { t: `translate(${x} ${y})`, W: cw, D: ch };
@@ -164,6 +165,9 @@ const FURNISH = {
     for (let i = 0; i < 4; i++) L.put(8, 8, cornerSpots(W, D, 8, 8), (x, y) => F.palm(x + 4, y + 4));
     return L.svg();
   },
+  // A seating saloon arranges itself to fit: a single line facing the windows in a narrow strip along the hull,
+  // facing pairs at little tables in a small room, and rows facing the bow with an aisle in a wide room.
+  saloon(fr, n, door, back, onHull) { return saloonLayout(fr, door, back, onHull).svg; },
   promenade(fr, n, door) {
     const { W, D } = fr, L = layout(W, D, null);
     for (let x = 2, k = 0; x + 6 <= W - 1; x += 7, k++)
@@ -229,6 +233,7 @@ const DEFS_BODY = `
 <pattern id="dp-parquet" width="12" height="12" patternUnits="userSpaceOnUse"><rect width="12" height="12" fill="#a0703f"/><rect width="6" height="6" fill="#ae7c48"/><rect x="6" y="6" width="6" height="6" fill="#ae7c48"/><path d="M0,2 H6 M0,4 H6 M8,0 V6 M10,0 V6 M6,8 H12 M6,10 H12 M2,6 V12 M4,6 V12" stroke="#8c5f33" stroke-width="0.3"/></pattern>
 <pattern id="dp-deckPlanks" width="24" height="4" patternUnits="userSpaceOnUse"><rect width="24" height="4" fill="#d3b27a"/><path d="M0,4 H24 M9,0 V4" stroke="#b08e57" stroke-width="0.4"/><path d="M0,1.6 H24" stroke="#ddbd88" stroke-width="0.3"/></pattern>
 <pattern id="dp-carpetRed" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="#7b3a3a"/><path d="M4,1 L7,4 L4,7 L1,4 Z" fill="none" stroke="#8e4a47" stroke-width="0.5"/></pattern>
+<pattern id="dp-carpetPlum" width="10" height="10" patternUnits="userSpaceOnUse"><rect width="10" height="10" fill="#5a4a72"/><path d="M0,5 H10 M5,0 V10" stroke="#6b5a8a" stroke-width="0.6"/></pattern>
 <pattern id="dp-carpetBlue" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="#3f4f78"/><circle cx="4" cy="4" r="1.3" fill="none" stroke="#5a6b96" stroke-width="0.5"/></pattern>
 <pattern id="dp-carpetGreen" width="10" height="10" patternUnits="userSpaceOnUse"><rect width="10" height="10" fill="#2f6358"/><path d="M5,1 L9,5 L5,9 L1,5 Z" fill="none" stroke="#3f7a6c" stroke-width="0.5"/><circle cx="5" cy="5" r="0.8" fill="#c9a65b" opacity="0.5"/></pattern>
 <pattern id="dp-tiles" width="6" height="6" patternUnits="userSpaceOnUse"><rect width="6" height="6" fill="#9ea19c"/><rect width="3" height="3" fill="#b8bab5"/><rect x="3" y="3" width="3" height="3" fill="#b8bab5"/></pattern>
@@ -299,6 +304,41 @@ const DEFS_BODY = `
   }
 
   function pickDoor(cand, side) { const list = cand[side].sort((a, b) => a.r - b.r || a.c - b.c); return { side, cell: list[Math.floor((list.length - 1) / 2)] }; }
+  // The bow's direction in a room's furnishing frame, for each way the frame can be turned (the bow is to the left on the deck).
+  const BOW = { n: [-1, 0], s: [1, 0], w: [0, -1], e: [0, 1] };
+  const faceRot = ([dx, dy]) => dx < 0 ? 90 : dx > 0 ? -90 : dy < 0 ? 180 : 0;       // armchair rotation to face that way
+  function saloonLayout(fr, door, back, onHull) {
+    const { W, D } = fr, L = layout(W, D, door), seat = (x, y, rot) => F.armchair(x, y, "#c9a06a", rot);     // tan leather, clear on the carpet
+    let seats = 0;
+    const put = (w, d, spots, draw, count) => { if (L.put(w, d, spots, draw)) seats += count; };
+    if (D < 1.3 * Q && onHull) {
+      // A narrow strip along the hull: one line of seats facing the windows, which are at the back wall.
+      for (let x = 1; x + 6.4 <= W - 0.5; x += 7.4) put(6.4, 6.4, [[x, 0.8]], (x, y) => seat(x + 3.2, y + 3.2, 180), 1);
+    } else if (W < 2.6 * Q && D < 2.6 * Q) {
+      // A small room: compartments of two facing pairs across a little table.
+      for (const [x, y] of gridSpots(W, D, 13, 14, 14)) put(13, 14, [[x, y]], (x, y) => seat(x + 3.4, y + 3.4, 0) + seat(x + 9.6, y + 3.4, 0)
+        + `<rect x="${x + 2.5}" y="${y + 6.2}" width="8" height="2.6" fill="#6b4529" filter="url(#dp-lift)"/>` + seat(x + 3.4, y + 10.6, 180) + seat(x + 9.6, y + 10.6, 180), 4);
+    } else {
+      // A wide room: rows facing the bow, with an aisle down the middle.
+      const [bx, by] = BOW[back] || [-1, 0], rot = faceRot([bx, by]);
+      // An aisle down the middle only in a room deep enough to need one; a shallower room opens straight onto its corridor.
+      if (bx !== 0) {
+        const aisle = D >= 3 * Q ? D / 2 : -99, rows = [];
+        for (let x = 1.5; x + 6.4 <= W - 1; x += 7.6) rows.push(x);
+        for (const x of rows) for (let y = 1; y + 6.4 <= D - 0.5; y += 6.8) {
+          if (y < aisle && y + 6.4 > aisle - 3) continue; if (y > aisle - 3 && y < aisle + 3) continue;
+          put(6.4, 6.4, [[x, y]], (x, y) => seat(x + 3.2, y + 3.2, rot), 1);
+        }
+      } else {
+        const aisle = W >= 3 * Q ? W / 2 : -99;
+        for (let y = 1.5; y + 6.4 <= D - 1; y += 7.6) for (let x = 1; x + 6.4 <= W - 0.5; x += 6.8) {
+          if (x + 6.4 > aisle - 3 && x < aisle + 3) continue;
+          put(6.4, 6.4, [[x, y]], (x, y) => seat(x + 3.2, y + 3.2, rot), 1);
+        }
+      }
+    }
+    return { svg: L.svg(), seats };
+  }
   // Drawing a deck. Coordinates: x along the ship (bow on the left), y across it (port side at the top).
   function render(ctx, opts = {}) {
     if (!ctx.cols.length) return "";
@@ -319,10 +359,11 @@ const DEFS_BODY = `
       const dr = door(ctx, room), back = dr ? OPP[dr.side] : (room.cells.some(k => k.r === 0) ? "n" : room.cells.some(k => k.r === ctx.rows - 1) ? "s" : "n");
       for (const rect of rectangles(room)) {
         let b = back;
-        if (room.type === "promenade") b = rect.r === 0 ? "n" : rect.r + rect.h === ctx.rows ? "s" : back;
+        if (room.type === "promenade" || (room.type === "saloon" && rect.h === 1)) b = rect.r === 0 ? "n" : rect.r + rect.h === ctx.rows ? "s" : back;
         const shift = ctx.colX(rect.c) - rect.c * S;                       // blocks after the first sit a little to the right
         const fr = frame(rect, b), scaled = { W: fr.W / K, D: fr.D / K };
-        furn += `<g transform="translate(${shift} 0) ${fr.t} scale(${K})">${FURNISH[room.type](scaled, rect.w * rect.h, doorInFrame(dr, rect, b))}</g>`;
+        const onHull = rect.r === 0 || rect.r + rect.h === ctx.rows;
+        furn += `<g transform="translate(${shift} 0) ${fr.t} scale(${K})">${FURNISH[room.type](scaled, rect.w * rect.h, doorInFrame(dr, rect, b), b, onHull)}</g>`;
       }
       if (dr) doors += `<g transform="translate(${ctx.colX(dr.cell.c) - dr.cell.c * S} 0)">${doorMark(dr)}</g>`;
       if (ctx.plan.first[room.id] && (room.type === "cabin")) {
@@ -385,7 +426,7 @@ const DEFS_BODY = `
 
   // What the plan adds up to: berths by class, seats, public space, and anything missing.
   function stats(d) {
-    const out = { laidOut: false, berths: 0, first: 0, second: 0, seats: 0, publicSq: 0, windowsSq: 0, washSq: 0, galley: false, noDoor: 0, empty: [], comfort: 0 };
+    const out = { laidOut: false, daySeats: 0, berths: 0, first: 0, second: 0, seats: 0, publicSq: 0, windowsSq: 0, washSq: 0, galley: false, noDoor: 0, empty: [], comfort: 0 };
     for (const deck of ["lower", "upper"]) {
       const ctx = context(d, deck);
       for (const b of ctx.bays) if (!ctx.cols.some((c, i) => c.bay === b && ctx.grid.some(row => row[i]))) out.empty.push(`${deck === "upper" ? "upper" : "lower"} deck of bay ${b}`);
@@ -395,30 +436,46 @@ const DEFS_BODY = `
         // Berths by size: one square takes a single berth, two or three a pair, four or more four in bunks.
         if (room.type === "cabin") { const b = cabinBerths(n); out.berths += b; if (ctx.plan.first[room.id]) out.first += b; else out.second += b; }
         if (room.type === "suite") { out.berths += 2; out.first += 2; }
+        if (room.type === "saloon") out.daySeats += saloonSeats(ctx, room);
         if (room.type === "dining") out.seats += seatCount(room);
-        if (OPEN.has(room.type) && room.type !== "corridor") out.publicSq += n;
+        if (OPEN.has(room.type) && room.type !== "corridor" && room.type !== "saloon") out.publicSq += n;     // seats are not legroom
         if (room.type === "promenade") out.windowsSq += room.cells.filter(k => k.r === 0 || k.r === ctx.rows - 1).length;
         if (room.type === "wash") out.washSq += n;
         if (room.type === "galley") out.galley = true;
         if (!OPEN.has(room.type) && !door(ctx, room)) out.noDoor++;
       }
     }
-    // Comfort, out of 100: public space per passenger, windows, the share in suites, and whether meals and washing are provided for.
-    if (out.berths) {
-      const space = Math.min(1, out.publicSq / out.berths / 1.2), view = Math.min(1, out.windowsSq / out.berths / 0.4);
-      const suites = Math.min(1, out.first / out.berths / 0.5), fed = out.seats >= out.berths * 0.5 && out.galley ? 1 : out.seats ? 0.5 : 0;
-      const wash = Math.min(1, out.washSq * 8 / out.berths);
+    // Comfort, out of 100: public space per passenger, windows, the share in first class, meals, and washrooms.
+    // Seated passengers count fully: a saloon of seats with nowhere to stretch the legs scores low.
+    const P = out.berths + out.daySeats; out.passengers = P;
+    if (P) {
+      const space = Math.min(1, out.publicSq / P / 1.2), view = Math.min(1, out.windowsSq / P / 0.4);
+      const suites = Math.min(1, out.first / P / 0.5), fed = out.seats >= P * 0.5 && out.galley ? 1 : out.seats ? 0.5 : 0;
+      const wash = Math.min(1, out.washSq * 8 / P);
       out.comfort = Math.round(20 + 30 * space + 15 * view + 15 * suites + 10 * fed + 10 * wash);
     }
     out.notes = [];
     if (out.noDoor) out.notes.push(`${out.noDoor} room${out.noDoor > 1 ? "s have" : " has"} no door onto a corridor or promenade.`);
     if (out.seats && !out.galley) out.notes.push("A dining room but no galley to cook for it.");
-    if (out.berths && out.washSq * 8 < out.berths) out.notes.push(`Too few washrooms: one square serves about eight passengers.`);
+    if (P && out.washSq * 8 < P) out.notes.push(`Too few washrooms: one square serves about eight passengers.`);
     // Short hops need no meals; longer services do.
-    if (out.berths >= 20 && out.seats < out.berths * 0.5) out.notes.push("Too few dining seats: passengers eat in two sittings at most.");
+    if (P >= 20 && out.seats < P * 0.5) out.notes.push("Too few dining seats: passengers eat in two sittings at most.");
+    if (out.daySeats && !out.berths) out.notes.push("Seats only: this ship carries passengers on legs of up to 12 hours.");
     return out;
   }
   const cabinBerths = n => n === 1 ? 1 : n <= 3 ? 2 : 4;
+  // Saloon seats, counted from the same layout as the drawing.
+  function saloonSeats(ctx, room) {
+    const dr = door(ctx, room), back0 = dr ? OPP[dr.side] : (room.cells.some(k => k.r === 0) ? "n" : room.cells.some(k => k.r === ctx.rows - 1) ? "s" : "n");
+    let n = 0;
+    for (const rect of rectangles(room)) {
+      let b = back0;
+      if (rect.h === 1) b = rect.r === 0 ? "n" : rect.r + rect.h === ctx.rows ? "s" : back0;
+      const fr = frame(rect, b), onHull = rect.r === 0 || rect.r + rect.h === ctx.rows;
+      n += saloonLayout({ W: fr.W / K, D: fr.D / K }, doorInFrame(dr, rect, b), b, onHull).seats;
+    }
+    return n;
+  }
   function seatCount(room) {
     let n = 0;
     for (const rect of rectangles(room)) { const W = rect.w * S / K, D = rect.h * S / K, big = W >= 3 * Q && D >= 2 * Q, t = big ? 19 : 15;

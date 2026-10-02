@@ -26,7 +26,10 @@ window.UpShip = window.UpShip || {};
     const max = U.research.stats(state, ship).passengers;
     if (!max) return { total: 0, first: 0, second: 0 };
     const c = U.SHIP_CLASSES[ship.classId];
-    if (c.designed) { const first = Math.round(max * c.firstShare); return { total: max, first, second: max - first }; }
+    if (c.designed) {
+      const first = Math.round(max * c.firstShare), seats = c.passengers ? Math.min(max - first, Math.round(max * (c.seats || 0) / c.passengers)) : 0;
+      return { total: max, first, second: max - first, seats };
+    }
     const cfg = configOf(ship), total = Math.max(1, Math.floor(max * cfg.berths));
     const first = Math.round(total * cfg.firstShare);
     return { total, first, second: total - first };

@@ -475,7 +475,7 @@ window.UpShip = window.UpShip || {};
         ${row("Engines", f.engines ? `${f.engines} × ${fmt(f.hpEach)} hp` : "None")}${row("Cruising speed", `${fmt(f.speed)} km/h`)}${row("Range", `${fmt(Math.round(f.range / 50) * 50)} km`)}</dl>
       ${trimGauge(f)}
       <h3>Capacity</h3><dl>
-        ${row("Passengers", f.planned ? `${f.berths} (${f.firstBerths} first class)` : `about ${f.berths}`)}${f.planned && f.berths ? row("Comfort", `${f.comfort} of 100`) : ""}${row("Cargo", `${fmt(f.cargoCap, 1)} t`)}${row("Crew", `${f.crew} needed, ${f.crewBerths} berths`)}</dl>
+        ${row("Passengers", f.planned ? `${f.passengers}${f.daySeats ? ` (${f.berths} berths, ${f.daySeats} seats)` : ""}` : `about ${f.berths}`)}${f.planned && f.firstBerths ? row("First class", f.firstBerths) : ""}${f.planned && f.berths ? row("Comfort", `${f.comfort} of 100`) : ""}${row("Cargo", `${fmt(f.cargoCap, 1)} t`)}${row("Crew", `${f.crew} needed, ${f.crewBerths} berths`)}</dl>
       <h3>Cost and building</h3><dl>
         ${row("Price", money(f.price))}${row("Build time", `${fmt(f.buildDays / 30.4, 1)} months`)}${row("Running cost", `${money(f.daily)} a day`)}${row("Shed needed", f.shed ? f.shed.name : "None large enough")}</dl>
       <h3>Notes</h3><ul class="do-notes">${f.notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul>

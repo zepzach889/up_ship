@@ -112,6 +112,8 @@ window.UpShip = window.UpShip || {};
     const plan = U.decks && d.plan ? U.decks.stats(d) : null;
     f.planned = !!(plan && plan.laidOut);
     f.berths = f.planned ? plan.berths : decks * Math.round(12 * k);
+    f.daySeats = f.planned ? plan.daySeats : 0;                      // saloon seats: legs of up to 12 hours only
+    f.passengers = f.berths + f.daySeats;
     f.firstBerths = f.planned ? plan.first : 0; f.comfort = f.planned ? plan.comfort : null; f.plan = plan;
     f.cargoCap = holds * 6 * k2;
     f.crew = Math.round(4 + 2 * engines + f.berths / 5 + holds + L / 50);
@@ -119,11 +121,11 @@ window.UpShip = window.UpShip || {};
     // Ships carry only the ballast they need to land, about 6% of their lift, however much tank space they have.
     f.fuel = fuelCap; f.ballastCap = ballastCap; f.ballast = Math.min(ballastCap, f.gross * 0.06);
     f.payloadRoom = f.useful - fuelCap - f.ballast - f.crew * 0.1;
-    f.demand = f.berths * 0.12 + f.cargoCap;
+    f.demand = f.passengers * 0.12 + f.cargoCap;
     // The load, placed where it rides: fuel and ballast in their tanks, passengers on their decks, cargo in the holds, crew in their quarters.
     for (const x of fuelAt) put(fuelCap / fuelAt.length, x);
     for (const x of ballastAt) put(f.ballast / ballastAt.length, x);
-    const perDeck = decks ? f.berths * 0.12 / decks : 0;
+    const perDeck = decks ? f.passengers * 0.12 / decks : 0;
     for (const [n, x] of paxBays) put(perDeck * n, x);
     for (const x of holdBays) put(f.cargoCap / holdBays.length, x);
     const crewX = crewAt.length ? crewAt : [ln + 6];

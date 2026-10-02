@@ -47,12 +47,7 @@ window.UpShip = window.UpShip || {};
     document.querySelectorAll("[data-open]").forEach(b => b.addEventListener("click", () => select({ type: b.dataset.open })));
     document.querySelectorAll("[data-office]").forEach(b => b.addEventListener("click", () => U.designer.open()));
     $("#panel-body").addEventListener("change", async e => {
-      if (e.target.id === "game-file" && e.target.files[0]) {
-        if (!confirm("Load this game? It replaces the game you are playing now.")) { e.target.value = ""; return; }
-        const err = U.sim.importGame(await e.target.files[0].text());
-        if (err) { notify(err); e.target.value = ""; return; }
-        location.reload(); return;
-      }
+
       const sel = e.target.closest && e.target.closest("[data-move-captain]");
       if (!sel || !sel.value) return;
       const s = U.state, c = s.captains.find(x => x.id === sel.dataset.moveCaptain);
@@ -204,6 +199,7 @@ window.UpShip = window.UpShip || {};
     if (data.state.version !== U.state?.version && data.state.version !== 11) { notify("That game was saved by a different version of Up, Ship! and cannot be loaded."); return; }
     if (!confirm(`Load ${data.state.company.name}, saved at ${U.sim.dateOf(data.state.tick).toLocaleDateString("en-GB", { month: "long", year: "numeric" })}? It replaces the game you are playing now.`)) return;
     try { localStorage.setItem("upship.save.v11", JSON.stringify(data.state)); } catch (e) { notify("There was not room to load that game."); return; }
+    U.sim.stopSaving();
     location.reload();
   }
   function backLabel(sel) {
@@ -725,11 +721,7 @@ window.UpShip = window.UpShip || {};
       <h3>Saved game</h3>
       <p class="small">The game saves itself in this browser. Save a copy to a file to keep a backup, move the game to another computer, or send it to someone.</p>
       <div class="btn-row"><button class="btn" data-save-file>Save a copy to a file</button><button class="btn-quiet" data-load-file>Load a game from a file</button></div>
-      <input type="file" accept=".json,application/json" hidden id="load-game-file">
-      <h3>This game</h3>
-      <p class="small">Save a copy of this game to a file, to keep as a backup or move to another computer. Loading a game from a file replaces the one you are playing.</p>
-      <div class="btn-row"><button class="btn-quiet" data-game-export>Save a copy to a file</button><button class="btn-quiet" data-game-import>Load a game from a file</button></div>
-      <input type="file" accept=".json,application/json" hidden id="game-file">`;
+      <input type="file" accept=".json,application/json" hidden id="load-game-file">`;
   }
   // Aetherium discovered: convert now, or wait for refining to bring the price down.
   function aetherDecisionPanel(state) {
@@ -1119,14 +1111,6 @@ window.UpShip = window.UpShip || {};
     if (b.dataset.openPanel) { select({ type: b.dataset.openPanel }); return; }
     if (b.dataset.saveFile != null) { saveToFile(s); return; }
     if (b.dataset.loadFile != null) { const inp = $("#load-game-file"); inp.onchange = () => loadFromFile(inp.files[0]); inp.click(); return; }
-    if (b.dataset.gameExport != null) {
-      const a = document.createElement("a"), d = U.sim.dateOf(s.tick);
-      a.href = URL.createObjectURL(new Blob([U.sim.exportGame(s)], { type: "application/json" }));
-      a.download = `${s.company.name.replace(/[^\w\- ]+/g, "").trim() || "Up Ship"} ${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}.upship-game.json`;
-      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-      notify("Saved a copy of this game to a file."); return;
-    }
-    if (b.dataset.gameImport != null) { $("#game-file").click(); return; }
     if (b.dataset.fleetSort) { fleetSort = b.dataset.fleetSort; render(); return; }
     if (b.dataset.crewTab) { crewTab = b.dataset.crewTab; render(); return; }
     if (b.dataset.handsReserve != null) { const n = U.crew.hireToReserve(s); if (n) notify(`Hired ${n} hands.`); h.changed(); render(); return; }

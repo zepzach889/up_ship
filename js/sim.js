@@ -294,22 +294,26 @@ window.UpShip = window.UpShip || {};
     return out;
   }
 
+  const DAY_HOURS = 12;
   function board(state, ship, route, reserved = 0) {
     const c = U.research.stats(state, ship);
     const from = route.stops[ship.stop];
     const room = U.facilities.roomToday(state, from);
     // Berths by class, cut back if the terminal can't board everyone today.
     const b = U.passengers.berths(state, ship), cut = b.total ? Math.min(1, room.pax / b.total) : 0;
-    let seats1 = Math.floor(b.first * cut), seats2 = Math.floor(b.second * cut);
+    let seats1 = Math.floor(b.first * cut), daySeats = Math.floor((b.seats || 0) * cut), seats2 = Math.floor(b.second * cut) - daySeats;
     let hold = Math.min(c.cargoTons - reserved, room.tons), revenue = 0, tons = 0, p1 = 0, p2 = 0;
     for (const to of downstream(route, ship)) {
       const w = state.waiting[pairKey(from, to)];
       if (!w) continue;
       const km = distanceKm(from, to), fr = U.passengers.fares(state, route, km, c.fare);
-      const a = Math.min(seats1, Math.floor(w.p1)), s2 = Math.min(seats2, Math.floor(w.p2));
+      // Saloon seats are for trips of up to 12 hours; longer trips need a berth.
+      const day = km / c.speedKmh <= DAY_HOURS;
+      const a = Math.min(seats1, Math.floor(w.p1)), s2 = Math.min(seats2 + (day ? daySeats : 0), Math.floor(w.p2));
+      const fromSeats = day ? Math.min(daySeats, s2) : 0; daySeats -= fromSeats;
       const t = Math.min(hold, Math.floor(w.tons * 10) / 10);
       w.p1 = Math.max(0, w.p1 - a); w.p2 = Math.max(0, w.p2 - s2); w.tons -= t;
-      seats1 -= a; seats2 -= s2; hold -= t; p1 += a; p2 += s2; tons += t;
+      seats1 -= a; seats2 -= s2 - fromSeats; hold -= t; p1 += a; p2 += s2; tons += t;
       revenue += a * fr.first + s2 * fr.second + t * freightRate(km);
     }
     const pax = p1 + p2;
@@ -615,24 +619,14 @@ window.UpShip = window.UpShip || {};
       return s;
     } catch (e) { return null; }
   }
-  // A whole game as a file, for backups or moving it to another computer; loading checks it is one this version can read.
-  function exportGame(state) {
-    return JSON.stringify({ format: "upship-game", version: VERSION, savedAt: new Date().toISOString(), company: state.company.name, state });
-  }
-  function importGame(text) {
-    let data; try { data = JSON.parse(text); } catch (e) { return "That file could not be read as an Up, Ship! game."; }
-    if (!data || data.format !== "upship-game" || !data.state) return "That file is not an Up, Ship! saved game.";
-    if (data.version !== VERSION) return `That game was saved by a different version of Up, Ship! (save version ${data.version}; this one reads ${VERSION}).`;
-    try { localStorage.setItem(SAVE_KEY, JSON.stringify(data.state)); } catch (e) { return "There was not enough room in the browser to load that game."; }
-    saving = false;                               // the game playing now must not save over the one just loaded as the page reloads
-    return null;
-  }
+  // Stops the game saving itself, so a game just loaded from a file is not overwritten as the page reloads.
+  function stopSaving() { saving = false; }
   function clearSave() {
     saving = false;
     try { for (const k of ["upship.save.v1", "upship.save.v2", "upship.save.v3", "upship.save.v4", "upship.save.v5", "upship.save.v6", "upship.save.v7", "upship.save.v8", "upship.save.v9", "upship.save.v10", SAVE_KEY]) localStorage.removeItem(k); } catch (e) {}
   }
 
-  U.sim = { exportGame, importGame, finishOverhaul, telegram, addGeneral, addIncome, nearestCity, distanceKm, fare, freightRate, dailyPassengers, dailyFreight, start, advance, beginTurn, dateOf, dateAtHour, H,
+  U.sim = { stopSaving, finishOverhaul, telegram, addGeneral, addIncome, nearestCity, distanceKm, fare, freightRate, dailyPassengers, dailyFreight, start, advance, beginTurn, dateOf, dateAtHour, H,
     routeSummary, save, load, clearSave, editRoute, routeOf, routeName, routeLegs, createRoute, deleteRoute, canAssign, assign,
     order, policyGas, heliumFill, rename, suggestName, longestLeg, catalog, orderTerms, saleValue, canSell, sell, positionAt, ageYears, roman };
 })(window.UpShip);

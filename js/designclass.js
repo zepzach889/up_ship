@@ -5,7 +5,7 @@ window.UpShip = window.UpShip || {};
 (function (U) {
   const P = () => U.physics;
   const K = 0.6;                                        // drawing units per metre, to match the hand-drawn ships
-  const FUEL_COST = 110;                                // pounds per tonne of fuel, in the game's running-cost terms
+  const FUEL_COST = 60;                                 // pounds per tonne of fuel, in the game's running-cost terms (calibrated to the builders' ships)
   const artKey = (id, rev) => `design-${id}-r${rev}`;
 
   // Figures from the physics, turned into a class. Research built into the figures is recorded as "baked",
@@ -15,7 +15,7 @@ window.UpShip = window.UpShip || {};
     const id = "d" + entry.id, year = U.sim.dateOf(state.tick).getFullYear();
     // A design too heavy to carry a full load flies with what it can lift.
     const lift = f.demand > 0 ? Math.max(0, Math.min(1, f.payloadRoom / f.demand)) : 1;
-    const berths = Math.floor((f.planned ? f.berths : f.berths) * lift), first = f.planned ? f.firstBerths : 0;
+    const berths = Math.floor(f.passengers * lift), first = f.planned ? f.firstBerths : 0, seats = Math.floor((f.daySeats || 0) * lift);
     const c = {
       id, name: entry.name, role: "Own design", basis: `Designed by your Drawing Office, ${year}`,
       kind: berths ? "passenger" : "cargo", designed: true, designId: entry.id,
@@ -23,7 +23,7 @@ window.UpShip = window.UpShip || {};
       speedKmh: Math.round(f.speed), rangeKm: Math.round(f.range / 100) * 100, crew: f.crew,
       price: f.price, dailyCost: f.daily, fuelPerKm: Math.round(f.fuelPerKm * FUEL_COST * 1000) / 1000, buildDays: f.buildDays,
       shedSize: f.shed ? f.shed.n : 3, liner: f.L > 200, gas: d.gas || "hydrogen",
-      firstShare: berths && f.berths ? first / f.berths : 0, comfort: f.planned && f.comfort != null ? f.comfort : 55,
+      firstShare: berths && f.passengers ? first / f.passengers : 0, seats, fuelCal: FUEL_COST, comfort: f.planned && f.comfort != null ? f.comfort : 55,
       baked: U.research.builtWith(state), names: [entry.name], requires: [],
       design: d, rev: 1, revs: { 1: JSON.parse(JSON.stringify(d.livery)) }, art: artKey(id, 1)
     };
@@ -54,7 +54,12 @@ window.UpShip = window.UpShip || {};
     }
   }
   function restore(state) {
-    for (const c of Object.values(state.designClasses || {})) register(c);
+    for (const c of Object.values(state.designClasses || {})) {
+      // Classes made before the fuel figure was recalibrated burn as they should from now on.
+      if (!c.fuelCal) { c.fuelPerKm = Math.round(c.fuelPerKm * FUEL_COST / 110 * 1000) / 1000; c.fuelCal = FUEL_COST; }
+      if (c.seats == null) c.seats = 0;
+      register(c);
+    }
   }
 
   // Generated drawings: a side view and a top view in the livery, bow toward +x like the hand-drawn ships.
