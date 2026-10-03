@@ -132,7 +132,9 @@ window.UpShip = window.UpShip || {};
     due.sort((a, b) => a.hour - b.hour);
     for (const t of due) {
       st.telegrams.push(t);
-      U.ui.showTelegram(t);
+      // Routine news goes to the log without interrupting; anything that may need the player still appears.
+      const routine = !t.major && /OVERHAUL COMPLETE|RETURNS FROM HER CHARTER|BACK IN SERVICE|REPAINTED|MONTHLY REPORT|WAGES PAID/.test(t.text);
+      if (!routine) U.ui.showTelegram(t);
       if (U.designer && U.designer.isOpen()) U.designer.telegram(t);
       if (t.major) { if (auto || U.turnActive) { U.pausedByTelegram = { auto: auto || 0 }; lastAuto = auto || lastAuto; auto = 0; slowedFrom = 0; if (U.turnActive) frozen = true; } }
       else if (auto > 1) { slowedFrom = auto; auto = 1; if (U.turnActive) setTurnLength(U.TIME.msPerTurn[1]); }

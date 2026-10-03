@@ -14,8 +14,9 @@ window.UpShip = window.UpShip || {};
     if (typeof a === "string") a = U.cityById[a];
     if (typeof b === "string") b = U.cityById[b];
     const R = 6371, rad = Math.PI / 180;
-    const dLat = (b.lat - a.lat) * rad, dLon = (b.lon - a.lon) * rad;
-    const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLon / 2) ** 2;
+    const la = a.realLat ?? a.lat, lo = a.realLon ?? a.lon, lb = b.realLat ?? b.lat, lob = b.realLon ?? b.lon;      // gateways measure from their real places
+    const dLat = (lb - la) * rad, dLon = (lob - lo) * rad;
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(la * rad) * Math.cos(lb * rad) * Math.sin(dLon / 2) ** 2;
     return 2 * R * Math.asin(Math.sqrt(h));
   }
   function nearestCity(lat, lon) {
@@ -29,7 +30,9 @@ window.UpShip = window.UpShip || {};
   const freightRate = km => E().freightBase + E().freightPerKm * km;
   function paxWeight(c) { return U.TIERS[c.tier].demand * U.SPECIALTIES[c.specialty].passengerBoost; }
   function freightWeight(c) { return U.TIERS[c.tier].demand / 6 * U.SPECIALTIES[c.specialty].freightBoost; }
-  function dailyPassengers(a, b) { return Math.sqrt(paxWeight(U.cityById[a]) * paxWeight(U.cityById[b])) * E().passengerShare; }
+  // Seasons: travel peaks in high summer and falls off in winter, about 15% either way.
+  const season = () => { if (!U.state) return 1; const m = dateOf(U.state.tick).getUTCMonth(); return 1 + 0.15 * Math.cos((m - 6.5) / 12 * 2 * Math.PI); };
+  function dailyPassengers(a, b) { return Math.sqrt(paxWeight(U.cityById[a]) * paxWeight(U.cityById[b])) * E().passengerShare * season(); }
   function dailyFreight(a, b) { return Math.sqrt(freightWeight(U.cityById[a]) * freightWeight(U.cityById[b])) * E().freightShare; }
   const pairKey = (a, b) => a + ">" + b;
 
@@ -195,6 +198,8 @@ window.UpShip = window.UpShip || {};
   function canAssign(state, ship, route) {
     const c = U.research.stats(state, ship), longest = longestLeg(route.stops, route.circuit);
     if (longest > c.rangeKm) return `A leg of ${Math.round(longest)} km is beyond its ${c.rangeKm.toLocaleString("en-GB")} km range`;
+    const closed = route.stops.find(id => U.cityById[id].gateway && !gatewayOpen(state, id));
+    if (closed) return `No landing rights at ${U.cityById[closed].name} yet: send a survey flight first`;
     return null;
   }
   function assign(state, shipId, routeId) {
@@ -626,12 +631,26 @@ window.UpShip = window.UpShip || {};
   }
   // Stops the game saving itself, so a game just loaded from a file is not overwritten as the page reloads.
   function stopSaving() { saving = false; }
+  // A survey flight to a gateway: the ship leaves her route for the round trip and two days there; landing rights follow.
+  function surveyFlight(state, gatewayId, shipId) {
+    const ship = state.ships.find(s => s.id === shipId), g = U.cityById[gatewayId], c = cls(ship), now = H(state.tick);
+    const km = distanceKm(ship.location, gatewayId), rs = U.research.stats(state, ship);
+    if (rs.rangeKm < km) return `${ship.name} cannot reach ${g.name}: ${Math.round(km)} km, against her range of ${rs.rangeKm} km.`;
+    const hours = Math.round(km / rs.speedKmh * 2 + 48), cost = Math.round(km * 2 * c.fuelPerKm * E().costFactor + 4000);
+    addCost(state, ship, cost);
+    ship.readyHour = Math.max(ship.readyHour, now) + hours;
+    state.gateways = state.gateways || {};
+    state.gateways[gatewayId] = { openAt: now + hours, by: ship.name };
+    telegram(state, now + hours, `survey flight to ${g.name} complete stop ${ship.name} home again stop landing rights granted stop routes may now end at ${g.name} stop`, true, { type: "city", id: gatewayId });
+    return null;
+  }
+  const gatewayOpen = (state, id) => { const g = state.gateways && state.gateways[id]; return !!g && g.openAt <= H(state.tick); };
   function clearSave() {
     saving = false;
     try { for (const k of ["upship.save.v1", "upship.save.v2", "upship.save.v3", "upship.save.v4", "upship.save.v5", "upship.save.v6", "upship.save.v7", "upship.save.v8", "upship.save.v9", "upship.save.v10", SAVE_KEY]) localStorage.removeItem(k); } catch (e) {}
   }
 
-  U.sim = { stopSaving, finishOverhaul, telegram, addGeneral, addIncome, nearestCity, distanceKm, fare, freightRate, dailyPassengers, dailyFreight, start, advance, beginTurn, dateOf, dateAtHour, H,
+  U.sim = { surveyFlight, gatewayOpen, stopSaving, finishOverhaul, telegram, addGeneral, addIncome, nearestCity, distanceKm, fare, freightRate, dailyPassengers, dailyFreight, start, advance, beginTurn, dateOf, dateAtHour, H,
     routeSummary, save, load, clearSave, editRoute, routeOf, routeName, routeLegs, createRoute, deleteRoute, canAssign, assign,
     order, policyGas, heliumFill, rename, suggestName, longestLeg, catalog, orderTerms, saleValue, canSell, sell, positionAt, ageYears, roman };
 })(window.UpShip);

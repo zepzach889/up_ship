@@ -2,6 +2,12 @@
 // label: which side of the marker the name sits on ("r", "l", "t", "b").
 window.UpShip = window.UpShip || {};
 UpShip.CITIES = [
+  // Gateways to the wider world: drawn at the map's edge, but distances, demand, and fares use their real places.
+  // Each opens only after a survey flight wins landing rights.
+  { id: "newyork", name: "New York", country: "United States", lat: 52.6, lon: -16.2, realLat: 40.71, realLon: -74.0, tier: "major", specialty: "port", gateway: true, via: "across the North Atlantic", works: false, pro: "The greatest city across the Atlantic", con: "Needs a survey flight and long range", label: "l" },
+  { id: "rio", name: "Rio de Janeiro", country: "Brazil", lat: 33.2, lon: -15.6, realLat: -22.91, realLon: -43.17, tier: "major", specialty: "port", gateway: true, via: "by way of the South Atlantic", works: false, pro: "Gateway to South America", con: "Needs a survey flight and long range", label: "l" },
+  { id: "bombay", name: "Bombay", country: "British India", lat: 33.3, lon: 40.2, realLat: 19.08, realLon: 72.88, tier: "major", specialty: "port", gateway: true, via: "by way of Baghdad and the Persian Gulf", works: false, pro: "Gateway to India and the East", con: "Needs a survey flight and long range", label: "r" },
+  { id: "capetown", name: "Cape Town", country: "South Africa", lat: 25.2, lon: 32.6, realLat: -33.92, realLon: 18.42, tier: "major", specialty: "port", gateway: true, via: "down the length of Africa", works: false, pro: "Gateway to southern Africa", con: "Needs a survey flight and long range", label: "r" },
   { id: "friedrichshafen", name: "Friedrichshafen", country: "Germany", lat: 47.65, lon: 9.48, tier: "small", specialty: "culture", home: true, works: true, pro: "Zeppelin works and calm lake weather", con: "A small town, far in Germany's southern corner", label: "r" },
   { id: "berlin", name: "Berlin", country: "Germany", lat: 52.52, lon: 13.40, tier: "major", specialty: "capital", home: true, works: false, pro: "The largest demand in Germany", con: "No airship works", label: "r" },
   { id: "hamburg", name: "Hamburg", country: "Germany", lat: 53.55, lon: 9.99, tier: "large", specialty: "port", home: true, works: false, pro: "Port freight and access to the North Sea", con: "Fog and rough coastal weather", label: "r" },

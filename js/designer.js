@@ -114,6 +114,7 @@ window.UpShip = window.UpShip || {};
       if (h && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); selBay = +h.dataset.bay; refresh(); root.querySelector(`[data-bay="${selBay}"]`)?.focus(); }
     });
     root.addEventListener("pointerdown", onPointerDown);
+    root.addEventListener("contextmenu", e => { if (e.target.closest && e.target.closest("svg.do-deck")) e.preventDefault(); });
     root.addEventListener("keydown", e => {
       if (tab !== "paint" || !paintSel || e.target.closest("input, select, textarea")) return;
       const k = { ArrowLeft: [-0.004, 0], ArrowRight: [0.004, 0], ArrowUp: [0, -0.03], ArrowDown: [0, 0.03] }[e.key];
@@ -724,7 +725,13 @@ window.UpShip = window.UpShip || {};
       accCtx = U.decks.context(d, accDeck);
       const cell = accCell(e); if (!cell) return;
       e.preventDefault();
-      U.decks.paintStart(accCtx, cell.r, cell.c, accTool);
+      if (isPiece(accTool) && e.button !== 2) {
+        const why = U.decks.placePiece(d, accCtx, cell.r, cell.c, accTool, accDir);
+        if (why) note(why);
+        accCtx = null; render(); return;
+      }
+      // A right-click clears squares, whichever room is chosen, so a slip is undone without changing tools.
+      U.decks.paintStart(accCtx, cell.r, cell.c, e.button === 2 ? "erase" : accTool);
       accRedraw();
       if (accTool === "first") { accCtx = null; refreshFigures(); }
       return;
@@ -772,6 +779,12 @@ window.UpShip = window.UpShip || {};
   function moveGhost(e) {
     if (hullDrag) { dragHull(e); return; }
     if (accCtx && U.decks.painting()) { const cell = accCell(e); if (cell) { U.decks.paintAt(accCtx, cell.r, cell.c); accRedraw(); } return; }
+    if (tab === "accommodation" && isPiece(accTool) && e.target.closest && e.target.closest("svg.do-deck")) {
+      accCtx = U.decks.context(draft(U.state), accDeck);
+      const cell = accCell(e);
+      if (cell && (!accHover || cell.r !== accHover.r || cell.c !== accHover.c)) { accHover = cell; accRedraw(); }
+      accCtx = null; return;
+    }
     if (paintDrag) { paintMove(e); return; }
     if (!drag) return;
     if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 4) drag.moved = true;
@@ -824,18 +837,26 @@ window.UpShip = window.UpShip || {};
   }
 
   // The Accommodation tab -------------------------------------------------------------------
-  let accDeck = "lower", accTool = "cabin", accGrid = false, accCtx = null;
+  let accDeck = "lower", accTool = "cabin", accGrid = false, accCtx = null, accDir = "e", accHover = null, accOther = false;
+  const isPiece = t => !!(U.decks.TYPES[t] && U.decks.TYPES[t].piece);
+  const DIR_NAME = { e: "toward the stern", w: "toward the bow", n: "toward port", s: "toward starboard" };
   function accTab(st, d, f) {
-    const D = U.decks, lower = D.context(d, "lower"), upper = D.context(d, "upper");
-    if (accDeck === "upper" && !upper.cols.length) accDeck = "lower";
+    const D = U.decks, lower = D.context(d, "lower"), upper = D.context(d, "upper"), hasUpper = upper.cols.some(c => !c.absent);
+    if (accDeck === "upper" && !hasUpper) accDeck = "lower";
     const ctx = accDeck === "upper" ? upper : lower;
-    const tools = Object.entries(D.TYPES).map(([k, t]) => `<button data-acc-tool="${k}" aria-pressed="${accTool === k}"><span class="sw" style="background:${t.sw}"></span>${t.name}</button>`).join("")
+    // The palette: rooms, then stairs (placed whole, turned with R), then openings on the upper deck.
+    const btn = ([k, t]) => `<button data-acc-tool="${k}" aria-pressed="${accTool === k}"><span class="sw" style="background:${t.sw}"></span>${t.name}</button>`;
+    const all = Object.entries(D.TYPES).filter(([, t]) => !t.auto);
+    const tools = all.filter(([, t]) => !t.piece && !t.upperOnly).map(btn).join("")
+      + `<span class="do-pal-sep">Stairs</span>` + all.filter(([, t]) => t.piece).map(btn).join("")
+      + `<button data-acc-rotate title="Turn the stair (R)"${isPiece(accTool) ? "" : " disabled"}>↻ Climbs ${DIR_NAME[accDir]}</button>`
+      + (accDeck === "upper" ? `<span class="do-pal-sep">Openings</span>` + all.filter(([, t]) => t.upperOnly).map(btn).join("") : "")
       + `<button data-acc-tool="first" aria-pressed="${accTool === "first"}" title="Click a cabin to make it first class, or back"><span class="sw sw-first">1</span>First class</button>`
       + `<button data-acc-tool="erase" aria-pressed="${accTool === "erase"}"><span class="sw" style="background:#e4d8bb"></span>Clear a square</button>`;
     const head = `<div class="do-acc-bar">
-        <div class="do-seg" role="group" aria-label="Deck"><button data-acc-deck="lower" aria-pressed="${accDeck === "lower"}">Lower deck</button><button data-acc-deck="upper" aria-pressed="${accDeck === "upper"}" ${upper.cols.length ? "" : "disabled"}>Upper deck</button></div>
-        <span class="do-acc-info">${ctx.cols.length ? `${ctx.bays.length} bay${ctx.bays.length > 1 ? "s" : ""}, ${ctx.rows} squares wide. Each stroke paints one room; start inside a room to extend it.` : ""}</span>
-        <button class="btn-quiet" data-acc="grid" aria-pressed="${accGrid}">Show the grid</button><button class="btn-quiet" data-acc="standard">Standard layout</button><button class="btn-quiet" data-acc="clear">Clear this deck</button></div>`;
+        <div class="do-seg" role="group" aria-label="Deck"><button data-acc-deck="lower" aria-pressed="${accDeck === "lower"}">Lower deck</button><button data-acc-deck="upper" aria-pressed="${accDeck === "upper"}" ${hasUpper ? "" : "disabled"}>Upper deck</button></div>
+        <span class="do-acc-info">${ctx.cols.length ? `${ctx.bays.length} bay${ctx.bays.length > 1 ? "s" : ""}, ${ctx.rows} squares wide. Each stroke paints one room; start inside a room to extend it. Right-click to clear squares.` : ""}</span>
+        <button class="btn-quiet" data-acc="grid" aria-pressed="${accGrid}">Show the grid</button><button class="btn-quiet" data-acc="other" aria-pressed="${accOther}" ${hasUpper ? "" : "disabled"}>Show the other deck</button><button class="btn-quiet" data-acc="standard">Standard layout</button><button class="btn-quiet" data-acc="clear">Clear this deck</button></div>`;
     if (!ctx.cols.length) return `<div class="do-sheet do-later"><p>This ship has no passenger decks. Place a passenger deck module in a bay on the Systems tab, then lay it out here.</p></div>`;
     return `${head}<div class="do-sheet do-accsheet">${accSvg(ctx)}</div><div class="do-palette" role="group" aria-label="Room type">${tools}</div>`;
   }
@@ -843,9 +864,25 @@ window.UpShip = window.UpShip || {};
     const W = ctx.width, H = ctx.rows * U.decks.S, pad = 40;
     return `<svg viewBox="${-pad - 30} ${-pad} ${W + pad * 2 + 130} ${H + pad * 2 + 60}" class="bp do-deck" data-deck="${ctx.deck}" aria-label="Deck plan, seen from above: bow to the left">
       <defs>${U.decks.defs()}</defs>
-      ${U.decks.render(ctx, { grid: accGrid })}
+      ${(() => { const D = U.decks, d = ctx.d, other = D.context(d, ctx.deck === "upper" ? "lower" : "upper");
+        const below = ctx.deck === "upper" ? D.render(D.context(d, "lower"), {}) : null;
+        const ghost = accOther && other.cols.some(c => !c.absent) ? D.render(other, {}) : null;
+        return D.render(ctx, { grid: accGrid, below, ghost, hover: hoverPiece(ctx) }); })()}
       <text x="${W / 2}" y="${-24}" class="bp-small mid">Port side</text><text x="${W / 2}" y="${H + 42}" class="bp-small mid">Starboard side</text>
       <text x="-22" y="${H / 2}" class="bp-small mid" transform="rotate(-90 -22 ${H / 2})">Bow</text><text x="${W + 72}" y="${H / 2}" class="bp-small mid" transform="rotate(90 ${W + 72} ${H / 2})">Stern</text></svg>`;
+  }
+  // While a stair is chosen, a ghost of it follows the pointer, red where it will not fit.
+  function hoverPiece(ctx) {
+    if (!accHover || !isPiece(accTool)) return "";
+    const { w, h } = U.decks.footprint(accTool, accDir), S = U.decks.S;
+    let ok = true, g = "";
+    for (let i = 0; i < h; i++) for (let j = 0; j < w; j++) {
+      const r = accHover.r + i, c = accHover.c + j;
+      if (r >= ctx.rows || c >= ctx.cols.length || ctx.cols[c].block !== ctx.cols[accHover.c].block) { ok = false; continue; }
+      g += `<rect x="${ctx.colX(c)}" y="${r * S}" width="${S}" height="${S}"/>`;
+    }
+    if (accTool === "boarding" ? ctx.deck !== "lower" : ctx.deck !== "lower") ok = false;
+    return `<g class="dp-ghost${ok ? "" : " bad"}" pointer-events="none">${g}</g>`;
   }
   function accCell(e) {
     const svg = root.querySelector("svg.do-deck"); if (!svg || !accCtx) return null;
@@ -854,6 +891,12 @@ window.UpShip = window.UpShip || {};
     const r = Math.floor(p.y / S), c = accCtx.cols.findIndex((col, i) => p.x >= accCtx.colX(i) && p.x < accCtx.colX(i) + S);
     return r >= 0 && r < accCtx.rows && c >= 0 ? { r, c } : null;
   }
+  // R turns the chosen stair whenever the office is open, wherever the focus is.
+  document.addEventListener("keydown", e => {
+    if (!root || root.hidden || tab !== "accommodation" || !isPiece(accTool)) return;
+    if ((e.key === "r" || e.key === "R") && !(e.target.closest && e.target.closest("input, select, textarea"))) { rotateStair(); e.preventDefault(); }
+  });
+  function rotateStair() { accDir = { e: "s", s: "w", w: "n", n: "e" }[accDir]; render(); }
   function accRedraw() { const sh = root.querySelector(".do-accsheet"); if (sh && accCtx) sh.innerHTML = accSvg(accCtx); }
 
   // The Paint tab ---------------------------------------------------------------------------
@@ -1094,7 +1137,9 @@ window.UpShip = window.UpShip || {};
     if (b.dataset.speed != null) { U.game && U.game.setAuto(+b.dataset.speed); clock(); return; }
     if (b.dataset.tab) { tab = b.dataset.tab; closePalette(); render(); return; }
     // Accommodation
-    if (b.dataset.accTool) { accTool = b.dataset.accTool; render(); return; }
+    if (b.dataset.accTool) { accTool = b.dataset.accTool; accHover = null; render(); return; }
+    if (b.dataset.accRotate != null) { rotateStair(); return; }
+    if (b.dataset.acc === "other") { accOther = !accOther; render(); return; }
     if (b.dataset.accDeck) { accDeck = b.dataset.accDeck; render(); return; }
     if (b.dataset.acc === "grid") { accGrid = !accGrid; render(); return; }
     if (b.dataset.acc === "standard") { if (!d.plan || !Object.keys(d.plan.cells).length || confirm("Replace both decks with the standard layout?")) { U.decks.standardLayout(d); render(); } return; }

@@ -66,7 +66,7 @@ window.UpShip = window.UpShip || {};
     if (pub) return { level: pub, own: false };
     return { level: 0, own: false };
   }
-  const canLand = (state, id) => effective(state, id, "mast").level > 0;
+  const canLand = (state, id) => { const c = U.cityById[id]; if (c && c.gateway && !(U.sim && U.sim.gatewayOpen(state, id))) return false; return effective(state, id, "mast").level > 0; };
 
   function terminalLimits(state, id) {
     const t = effective(state, id, "terminal");

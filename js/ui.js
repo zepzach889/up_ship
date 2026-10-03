@@ -231,7 +231,20 @@ window.UpShip = window.UpShip || {};
     return { fleet: "the fleet", routes: "routes", crew: "crew", shipyard: "the Shipyard", finances: "finances", contracts: "contracts", telegrams: "telegrams", research: "research", company: "the company" }[sel.type] || "the list";
   }
 
+  // A gateway to the wider world: what lies beyond, how far, and the survey flight that opens it.
+  function gatewayPanel(state, id) {
+    const c = city(id), g = state.gateways && state.gateways[id], open = U.sim.gatewayOpen(state, id), now = U.sim.H(state.tick);
+    const ready = state.ships.filter(x => x.deliveryTick <= state.tick && !x.lost && !x.overhaulUntil);
+    const rows = ready.map(x => { const km = U.sim.distanceKm(x.location, id), rs = U.research.stats(state, x), days = Math.round((km / rs.speedKmh * 2 + 48) / 24);
+      return { x, km, days, ok: rs.rangeKm >= km, range: rs.rangeKm }; }).sort((a, b) => a.km - b.km);
+    return `<h2>${esc(c.name)}</h2><p class="sub">Gateway to the wider world, ${c.via}. Shown at the map's edge; distances, demand, and fares are measured from ${esc(c.name)} itself.</p>
+      ${open ? `<p class="status">Open. Landing rights won by ${esc(g.by)}'s survey flight; routes may end here.</p>`
+        : g ? `<p class="status">${esc(g.by)} is flying the survey. Landing rights follow on ${shortDate(U.sim.dateOf((g.openAt) / 12))}.</p>`
+        : `<p>Before routes can end here, a survey flight must prove the way and win landing rights. The ship leaves her route for the round trip and two days on the ground; the flight costs her fuel and about £4,000 in fees.</p>
+          <ul class="plain-list">${rows.map(r => `<li>${esc(r.x.name)}: ${Math.round(r.km).toLocaleString("en-GB")} km from ${esc(city(r.x.location).name)}, ${r.ok ? `about ${r.days} days away <button class="btn-quiet" data-survey="${id}:${r.x.id}">Send her</button>` : `<span class="small">out of range (${r.range.toLocaleString("en-GB")} km)</span>`}</li>`).join("") || `<li class="note">No ship is free.</li>`}</ul>`}`;
+  }
   function cityPanel(state, id) {
+    if (city(id).gateway) return gatewayPanel(state, id);
     const c = city(id), tier = U.TIERS[c.tier], sp = U.SPECIALTIES[c.specialty];
     const routes = state.routes.filter(r => r.stops.includes(c.id));
     const here = state.ships.filter(s => s.deliveryTick <= state.tick && !s.leg && s.location === c.id);
@@ -580,7 +593,8 @@ window.UpShip = window.UpShip || {};
       const price = cls ? U.sim.orderTerms(state, cls.id).price : f.price, days = cls ? U.sim.orderTerms(state, cls.id).days : f.buildDays;
       const shedOk = cls ? !!U.facilities.deliveryCity(state, cls.id) : !!f.shed && hasShed(state, f.shed.n);
       const short = Math.max(0, Math.ceil(price - state.money)), room = U.contracts.loanLimit(state) - state.loan;
-      const blocked = need.length || f.status === "sink" || (state.money < price && short > room) || !shedOk;
+      const noStair = f.passengers > 0 && f.planned && !U.decks.stats(e.d).boarding;          // passengers board by a stair from the belly
+      const blocked = need.length || f.status === "sink" || noStair || (state.money < price && short > room) || !shedOk;
       const sketch = designSketch(state, e, f);
       return `<section class="card${need.length ? " needs" : ""}">
         <h4>${esc(e.name)}${cls ? ` <small>class</small>` : ""}</h4>${sketch}
@@ -590,6 +604,7 @@ window.UpShip = window.UpShip || {};
           ${row("Running cost", money((cls ? cls.dailyCost : f.daily) * U.ECONOMY.costFactor) + " a day")}${row("Delivery", `${Math.round(days / 30 * 2) / 2} months`)}</dl>
         <div class="card-foot"><span class="price">${money(price)}</span><button class="btn" data-order-design="${e.id}" ${blocked ? "disabled" : ""}>Order</button></div>
         ${need.length ? `<p class="note">Needs research: ${need.map(esc).join("; ")}.</p>` : f.status === "sink" ? `<p class="note">It cannot fly as drawn.</p>`
+          : noStair ? `<p class="note">It needs a boarding stair on its lower deck.</p>`
           : !shedOk ? `<p class="note">Needs a ${f.shed ? f.shed.name.toLowerCase() : "larger"} shed.</p>` : state.money < price ? `<p class="note">Not enough funds.</p>` : ""}
       </section>`;
     }).join("");
@@ -995,7 +1010,9 @@ window.UpShip = window.UpShip || {};
     const now = U.sim.H(state.tick);
     const offers = state.offers.map(o => `<section class="card offer">${offerText(o)}
       <p class="note">Open until ${shortDate(U.sim.dateAtHour(o.expiresHour))}.</p>
-      <div class="btn-row"><button class="btn-quiet" data-decline="${o.id}">Decline</button><button class="btn" data-accept="${o.id}">Accept</button></div></section>`).join("");
+      <div class="btn-row"><button class="btn-quiet" data-decline="${o.id}">Decline</button>${o.kind === "record"
+        ? `<button class="btn-quiet" data-record="${o.id}:steady" title="No extra risk">Fly it steady</button><button class="btn-quiet" data-record="${o.id}:hard" title="Faster, some risk of strain">Push hard</button><button class="btn" data-record="${o.id}:allout" title="Fastest, real risk of damage">All out</button>`
+        : `<button class="btn" data-accept="${o.id}">Accept</button>`}</div></section>`).join("");
     const mail = state.contracts.map(k => {
       const rel = k.required ? Math.round(k.made / k.required * 100) + "%" : "New";
       const has = state.routes.some(r => r.stops.includes(k.a) && r.stops.includes(k.b));
@@ -1177,7 +1194,21 @@ window.UpShip = window.UpShip || {};
       U.sim.assign(s, shipId, routeId || null);
       picking = null; h.changed(); render(); return;
     }
-    if (b.dataset.accept) { U.contracts.accept(s, b.dataset.accept); h.changed(); render(); return; }
+    if (b.dataset.accept) {
+      const o = s.offers.find(x => x.id === b.dataset.accept), res = U.contracts.accept(s, b.dataset.accept);
+      if (o && o.kind === "charter") notify(res ? `${res.ship.name} leaves her route for ${o.days} days on charter for ${o.who}. ${money(o.pay)} paid.` : `No ship has the ${o.range.toLocaleString("en-GB")} km of range this charter needs.`);
+      h.changed(); render(); return;
+    }
+    if (b.dataset.record) {
+      const [oid, push] = b.dataset.record.split(":"), r = U.contracts.attempt(s, oid, push);
+      notify(!r ? "That offer has gone." : r.none ? "No ship has the range for this run." : `${r.ship.name} sets out on the record attempt. The result comes by telegram.`);
+      h.changed(); render(); return;
+    }
+    if (b.dataset.survey) {
+      const [gid, sid] = b.dataset.survey.split(":"), why = U.sim.surveyFlight(s, gid, sid);
+      notify(why || `${s.ships.find(x => x.id === sid).name} sets out to survey the route to ${city(gid).name}.`);
+      h.changed(); render(); return;
+    }
     if (b.dataset.drop) {
       const k = s.contracts.find(x => x.id === b.dataset.drop);
       if (k && confirm(`Drop the ${city(k.a).name}–${city(k.b).name} mail contract? The penalty is ${money(k.monthly)}, and ${k.authority === U.NATIONS[s.company.nation].name ? "your postal ministry" : "the " + k.authority + " postal authority"} will make no new offers for about six months.`)) {
