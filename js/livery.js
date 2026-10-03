@@ -32,6 +32,12 @@ window.UpShip = window.UpShip || {};
       name: { text: "", font: "deco", size: 1, color: e.c1, x: 0.16, y: 0.05 },
       emblems: [{ x: 0.9, y: -1.3, size: 0.9 }] };
   }
+  // The look of the builders' ships, as their pictures show it: hull in the company colour, fins and rudders darker, emblem on the fins.
+  function builders(state) {
+    const e = state.company.emblem || { c1: "#9b2a24", c2: "#f0e7d1" }, dark = shade(e.c1, -0.35);
+    return { ...fresh(state), preset: null, hull: e.c1, fins: dark, rudders: dark, car: "#b9bcbd", engines: "#b9bcbd", decorations: [] };
+  }
+  function shade(hex, amt) { const n = parseInt(hex.slice(1), 16); return "#" + [n >> 16, (n >> 8) & 255, n & 255].map(v => Math.max(0, Math.round(v * (1 + amt))).toString(16).padStart(2, "0")).join(""); }
   // Livery presets: combinations to start from; the ship's name and emblems are kept.
   function presets(state) {
     const e = state.company.emblem || { c1: "#9b2a24", c2: "#f0e7d1" };
@@ -237,5 +243,5 @@ window.UpShip = window.UpShip || {};
   const emblemY = (e, rx, R) => Math.abs(e.y) <= 1 ? e.y * rx : Math.sign(e.y) * (rx + (Math.abs(e.y) - 1) * R);
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
-  U.livery = { emblemY, PALETTE, FONTS, DECOR, fresh, presets, applyPreset, side, top, finShapes };
+  U.livery = { builders, emblemY, PALETTE, FONTS, DECOR, fresh, presets, applyPreset, side, top, finShapes };
 })(window.UpShip);

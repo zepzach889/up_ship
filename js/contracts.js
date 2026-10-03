@@ -281,6 +281,10 @@ window.UpShip = window.UpShip || {};
       else S().telegram(state, now, `loan installment of ${gbp(due)} skipped stop not enough funds stop`, false, { type: "finances" });
       if (state.loan <= 0) { state.installment = 0; S().telegram(state, now, `bank loan repaid in full stop`, false, { type: "finances" }); }
     }
+    // Company overheads: offices, clerks, ground staff, management. Each ship in service costs more to manage
+    // the larger the fleet, so overheads grow with the square of the fleet: trivial for a few ships, heavy for many.
+    const fleet = state.ships.filter(s => !s.lost && s.deliveryTick <= state.tick).length, over = Math.round(E().overheadPerShip * fleet * fleet);
+    if (over) { S().addGeneral(state, over); state.year.overheads = (state.year.overheads || 0) + over; state.overheadsLast = over; }
     // Loan interest and bankruptcy.
     if (state.loan > 0) {
       const interest = Math.round(state.loan * E().loanRate / 12);

@@ -1059,6 +1059,7 @@ window.UpShip = window.UpShip || {};
         ${row("Mail contracts", money(y.mail || 0))}
         ${row("Government grants", money(y.grants || 0))}
         ${row("Loan interest paid", money(y.interest || 0))}
+        ${row("Company overheads", `${money(y.overheads || 0)}${state.overheadsLast ? ` (now ${money(state.overheadsLast)} a month)` : ""}`)}
       </dl>
       <h3>Bank loan</h3>
       <dl>

@@ -101,9 +101,10 @@ UpShip.ECONOMY = {
   noWorksBonus: 50000,                    // extra starting funds for home cities without works
   worksBuildFactor: 0.7, worksPriceFactor: 0.9,
   fareBase: 1.5, farePerKm: 0.0042,       // passenger fare, pounds
-  freightBase: 1, freightPerKm: 0.014,    // per ton, pounds
+  freightBase: 2.5, freightPerKm: 0.035,    // per ton, pounds
   passengerShare: 0.65,                   // daily passengers per direction = sqrt(wA * wB) * share
-  freightShare: 0.75,                     // daily tons per direction, same form
+  overheadPerShip: 275,                     // monthly company overheads: this times the fleet size, for each ship (so they grow with the square)
+  freightShare: 1.125,                     // daily tons per direction, same form
   demandSwing: 0.15,                      // random daily variation
   passengerWaitDays: 2,                   // unserved passengers give up after about this long
   freightWaitDays: 4,

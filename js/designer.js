@@ -1140,9 +1140,10 @@ window.UpShip = window.UpShip || {};
     if (key.startsWith("class:")) {
       const c = U.SHIP_CLASSES[key.slice(6)];
       p = JSON.parse(JSON.stringify(c.design)); p.type = `Based on the ${c.name}`; p.key = key; p.trimmed = p.D > lim.maxD; p.D = Math.min(p.D, lim.maxD);
+      p.livery = U.livery.builders(st);                     // painted as the builders paint her
     } else p = P().preset(st, key);
     const keep = st.drawing && st.drawing.livery;
-    p.livery = keep ? JSON.parse(JSON.stringify(keep)) : U.livery.fresh(st);
+    if (!p.livery) p.livery = keep ? JSON.parse(JSON.stringify(keep)) : U.livery.fresh(st);
     // A locked design is never overwritten: starting over makes a new design.
     const e = openEntry(st);
     if (e.locked) { const n = newDesign(st, p); st.openDesign = n.id; } else e.d = p;
