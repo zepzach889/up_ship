@@ -159,7 +159,8 @@ window.UpShip = window.UpShip || {};
         </nav>
         <button class="btn-quiet do-portfolio-btn" data-do="portfolio" aria-haspopup="dialog">Designs</button>
         <span class="do-design-name" title="The design you are working on">${esc(openEntry(st).name)}${openEntry(st).locked ? " (ordered)" : ""}</span>
-        <label class="do-start"><span class="sr-only">Start from</span><select data-preset-select aria-label="Start from a standard design"><option value="">Start from…</option>${Object.entries(P().PRESETS).map(([k, p]) => `<option value="${k}">${p.label}</option>`).join("")}</select></label>
+        <label class="do-start"><span class="sr-only">Start from</span><select data-preset-select aria-label="Start from a standard design"><option value="">Start from…</option>${Object.entries(P().PRESETS).map(([k, p]) => `<option value="${k}">${p.label}</option>`).join("")}
+          <optgroup label="The builders' ships">${U.sim.catalog(st).filter(id => U.SHIP_CLASSES[id].design).map(id => `<option value="class:${id}">${esc(U.SHIP_CLASSES[id].name)}</option>`).join("")}</optgroup></select></label>
         <div class="do-clock"><span class="do-date"></span>
           <div class="do-speed" role="group" aria-label="Game speed">
             <button data-speed="0" aria-label="Pause">${icon("pause")}</button><button data-speed="1" aria-label="Normal speed">${icon("play")}</button>
@@ -1134,7 +1135,12 @@ window.UpShip = window.UpShip || {};
     }
   }
   function startFrom(key) {
-    const st = U.state, lim = P().limits(st), p = P().preset(st, key);
+    const st = U.state, lim = P().limits(st);
+    let p;
+    if (key.startsWith("class:")) {
+      const c = U.SHIP_CLASSES[key.slice(6)];
+      p = JSON.parse(JSON.stringify(c.design)); p.type = `Based on the ${c.name}`; p.key = key; p.trimmed = p.D > lim.maxD; p.D = Math.min(p.D, lim.maxD);
+    } else p = P().preset(st, key);
     const keep = st.drawing && st.drawing.livery;
     p.livery = keep ? JSON.parse(JSON.stringify(keep)) : U.livery.fresh(st);
     // A locked design is never overwritten: starting over makes a new design.

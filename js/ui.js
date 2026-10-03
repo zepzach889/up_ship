@@ -525,6 +525,8 @@ window.UpShip = window.UpShip || {};
   // The three cabin layouts for a class, with berths and comfort for each.
   function layoutPicker(state, id) {
     const P = U.passengers, cfg = yardConfig[id] || "two", c = U.SHIP_CLASSES[id];
+    if (c.fromDesign) { const b = P.berths(state, { classId: id, config: cfg, condition: 1, fitted: [] });
+      return c.passengers ? `<p class="small">${b.total} passengers${b.seats ? ` (${b.seats} in saloon seats, for legs of up to 12 hours)` : ""}${b.first ? `, ${b.first} first class` : ""}; comfort ${c.comfort} of 100.</p>` : ""; }
     const probe = cf => ({ classId: id, config: cf, condition: 1 });
     return `<div class="layouts" role="group" aria-label="Cabin layout">${P.CONFIG_ORDER.map(k => {
       const b = Math.max(1, Math.floor(c.passengers * P.CONFIGS[k].berths)), f = Math.round(b * P.CONFIGS[k].firstShare);

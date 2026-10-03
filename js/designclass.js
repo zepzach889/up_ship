@@ -76,5 +76,16 @@ window.UpShip = window.UpShip || {};
     U.shipArt.VIEW[key] = `${(-hw - 6).toFixed(1)} ${(-hh * 1.9).toFixed(1)} ${(hw * 2 + 12).toFixed(1)} ${(hh * 3.9).toFixed(1)}`;
   }
 
-  U.designClass = { ensure, restore, syncLivery, artKey };
+  // The builders' classes are designs too: their figures come from the lineup the physics produced.
+  function applyLineup() {
+    for (const [id, L] of Object.entries(U.LINEUP || {})) {
+      const c = U.SHIP_CLASSES[id]; if (!c) continue;
+      Object.assign(c, { passengers: L.passengers, seats: L.seats, firstShare: L.firstShare, comfort: L.comfort, cargoTons: L.cargoTons,
+        speedKmh: L.speedKmh, rangeKm: L.rangeKm, crew: L.crew, price: L.price, dailyCost: L.dailyCost, fuelPerKm: L.fuelPerKm,
+        buildDays: L.buildDays, shedSize: L.shedSize, baked: L.baked, design: L.design, fromDesign: true });
+      if (c.kind !== "surplus") c.kind = L.passengers ? "passenger" : "cargo";
+    }
+  }
+  applyLineup();
+  U.designClass = { ensure, restore, syncLivery, artKey, applyLineup };
 })(window.UpShip);
