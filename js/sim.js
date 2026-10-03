@@ -361,9 +361,14 @@ window.UpShip = window.UpShip || {};
       ship.gas = ship.gasTo;
     }
     ship.gasTo = null; ship.gasLeft = U.facilities.GAS[ship.gas].range; ship.sinceTopUp = 0;
+    let extraDays = 0;
+    if (ship.refitInterior) {
+      refit.cost += Math.round(cls(ship).price * 0.08 / 100) * 100; extraDays = 14;
+      ship.interior = ship.refitInterior; ship.refitInterior = null; refit.done.push("a new interior");
+    }
     addCost(state, ship, cost + refit.cost);
     ship.overhaulNow = false;
-    ship.overhaulUntil = t + E().overhaulDays * 24;
+    ship.overhaulUntil = t + (E().overhaulDays + extraDays) * 24;
     ship.readyHour = ship.overhaulUntil;
     const refitText = refit.done.length ? ` refit with ${refit.done.join(" and ").toLowerCase()} stop` : "";
     telegram(state, t, `${ship.name} in for overhaul at ${U.cityById[ship.location].name} stop${refitText} cost £${(cost + refit.cost).toLocaleString("en-GB")} stop back in service in three weeks stop`, false, { type: "ship", id: ship.id });

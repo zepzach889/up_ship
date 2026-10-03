@@ -27,6 +27,10 @@ window.UpShip = window.UpShip || {};
       baked: U.research.builtWith(state), names: [entry.name], requires: [],
       design: d, rev: 1, revs: { 1: JSON.parse(JSON.stringify(d.livery)) }, art: artKey(id, 1)
     };
+    if (entry.fitout) {
+      const base = U.SHIP_CLASSES[entry.fitout.base];
+      Object.assign(c, { price: base.price, buildDays: base.buildDays, shedSize: base.shedSize || c.shedSize, basis: `A ${base.name} with your own fit-out`, fitoutOf: base.id });
+    }
     return c;
   }
   // The first order of a design: make and register its class, and lock the design.

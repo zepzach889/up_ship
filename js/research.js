@@ -229,7 +229,7 @@ window.UpShip = window.UpShip || {};
     const speed = c.speedKmh * (f.has("engines1") ? 1.08 : 1) * (f.has("structures4") ? 1.1 : 1) * (f.has("engines5") ? 1.1 : 1) * (f.has("engines7") ? 1.1 : 1)
       * (1 + 0.02 * r.refinements.engines) * cm.speed;
     return {
-      passengers: Math.floor(c.passengers * payload * aePax),
+      passengers: Math.floor((ship.interior ? ship.interior.passengers : c.passengers) * payload * aePax),
       cargoTons: Math.round(c.cargoTons * payload * heCargo * 10) / 10,
       speedKmh: Math.round(speed),
       rangeKm: Math.round(c.rangeKm * (f.has("engines3") ? 1.2 : 1) * (f.has("structures4") ? 1.1 : 1) / 100) * 100,

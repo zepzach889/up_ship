@@ -78,6 +78,46 @@ window.UpShip = window.UpShip || {};
   }
   U.game = { resumeFromTelegram, keepPaused: () => { U.pausedByTelegram = null; }, setAuto: s => { if (s && !U.turnActive && !auto) { setAuto(s); } else setAuto(s); }, auto: () => (frozen && !auto ? 0 : auto) };
 
+  // Skip to next event: whole turns run back to back with the map held still, about ten game days a second.
+  // Telegrams along the way go quietly to the log; the skip stops at the first that needs the player,
+  // or after four months at most, and shows the telegrams that stopped it.
+  let skipping = null;
+  const needsYou = t => t.major || (t.target && ["research", "contracts", "crew", "aetherdecision", "gasdecision"].includes(t.target.type)) || /DELIVERED|OFFERS|COMPLETE STOP/.test(t.text);
+  function skipAhead() {
+    const st = U.state;
+    if (!st || skipping || st.bankrupt || U.ui.isDrawing() || !U.tutorial.allowsTurns()) return;
+    setAuto(0); frozen = false;
+    if (U.turnActive) endTurn();                                  // finish the turn in hand first
+    skipping = { until: U.sim.H(st.tick) + 120 * 24, stop: false };
+    U.ui.setSkipping(true, U.sim.dateOf(st.tick));
+    const step = () => {
+      if (!skipping) return;
+      const held = [];
+      for (let i = 0; i < 1 && !skipping.stop; i++) {
+        U.sim.beginTurn(st); U.sim.advance(st);
+        const hour = U.sim.H(st.tick), due = st.pendingTelegrams.filter(t => t.hour <= hour + 1e-6);
+        st.pendingTelegrams = st.pendingTelegrams.filter(t => t.hour > hour + 1e-6);
+        for (const t of due.sort((a, b) => a.hour - b.hour)) { st.telegrams.push(t); if (needsYou(t)) held.push(t); }
+        if (held.length || st.bankrupt || hour >= skipping.until) skipping.stop = true;
+      }
+      U.ui.setSkipping(true, U.sim.dateOf(st.tick));
+      if (skipping.stop) { finishSkip(held); return; }
+      setTimeout(step, 50);
+    };
+    setTimeout(step, 250);
+  }
+  function stopSkip() { if (skipping) skipping.stop = true; }
+  function finishSkip(held) {
+    skipping = null;
+    U.ui.setSkipping(false);
+    U.map.syncRoutes(U.state); U.map.drawShips(U.state, 0);
+    U.sim.save(U.state);
+    for (const t of held) U.ui.showTelegram(t);
+    U.ui.rerenderIf(["ship", "route", "city", "fleet", "routes", "finances", "shipyard", "company", "telegrams", "contracts", "crew", "research"]);
+    if (U.state.bankrupt) U.ui.showBankrupt(U.state);
+  }
+  U.skip = { start: skipAhead, stop: stopSkip, active: () => !!skipping };
+
   function newGame() {
     if (!confirm("Start a new game? Your current game will be lost.")) return;
     U.sim.clearSave();

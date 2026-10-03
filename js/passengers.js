@@ -27,7 +27,8 @@ window.UpShip = window.UpShip || {};
     if (!max) return { total: 0, first: 0, second: 0 };
     const c = U.SHIP_CLASSES[ship.classId];
     if (c.designed || c.fromDesign) {
-      const first = Math.round(max * c.firstShare), seats = c.passengers ? Math.min(max - first, Math.round(max * (c.seats || 0) / c.passengers)) : 0;
+      const I = ship.interior || c, P0 = I.passengers;
+      const first = Math.round(max * I.firstShare), seats = P0 ? Math.min(max - first, Math.round(max * (I.seats || 0) / P0)) : 0;
       return { total: max, first, second: max - first, seats };
     }
     const cfg = configOf(ship), total = Math.max(1, Math.floor(max * cfg.berths));
@@ -37,7 +38,7 @@ window.UpShip = window.UpShip || {};
   // Comfort from the layout, adjusted by the kind of ship, then worn down with its condition.
   function comfortNew(ship) {
     const c = U.SHIP_CLASSES[ship.classId];
-    if (c.designed || c.fromDesign) return Math.max(5, Math.min(100, c.comfort));
+    if (c.designed || c.fromDesign) return Math.max(5, Math.min(100, (ship.interior || c).comfort));
     let v = configOf(ship).comfort;
     if (c.kind === "surplus") v = Math.min(v - 20, 55);        // converted warships: cramped whatever the layout
     if (c.liner) v += 10; else if (c.art === "medium") v += 5;

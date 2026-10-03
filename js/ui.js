@@ -28,6 +28,8 @@ window.UpShip = window.UpShip || {};
   function init(handlers) {
     h = handlers;
     document.querySelectorAll("[data-auto]").forEach(b => b.addEventListener("click", () => h.setAuto(+b.dataset.auto)));
+    $("#skip").addEventListener("click", () => U.skip && (U.skip.active() ? U.skip.stop() : U.skip.start()));
+    document.addEventListener("keydown", e => { if ((e.key === "s" || e.key === "S") && !e.target.closest("input, textarea, select") && !(U.designer && U.designer.isOpen())) { U.skip && (U.skip.active() ? U.skip.stop() : U.skip.start()); } });
     $("#next-turn").addEventListener("click", h.nextTurn);
     document.querySelectorAll("[data-layer]").forEach(b => b.addEventListener("click", () => {
       document.querySelectorAll("[data-layer]").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
@@ -179,6 +181,26 @@ window.UpShip = window.UpShip || {};
     if (input) { input.focus(); input.select(); }
   }
   const safe = f => { try { return f(); } catch (e) { return null; } };
+  // While skipping: the map dims and holds still, and a calendar in the corner flips through the days.
+  function setSkipping(on, date) {
+    let box = document.getElementById("skip-box");
+    if (!box) {
+      box = document.createElement("div"); box.id = "skip-box"; box.className = "skip-box"; box.setAttribute("aria-live", "polite");
+      box.innerHTML = `<div class="skip-cal"><div class="m"></div><div class="d"></div><div class="y"></div></div>
+        <div class="skip-note">Skipping ahead. Your ships carry on; nothing needs you yet. <button class="btn-quiet" id="skip-stop">Stop</button></div>`;
+      document.body.appendChild(box);
+      box.querySelector("#skip-stop").addEventListener("click", () => U.skip.stop());
+    }
+    document.body.classList.toggle("skipping", !!on);
+    box.hidden = !on;
+    $("#skip").textContent = on ? "Stop skipping" : "Skip to next event";
+    if (on && date) {
+      box.querySelector(".m").textContent = MONTHS[date.getUTCMonth()];
+      box.querySelector(".d").textContent = date.getUTCDate();
+      box.querySelector(".y").textContent = date.getUTCFullYear();
+      $("#date").textContent = dateLine(date);
+    }
+  }
   // The whole game to a file, and back.
   function saveToFile(state) {
     U.sim.save(state);
@@ -305,7 +327,9 @@ window.UpShip = window.UpShip || {};
   // Cabin layout, comfort, and changing the layout at the next overhaul.
   function cabinRows(state, ship) {
     const P = U.passengers, b = P.berths(state, ship), now = P.comfort(ship), fresh = P.comfortNew(ship);
-    if (U.SHIP_CLASSES[ship.classId].designed) return `${row("Layout", "From the deck plan")}
+    if (U.SHIP_CLASSES[ship.classId].designed || U.SHIP_CLASSES[ship.classId].fromDesign) return `${row("Layout", ship.interior ? "Her own interior" : "From the deck plan")}
+      ${ship.refitInterior ? `<p class="small">A new interior goes in at her next overhaul. <button class="btn-quiet" data-refit-interior="${ship.id}">Change it</button> <button class="btn-quiet" data-cancel-refit="${ship.id}">Cancel</button></p>`
+        : U.SHIP_CLASSES[ship.classId].design ? `<p><button class="btn-quiet" data-refit-interior="${ship.id}">Refit the interior</button></p>` : ""}
       ${row("Berths", b.first && b.second ? `${b.total}: ${b.first} first, ${b.second} second` : `${b.total}`)}
       ${row("Comfort", `${now} of 100${now < fresh ? ` (${fresh} when overhauled)` : ""}`)}`;
     const cost = Math.round(U.SHIP_CLASSES[ship.classId].price * P.RECONFIG_SHARE / 100) * 100;
@@ -626,7 +650,8 @@ window.UpShip = window.UpShip || {};
           </dl>
           <div class="card-foot"><span class="price">${money(t.price)}${grant ? ` <small class="was">${money(t.price + grant)}</small>` : ""}</span>
             ${canBorrow ? `<button class="btn" data-borrow-order="${id}:${short}" title="Adds ${money(short * U.ECONOMY.loanRate / 12)} a month in interest">Borrow ${money(short)} and order</button>`
-              : `<button class="btn" data-order="${id}" ${blocked ? "disabled" : ""}>Order</button>`}</div>
+              : `<button class="btn" data-order="${id}" ${blocked ? "disabled" : ""}>Order</button>`}
+            ${U.SHIP_CLASSES[id].design ? `<button class="btn-quiet" data-fitout="${id}" title="Order her with an interior of your own">Custom fit-out</button>` : ""}</div>
           ${!deliverAt ? `<p class="note">Needs a ${U.facilities.SIZE_NAMES[U.facilities.shipSize(id)].toLowerCase()} shed or larger to be built in: build or enlarge your own shed${U.facilities.hasPublic(state.company.home) ? " (public sheds are medium)" : ""}.</p>`
             : surplus && !left ? `<p class="note">Every surplus hull has been sold.</p>`
             : canBorrow ? `<p class="note">Borrowing the difference adds ${money(short * U.ECONOMY.loanRate / 12)} a month in interest.</p>`
@@ -1119,6 +1144,20 @@ window.UpShip = window.UpShip || {};
     if (b.dataset.handsReserve != null) { const n = U.crew.hireToReserve(s); if (n) notify(`Hired ${n} hands.`); h.changed(); render(); return; }
     if (b.dataset.back != null) { const prev = navStack.pop(); if (prev) select(prev, true); return; }
     if (b.dataset.officeOpen != null) { U.designer.open(); return; }
+    if (b.dataset.fitout) {
+      const c = U.SHIP_CLASSES[b.dataset.fitout], d = JSON.parse(JSON.stringify(c.design));
+      d.livery = U.livery.builders(s); d.type = `${c.name}, own fit-out`;
+      const short = s.company.name.split(" ")[0], e = U.designer.newEntry(d, `${c.name} (${short} fit-out)`, { fitout: { base: c.id } });
+      U.designer.openOn(e.id, "accommodation"); return;
+    }
+    if (b.dataset.refitInterior) {
+      const ship = s.ships.find(x => x.id === b.dataset.refitInterior), c = U.SHIP_CLASSES[ship.classId];
+      const d = JSON.parse(JSON.stringify(c.design)); if (!d.livery) d.livery = U.livery.builders(s);
+      if (ship.refitInterior) d.plan = JSON.parse(JSON.stringify(ship.refitInterior.plan)); else if (ship.interior && ship.interior.plan) d.plan = JSON.parse(JSON.stringify(ship.interior.plan));
+      const e = U.designer.newEntry(d, `${ship.name}: new interior`, { refitFor: ship.id, origPlan: JSON.stringify(d.plan), returnTo: s.openDesign });
+      U.designer.openOn(e.id, "accommodation"); return;
+    }
+    if (b.dataset.cancelRefit) { const ship = s.ships.find(x => x.id === b.dataset.cancelRefit); ship.refitInterior = null; h.changed(); render(); return; }
     if (b.dataset.orderDesign) { orderDesign(s, +b.dataset.orderDesign); return; }
     if (b.dataset.borrowOrder) {
       const [id, amt] = b.dataset.borrowOrder.split(":");
@@ -1428,6 +1467,6 @@ window.UpShip = window.UpShip || {};
     $("#panel-body").querySelector("[data-act=bankrupt-new]").addEventListener("click", () => { U.sim.clearSave(); location.reload(); });
   }
 
-  U.ui = { init, showCompany, showTelegram, showBankrupt, dismissAll, openTelegramCount, openMajorCount,
+  U.ui = { setSkipping, init, showCompany, showTelegram, showBankrupt, dismissAll, openTelegramCount, openMajorCount,
     onTelegramClosed: fn => { onTelegramClosed = fn; }, updateBar, select, render, notify, isDrawing: () => !!draft, rerenderIf: types => { if (selection && types.includes(selection.type) && !editing) render(); } };
 })(window.UpShip);

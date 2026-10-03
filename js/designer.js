@@ -61,10 +61,14 @@ window.UpShip = window.UpShip || {};
   }
   // A locked design (ships ordered) keeps its hull, systems, and decks; only its paint can change.
   function locked(st) { const e = openEntry(st); return !!(e && e.locked); }
+  // What may change: an ordered design only its paint; a fit-out its interior and paint; an interior refit only its decks.
   function blockedEdit() {
-    if (tab === "paint" || !locked(U.state)) return false;
-    note("Ships of this class have been ordered, so its hull, systems, and decks are fixed. Make a Mark II to change them.");
-    return true;
+    const e = openEntry(U.state);
+    if (e.refitFor) { if (tab === "accommodation") return false; note("This is an interior refit: only the decks can change."); return true; }
+    if (tab === "paint") return false;
+    if (e.locked) { note("Ships of this class have been ordered, so its hull, systems, and decks are fixed. Make a Mark II to change them."); return true; }
+    if (e.fitout && (tab === "hull" || tab === "systems")) { note("A fit-out keeps the builders' hull and systems; its interior and paint are yours to change."); return true; }
+    return false;
   }
 
   // Opening and closing ----------------------------------------------------------------
@@ -79,6 +83,19 @@ window.UpShip = window.UpShip || {};
   }
   function close() {
     if (!root) return;
+    const st = U.state, e = st.designs && st.designs.find(x => x.id === st.openDesign);
+    if (e && e.refitFor) {
+      const ship = st.ships.find(s => s.id === e.refitFor), changed = JSON.stringify(e.d.plan) !== e.origPlan;
+      if (ship && changed) {
+        const f = P().figures(st, e.d), lift = f.demand > 0 ? Math.max(0, Math.min(1, f.payloadRoom / f.demand)) : 1;
+        const cost = Math.round(U.SHIP_CLASSES[ship.classId].price * 0.08 / 100) * 100;
+        if (confirm(`Plan this new interior for ${ship.name}? It goes in at her next overhaul: about £${cost.toLocaleString("en-GB")} and two weeks more in the shed. Passengers: ${Math.floor(f.passengers * lift)}${f.daySeats ? ` (${Math.floor(f.daySeats * lift)} in seats)` : ""}, comfort ${f.comfort ?? "—"}.`))
+          ship.refitInterior = { passengers: Math.floor(f.passengers * lift), seats: Math.floor((f.daySeats || 0) * lift), firstShare: f.passengers ? (f.firstBerths || 0) / f.passengers : 0, comfort: f.comfort ?? 50, plan: e.d.plan };
+      }
+      st.designs = st.designs.filter(x => x !== e);
+      st.openDesign = e.returnTo || (st.designs[0] && st.designs[0].id);
+      tab = "hull"; resetAnim();
+    }
     root.hidden = true;
     document.body.classList.remove("office-open");
     clearInterval(clockTimer);
@@ -700,7 +717,7 @@ window.UpShip = window.UpShip || {};
 
   // Dragging, with pointer events so it works with a mouse, a pen, or a finger.
   function onPointerDown(e) {
-    if (tab !== "paint" && locked(U.state) && e.target.closest && (e.target.closest("[data-handle]") || e.target.closest("[data-card]") || e.target.closest("[data-item]") || e.target.closest("svg.do-deck"))) { blockedEdit(); return; }
+    if (e.target.closest && (e.target.closest("[data-handle]") || e.target.closest("[data-card]") || e.target.closest("[data-item]") || e.target.closest("svg.do-deck")) && blockedEdit()) return;
     if (pop && !e.target.closest(".do-pop") && !e.target.closest("[data-color]")) closePalette();
     if (tab === "accommodation" && e.target.closest && e.target.closest("svg.do-deck")) {
       const d = draft(U.state);
@@ -1106,7 +1123,8 @@ window.UpShip = window.UpShip || {};
   }
   function onInput(e) {
     const t = e.target;
-    if ((t.dataset.field === "D" || t.dataset.presetSelect != null) && t.value && tab !== "paint" && locked(U.state) && t.dataset.presetSelect == null) { t.value = draft(U.state).D; blockedEdit(); return; }
+    if (t.dataset.field === "D" && blockedEdit()) { t.value = draft(U.state).D; return; }
+    if (t.dataset.presetSelect != null && t.value && (openEntry(U.state).fitout || openEntry(U.state).refitFor)) { t.value = ""; note("Starting over is not possible here; open the Designs list for a new design."); return; }
     if (tab === "paint") {
       const d = draft(U.state), lv = d.livery, redraw = () => { root.querySelector(".do-paintsheet").innerHTML = paintSvg(U.state, d, P().figures(U.state, d)); };
       if (t.dataset.pickInput != null && pop) { setColor(pop.dataset.target, t.value); redraw(); const chip = root.querySelector(`[data-color="${pop.dataset.target}"] span`); if (chip) chip.style.background = t.value; return; }
@@ -1165,5 +1183,8 @@ window.UpShip = window.UpShip || {};
     clearTimeout(bannerTimer); bannerTimer = setTimeout(() => { b.hidden = true; }, 7000);
   }
 
-  U.designer = { open, close, isOpen, telegram, needsResearch, draft };
+  // Opening the office on a given design and tab: a fit-out from the Shipyard, or an interior refit from a ship's panel.
+  function openOn(entryId, atTab) { U.state.openDesign = entryId; tab = atTab || "hull"; resetAnim(); open(); }
+  function newEntry(d, name, extra) { draft(U.state); const e = newDesign(U.state, d, name); Object.assign(e, extra || {}); return e; }
+  U.designer = { open, close, isOpen, telegram, needsResearch, draft, openOn, newEntry };
 })(window.UpShip);
