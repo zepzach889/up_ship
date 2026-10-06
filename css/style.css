@@ -971,3 +971,8 @@ body.skipping #map svg, body.skipping .traffic-canvas { filter: saturate(0.35) b
 .dp-ghost.bad { fill: rgba(201,115,91,0.25); stroke: #c9735b; }
 .do-pal-sep { display: block; width: 100%; font-size: 11.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--brass); margin: 6px 0 2px; }
 [data-acc-rotate] { font-size: 12.5px; }
+
+.dp-stairwall { stroke: #2d2418; stroke-width: 2.2; }
+.dp-post { fill: #8a6a2a; stroke: #2d2418; stroke-width: 0.4; }
+.dp-balustrade { stroke: #8a6a2a; stroke-width: 2.4; stroke-dasharray: none; }
+.dp-airlock { fill: #d9cdb0; stroke: #2d2418; stroke-width: 1.2; }

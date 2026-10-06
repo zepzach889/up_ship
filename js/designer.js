@@ -856,7 +856,7 @@ window.UpShip = window.UpShip || {};
     const head = `<div class="do-acc-bar">
         <div class="do-seg" role="group" aria-label="Deck"><button data-acc-deck="lower" aria-pressed="${accDeck === "lower"}">Lower deck</button><button data-acc-deck="upper" aria-pressed="${accDeck === "upper"}" ${hasUpper ? "" : "disabled"}>Upper deck</button></div>
         <span class="do-acc-info">${ctx.cols.length ? `${ctx.bays.length} bay${ctx.bays.length > 1 ? "s" : ""}, ${ctx.rows} squares wide. Each stroke paints one room; start inside a room to extend it. Right-click to clear squares.` : ""}</span>
-        <button class="btn-quiet" data-acc="grid" aria-pressed="${accGrid}">Show the grid</button><button class="btn-quiet" data-acc="other" aria-pressed="${accOther}" ${hasUpper ? "" : "disabled"}>Show the other deck</button><button class="btn-quiet" data-acc="standard">Standard layout</button><button class="btn-quiet" data-acc="clear">Clear this deck</button></div>`;
+        ${!hasUpper ? (d.D >= P().TWO_DECKS ? `<button class="btn-quiet" data-acc="twodecks">Give passenger bays two decks</button>` : `<span class="do-hint">An upper deck needs a hull at least ${P().TWO_DECKS} m across.</span>`) : ""}<button class="btn-quiet" data-acc="grid" aria-pressed="${accGrid}">Show the grid</button><button class="btn-quiet" data-acc="other" aria-pressed="${accOther}" ${hasUpper ? "" : "disabled"}>Show the other deck</button><button class="btn-quiet" data-acc="standard">Standard layout</button><button class="btn-quiet" data-acc="clear">Clear this deck</button></div>`;
     if (!ctx.cols.length) return `<div class="do-sheet do-later"><p>This ship has no passenger decks. Place a passenger deck module in a bay on the Systems tab, then lay it out here.</p></div>`;
     return `${head}<div class="do-sheet do-accsheet">${accSvg(ctx)}</div><div class="do-palette" role="group" aria-label="Room type">${tools}</div>`;
   }
@@ -1140,6 +1140,12 @@ window.UpShip = window.UpShip || {};
     if (b.dataset.accTool) { accTool = b.dataset.accTool; accHover = null; render(); return; }
     if (b.dataset.accRotate != null) { rotateStair(); return; }
     if (b.dataset.acc === "other") { accOther = !accOther; render(); return; }
+    if (b.dataset.acc === "twodecks") {
+      if (blockedEdit()) return;
+      const d = draft(U.state), sys = d.systems; sys.deckCount = sys.deckCount || {};
+      for (const [bay, m] of Object.entries(sys.modules)) if (m === "passenger") sys.deckCount[bay] = 2;
+      accDeck = "upper"; render(); return;
+    }
     if (b.dataset.accDeck) { accDeck = b.dataset.accDeck; render(); return; }
     if (b.dataset.acc === "grid") { accGrid = !accGrid; render(); return; }
     if (b.dataset.acc === "standard") { if (!d.plan || !Object.keys(d.plan.cells).length || confirm("Replace both decks with the standard layout?")) { U.decks.standardLayout(d); render(); } return; }

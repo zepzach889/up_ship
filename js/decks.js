@@ -16,11 +16,11 @@ window.UpShip = window.UpShip || {};
     hall:      { name: "Entrance hall", sw: "#8a6a3a", floor: "url(#dp-marble)", group: "public" },
     writing:   { name: "Writing room", sw: "#5a3a2a", floor: "url(#dp-carpetRed)", group: "public" },
     smoking:   { name: "Smoking room", sw: "#4a3a2a", floor: "url(#dp-parquet)", group: "public" },
-    bar:       { name: "Bar", sw: "#3a2a20", floor: "url(#dp-parquet)", group: "public" },
+    bar:       { name: "Bar", sw: "#3a2a20", floor: "url(#dp-darkwood)", group: "public" },
     library:   { name: "Library", sw: "#2f4a3a", floor: "url(#dp-carpetGreen)", group: "public" },
     drawing:   { name: "Drawing room", sw: "#6a4a6a", floor: "url(#dp-carpetBlue)", group: "public" },
     chapel:    { name: "Chapel", sw: "#c9b48a", floor: "url(#dp-marble)", group: "public" },
-    observation: { name: "Observation room", sw: "#8fb3c9", floor: "url(#dp-glass)", group: "public" },
+    observation: { name: "Observation room", sw: "#8fb3c9", floor: "url(#dp-carpetBlue)", group: "public" },
     cinema:    { name: "Music room and cinema", sw: "#5a2a3a", floor: "url(#dp-carpetRed)", group: "public" },
     playroom:  { name: "Children's playroom", sw: "#c98a5a", floor: "url(#dp-carpetGreen)", group: "public" },
     barber:    { name: "Barber and hairdresser", sw: "#b9c2c4", floor: "url(#dp-whiteTiles)", group: "service" },
@@ -57,6 +57,16 @@ const F = {
   nightstand: (x, y) => `<g filter="url(#dp-lift)"><rect x="${x}" y="${y}" width="3.6" height="3.6" fill="#6b4529"/><circle cx="${x + 1.8}" cy="${y + 1.8}" r="1.1" fill="#f6dc9a"/></g><circle cx="${x + 1.8}" cy="${y + 1.8}" r="5" fill="url(#dp-lampGlow)"/>`,
   wash: (x, y) => `<g filter="url(#dp-lift)"><rect x="${x}" y="${y}" width="5" height="3.6" rx="0.6" fill="#e9e4da" stroke="#8a8278" stroke-width="0.4"/><ellipse cx="${x + 2.5}" cy="${y + 1.9}" rx="1.6" ry="1.1" fill="#b9c6c8"/></g>`,
   armchair: (x, y, col, rot = 0) => `<g transform="translate(${x} ${y}) rotate(${rot})" filter="url(#dp-lift)"><rect x="-3.2" y="-3" width="6.4" height="6" rx="1.6" fill="${col}"/><rect x="-3.2" y="-3" width="6.4" height="2" rx="1" fill="${shade(col, -0.25)}"/><rect x="-3.2" y="-3" width="1.4" height="6" rx="0.7" fill="${shade(col, -0.2)}"/><rect x="1.8" y="-3" width="1.4" height="6" rx="0.7" fill="${shade(col, -0.2)}"/></g>`,
+  lamp: (x, y) => `<circle cx="${x}" cy="${y}" r="1.4" fill="#f3d27a" stroke="#8a6a2a" stroke-width="0.4"/><circle cx="${x}" cy="${y}" r="3.2" fill="url(#dp-lampGlow)" opacity="0.6"/>`,
+  sidetable: (x, y) => `<circle cx="${x}" cy="${y}" r="1.8" fill="#6b4529" filter="url(#dp-lift)"/>`,
+  shower: (x, y) => `<g filter="url(#dp-lift)"><rect x="${x}" y="${y}" width="7" height="7" fill="#e8eef0" stroke="#8a8278" stroke-width="0.5"/><circle cx="${x + 3.5}" cy="${y + 3.5}" r="0.8" fill="none" stroke="#8a8278" stroke-width="0.4"/><path d="M${x + 0.5},${y + 6.5} q1.5,-1 3,0 t3,0" stroke="#7fa3b3" stroke-width="0.5" fill="none"/></g>`,
+  cabinet: (x, y) => `<rect x="${x}" y="${y}" width="3" height="3" fill="#7a6a4a" stroke="#4a3a2a" stroke-width="0.4" filter="url(#dp-lift)"/>`,
+  safe: (x, y) => `<g filter="url(#dp-lift)"><rect x="${x}" y="${y}" width="4" height="4" fill="#3a3a3a"/><circle cx="${x + 2}" cy="${y + 2}" r="1" fill="none" stroke="#c9a65b" stroke-width="0.4"/></g>`,
+  horse: (x, y) => `<g filter="url(#dp-lift)"><path d="M${x},${y + 4} q3,2 6,0" stroke="#6b4529" stroke-width="0.8" fill="none"/><ellipse cx="${x + 3}" cy="${y + 2}" rx="2.6" ry="1.3" fill="#c98a5a"/><circle cx="${x + 5.4}" cy="${y + 1}" r="1" fill="#c98a5a"/></g>`,
+  chest: (x, y) => `<rect x="${x}" y="${y}" width="6" height="3.4" rx="0.6" fill="#9b2a24" stroke="#5c1a16" stroke-width="0.4" filter="url(#dp-lift)"/>`,
+  basin: (x, y) => `<ellipse cx="${x + 2}" cy="${y + 1.6}" rx="1.6" ry="1.1" fill="#f7f5ef" stroke="#8a8278" stroke-width="0.4"/>`,
+  candle: (x, y) => `<circle cx="${x}" cy="${y}" r="0.6" fill="#f3d27a"/>`,
+  glasspanel: (x, y, w, d) => `<rect x="${x}" y="${y}" width="${w}" height="${d}" rx="0.8" fill="url(#dp-glass)" stroke="#c9a65b" stroke-width="0.9"/>`,
   shelf: (x, y, w) => `<g filter="url(#dp-lift)"><rect x="${x}" y="${y}" width="${w}" height="2.6" fill="#5c3b25"/>${Array.from({ length: Math.floor(w / 1.1) }, (_, i) => `<rect x="${x + 0.3 + i * 1.1}" y="${y + 0.4}" width="0.8" height="1.8" fill="${["#9b2a24", "#2d4a6b", "#3f5a3a", "#c9a65b"][i % 4]}"/>`).join("")}</g>`,
   pew: (x, y, w) => `<g filter="url(#dp-lift)"><rect x="${x}" y="${y}" width="${w}" height="2.6" rx="0.6" fill="#6b4529"/><rect x="${x}" y="${y + 2.2}" width="${w}" height="0.8" fill="#4a2e1c"/></g>`,
   stool: (x, y) => `<circle cx="${x}" cy="${y}" r="1.3" fill="#9b2a24" stroke="#4a2e1c" stroke-width="0.4" filter="url(#dp-lift)"/>`,
@@ -128,6 +138,13 @@ function placeBed(L, W, D, col, allowDouble) {
   return null;
 }
 
+// A conversation or reading group: chairs facing a low table, with a lamp beside.
+const club = (x, y, col, n = 2) => {
+  let g = F.sidetable(x + 6, y + 6);
+  const spots = [[2.8, 6, 90], [9.2, 6, -90], [6, 2.4, 180], [6, 9.6, 0]].slice(0, n);
+  for (const [dx, dy, r] of spots) g += F.armchair(x + dx, y + dy, col, r);
+  return g + F.lamp(x + 11, y + 1.2);
+};
 const FURNISH = {
   cabin(fr, n, door) {
     const { W, D } = fr, L = layout(W, D, door), single = W < 1.5 * Q || D < 1.1 * Q && W < 2.2 * Q;
@@ -194,17 +211,58 @@ const FURNISH = {
   // facing pairs at little tables in a small room, and rows facing the bow with an aisle in a wide room.
   saloon(fr, n, door, back, onHull) { return saloonLayout(fr, door, back, onHull).svg; },
   hall(fr, n, door) { const { W, D } = fr, L = layout(W, D, door); L.put(W * 0.6, D * 0.5, [[W * 0.2, D * 0.25]], (x, y) => F.rug(x, y, W * 0.6, D * 0.5, "#8a2a2a")); for (const [x, y] of cornerSpots(W, D, 8, 8)) L.put(8, 8, [[x, y]], (x, y) => F.planter(x + 4, y + 4)); return L.svg(); },
-  writing(fr, n, door) { const { W, D } = fr, L = layout(W, D, door); for (let x = 1; x + 8 <= W - 1; x += 10) L.put(8, 8, [[x, 0.6]], (x, y) => F.desk(x, y) + F.armchair(x + 4, y + 6.5, "#5c3b25", 180)); L.put(6.4, 6, gridSpots(W, D, 6.4, 6, 2), (x, y) => F.armchair(x + 3.2, y + 3, "#9b2a24")); return L.svg(); },
-  smoking(fr, n, door) { const { W, D } = fr, L = layout(W, D, door); for (const [x, y] of gridSpots(W, D, 15, 13, 6)) L.put(15, 13, [[x, y]], (x, y) => F.armchair(x + 3.4, y + 3.4, "#4a2e1c", 0) + F.armchair(x + 11.6, y + 3.4, "#4a2e1c", 0) + `<circle cx="${x + 7.5}" cy="${y + 8}" r="2.2" fill="#6b4529"/>`); return L.svg(); },
-  bar(fr, n, door) { const { W, D } = fr, L = layout(W, D, door); L.put(W - 2, 4, [[1, 0.8]], (x, y) => F.counter(x, y, W - 2, 3.2) + Array.from({ length: Math.floor((W - 4) / 4) }, (_, i) => F.stool(x + 3 + i * 4, y + 5.6)).join("")); for (const [x, y] of gridSpots(W, D, 11, 11, 4)) L.put(11, 11, [[x, y]], (x, y) => F.table(x + 5.5, y + 5.5, 2.6, 2)); return L.svg(); },
-  library(fr, n, door) { const { W, D } = fr, L = layout(W, D, door); L.put(W - 2, 3, [[1, 0.5]], (x, y) => F.shelf(x, y, W - 2)); if (D > 20) L.put(3, D - 12, [[0.5, 5]], (x, y) => `<g transform="rotate(90 ${x + 1.5} ${y + 1.5})">${F.shelf(x, y, D - 12)}</g>`); for (const [x, y] of gridSpots(W, D, 6.4, 6, 4)) L.put(6.4, 6, [[x, y]], (x, y) => F.armchair(x + 3.2, y + 3, "#3f5a3a")); return L.svg(); },
-  drawing(fr, n, door) { const { W, D } = fr, L = layout(W, D, door); L.put(Math.min(16, W - 4), 7, [[2, 1]], (x, y) => F.sofa(x, y, Math.min(16, W - 4), "#8a5a7a")); for (const [x, y] of gridSpots(W, D, 6.4, 6, 4)) L.put(6.4, 6, [[x, y]], (x, y) => F.armchair(x + 3.2, y + 3, "#c9a0b0")); for (const [x, y] of cornerSpots(W, D, 7, 7)) L.put(7, 7, [[x, y]], (x, y) => F.planter(x + 3.5, y + 3.5)); return L.svg(); },
-  chapel(fr, n, door) { const { W, D } = fr, L = layout(W, D, door); L.put(7, 3, [[W / 2 - 3.5, 0.8]], (x, y) => F.altar(x, y)); for (let y = 7; y + 3 <= D - 2; y += 4.2) { L.put(W / 2 - 3, 3, [[1.5, y]], (x, y) => F.pew(x, y, W / 2 - 3)); L.put(W / 2 - 3, 3, [[W / 2 + 1.5, y]], (x, y) => F.pew(x, y, W / 2 - 3)); } return L.svg(); },
-  observation(fr, n, door, back) { const { W, D } = fr, L = layout(W, D, door); for (const [x, y] of gridSpots(W, D, 6.4, 6.4, 8)) L.put(6.4, 6.4, [[x, y]], (x, y) => F.armchair(x + 3.2, y + 3.2, "#c9a06a", 180)); return L.svg(); },
-  cinema(fr, n, door) { const { W, D } = fr, L = layout(W, D, door); L.put(W - 6, 1.5, [[3, 0.6]], (x, y) => F.screen(x, y, W - 6)); L.put(9, 8, [[1, 3]], (x, y) => F.piano(x, y)); for (let y = 12; y + 6 <= D - 1; y += 7) for (let x = 2; x + 6 <= W - 2; x += 7) L.put(6, 6, [[x, y]], (x, y) => F.armchair(x + 3, y + 3, "#7a2a3a", 180)); return L.svg(); },
-  playroom(fr, n, door) { const { W, D } = fr, L = layout(W, D, door); L.put(W * 0.6, D * 0.5, [[W * 0.2, D * 0.25]], (x, y) => F.rug(x, y, W * 0.6, D * 0.5, "#e6b04a") + [["#9b2a24", 0.2, 0.3], ["#2d4a6b", 0.5, 0.6], ["#3f5a3a", 0.7, 0.35]].map(([c, a, b2]) => F.toy(x + W * 0.6 * a, y + D * 0.5 * b2, c)).join("")); return L.svg(); },
-  barber(fr, n, door) { const { W, D } = fr, L = layout(W, D, door); L.put(W - 2, 2, [[1, 0.5]], (x, y) => F.mirror(x, y, W - 2)); for (let x = 2; x + 6 <= W - 1; x += 8) L.put(6, 6, [[x, 3]], (x, y) => F.armchair(x + 3, y + 3, "#b9bcbd", 180)); return L.svg(); },
-  purser(fr, n, door) { const { W, D } = fr, L = layout(W, D, door); L.put(W - 4, 4, [[2, D * 0.45]], (x, y) => F.counter(x, y, W - 4, 3)); L.put(8, 8, [[2, 1]], (x, y) => F.desk(x, y)); return L.svg(); },
+  writing(fr, n, door) { const { W, D } = fr, L = layout(W, D, door);
+    for (let x = 1.5; x + 9 <= W - 1; x += 11) L.put(9, 9, [[x, 0.6]], (x, y) => F.desk(x, y) + F.lamp(x + 7, y + 1.4) + F.armchair(x + 4, y + 6.4, "#5c3b25", 180));
+    if (D > 22) L.put(13, 13, [[W / 2 - 6.5, D * 0.5]], (x, y) => club(x, y, "#7a3a2a", 3));
+    for (const [x, y] of cornerSpots(W, D, 7, 7)) L.put(7, 7, [[x, y]], (x, y) => F.planter(x + 3.5, y + 3.5)); return L.svg(); },
+  smoking(fr, n, door) { const { W, D } = fr, L = layout(W, D, door);
+    for (const [x, y] of gridSpots(W, D, 14, 14, 4)) L.put(14, 14, [[x, y]], (x, y) => club(x, y, "#4a2e1c", 3 + ((x + y) | 0) % 2));
+    for (const [x, y] of cornerSpots(W, D, 7, 7)) L.put(7, 7, [[x, y]], (x, y) => F.planter(x + 3.5, y + 3.5)); return L.svg(); },
+  bar(fr, n, door) { const { W, D } = fr, L = layout(W, D, door);
+    // The back bar of bottles, the counter with its brass rail, stools, and a few small cocktail tables.
+    L.put(W - 2, 9, [[1, 0.5]], (x, y) => `<rect x="${x}" y="${y}" width="${W - 2}" height="1.6" fill="#3a2418"/>${Array.from({ length: Math.floor((W - 3) / 1.6) }, (_, i) => `<rect x="${x + 0.6 + i * 1.6}" y="${y + 0.2}" width="0.7" height="1.2" fill="${["#7a9a5a", "#c9a65b", "#8a3a2a", "#cfe1ea"][i % 4]}"/>`).join("")}
+      <rect x="${x + 1}" y="${y + 3.4}" width="${W - 4}" height="2.6" rx="1.2" fill="#5c3b25"/><line x1="${x + 1.5}" y1="${y + 6.2}" x2="${x + W - 3.5}" y2="${y + 6.2}" stroke="#c9a65b" stroke-width="0.5"/>${Array.from({ length: Math.floor((W - 6) / 3.6) }, (_, i) => F.stool(x + 3 + i * 3.6, y + 7.6)).join("")}`);
+    for (const [x, y] of gridSpots(W, D, 8, 8, 4)) L.put(8, 8, [[x, y]], (x, y) => `<circle cx="${x + 4}" cy="${y + 4}" r="1.8" fill="#3a2418" filter="url(#dp-lift)"/>` + F.stool(x + 1, y + 4) + F.stool(x + 7, y + 4));
+    return L.svg(); },
+  library(fr, n, door) { const { W, D } = fr, L = layout(W, D, door);
+    L.put(W - 2, 3, [[1, 0.5]], (x, y) => F.shelf(x, y, W - 2));
+    if (D > 18) L.put(3, D - 8, [[0.5, 4]], (x, y) => `<g transform="rotate(90 ${x + 1.5} ${y + 1.5})">${F.shelf(x, y, D - 8)}</g>`);
+    // The rug is floor, not furniture: drawn beneath, it blocks nothing.
+    const rug = F.rug(W * 0.2, D * 0.3, W * 0.6, D * 0.5, "#3f5a3a");
+    for (const [x, y] of gridSpots(W, D, 14, 14, 10)) L.put(14, 14, [[x, y]], (x, y) => club(x, y, "#5a3a2a", 2));
+    return rug + L.svg(); },
+  drawing(fr, n, door) { const { W, D } = fr, L = layout(W, D, door);
+    L.put(Math.min(22, W - 4), 16, [[W / 2 - Math.min(11, W / 2 - 2), D * 0.3]], (x, y) => { const w = Math.min(22, W - 4); return F.rug(x, y, w, 16, "#8a5a7a") + F.sofa(x + w / 2 - 7, y + 1, 14, "#c9a0b0") + F.sidetable(x + w / 2, y + 10) + F.armchair(x + w / 2 - 6, y + 13, "#c9a0b0", 0) + F.armchair(x + w / 2 + 6, y + 13, "#c9a0b0", 0); });
+    L.put(9, 6, [[W - 10, 1]], (x, y) => F.desk(x, y) + F.lamp(x + 7, y + 1.4));
+    for (const [x, y] of cornerSpots(W, D, 7, 7)) L.put(7, 7, [[x, y]], (x, y) => F.planter(x + 3.5, y + 3.5)); return L.svg(); },
+  chapel(fr, n, door) { const { W, D } = fr, L = layout(W, D, door);
+    L.put(W - 4, 6, [[2, 0.5]], (x, y) => `<rect x="${x}" y="${y}" width="${W - 4}" height="4.4" fill="#d9cdb0"/><line x1="${x}" y1="${y + 5.2}" x2="${x + W - 4}" y2="${y + 5.2}" stroke="#c9a65b" stroke-width="0.6"/>` + F.altar(x + (W - 4) / 2 - 3.5, y + 0.6) + F.candle(x + (W - 4) / 2 - 5, y + 2) + F.candle(x + (W - 4) / 2 + 5, y + 2));
+    L.put(5, D - 8, [[W / 2 - 2.5, 7]], (x, y) => `<rect x="${x}" y="${y}" width="5" height="${D - 8}" fill="#8a2a2a" opacity="0.85"/>`);
+    for (let y = 8; y + 3 <= D - 2; y += 4.4) { L.put(W / 2 - 5, 3, [[1.5, y]], (x, y) => F.pew(x, y, W / 2 - 5)); L.put(W / 2 - 5, 3, [[W / 2 + 3.5, y]], (x, y) => F.pew(x, y, W / 2 - 5)); }
+    return L.svg(); },
+  observation(fr, n, door) { const { W, D } = fr, L = layout(W, D, door);
+    // Framed glass panels let into the floor, with chairs and small tables around them, like a lounge.
+    for (const [x, y] of gridSpots(W, D, 16, 16, 3)) L.put(16, 16, [[x, y]], (x, y) => F.glasspanel(x + 4, y + 4, 8, 8) + F.armchair(x + 2, y + 8, "#c9a06a", 90) + F.armchair(x + 14, y + 8, "#c9a06a", -90) + F.sidetable(x + 2.2, y + 2.2) + F.sidetable(x + 13.8, y + 13.8));
+    for (const [x, y] of cornerSpots(W, D, 7, 7)) L.put(7, 7, [[x, y]], (x, y) => F.planter(x + 3.5, y + 3.5)); return L.svg(); },
+  cinema(fr, n, door) { const { W, D } = fr, L = layout(W, D, door);
+    // A stage with curtains and a piano, then two blocks of seats either side of a centre aisle.
+    L.put(W - 2, 9, [[1, 0.5]], (x, y) => `<rect x="${x}" y="${y}" width="${W - 2}" height="7" fill="#8a5a3a"/><rect x="${x}" y="${y}" width="3" height="7" fill="#7a1f2a"/><rect x="${x + W - 5}" y="${y}" width="3" height="7" fill="#7a1f2a"/>` + F.screen(x + 4, y + 0.6, W - 10) + F.piano(x + W - 14, y + 2.4));
+    for (let y = 12; y + 6 <= D - 1; y += 7) for (let x = 1.5; x + 6 <= W - 1.5; x += 6.8) { if (x + 6 > W / 2 - 3 && x < W / 2 + 3) continue; L.put(6, 6, [[x, y]], (x, y) => F.armchair(x + 3, y + 3, "#7a2a3a", 180)); }
+    return L.svg(); },
+  playroom(fr, n, door) { const { W, D } = fr, L = layout(W, D, door);
+    L.put(W * 0.6, D * 0.5, [[W * 0.2, D * 0.25]], (x, y) => F.rug(x, y, W * 0.6, D * 0.5, "#e6b04a") + [["#9b2a24", 0.2, 0.3], ["#2d4a6b", 0.5, 0.6], ["#3f5a3a", 0.7, 0.35]].map(([c, a, b2]) => F.toy(x + W * 0.6 * a, y + D * 0.5 * b2, c)).join(""));
+    L.put(7, 6, [[1.5, 1.5]], (x, y) => F.horse(x, y)); L.put(7, 4, [[W - 8, 1]], (x, y) => F.chest(x, y));
+    L.put(10, 9, [[W - 11, D - 10]], (x, y) => `<rect x="${x + 2}" y="${y + 3}" width="6" height="4" rx="0.8" fill="#e8c98a" filter="url(#dp-lift)"/>` + [[x + 1, y + 5], [x + 9, y + 5], [x + 5, y + 1.6], [x + 5, y + 8.4]].map(([a, b2]) => F.stool(a, b2)).join(""));
+    return L.svg(); },
+  barber(fr, n, door) { const { W, D } = fr, L = layout(W, D, door);
+    L.put(W - 2, 9, [[1, 0.5]], (x, y) => F.mirror(x, y, W - 2) + Array.from({ length: Math.floor((W - 4) / 8) }, (_, i) => F.basin(x + 2 + i * 8, y + 1.8) + F.armchair(x + 4 + i * 8, y + 6, "#b9bcbd", 180)).join(""));
+    L.put(W - 6, 6, [[3, D - 7]], (x, y) => F.sofa(x, y, W - 6, "#7a6a4a")); for (const [x, y] of cornerSpots(W, D, 7, 7)) L.put(7, 7, [[x, y]], (x, y) => F.planter(x + 3.5, y + 3.5)); return L.svg(); },
+  purser(fr, n, door) { const { W, D } = fr, L = layout(W, D, door);
+    L.put(W - 4, 5, [[2, D * 0.45]], (x, y) => F.counter(x, y, W - 4, 3) + Array.from({ length: Math.floor((W - 4) / 3) }, (_, i) => `<line x1="${x + 1 + i * 3}" y1="${y - 1.5}" x2="${x + 1 + i * 3}" y2="${y}" stroke="#c9a65b" stroke-width="0.5"/>`).join(""));
+    L.put(9, 9, [[2, 1]], (x, y) => F.desk(x, y) + F.lamp(x + 7, y + 1.4) + F.armchair(x + 4, y + 6.4, "#5c3b25", 180));
+    L.put(4, 4, [[W - 6, 1]], (x, y) => F.safe(x, y)); L.put(7, 3, [[W - 14, 1]], (x, y) => F.cabinet(x, y) + F.cabinet(x + 3.5, y));
+    for (const [x, y] of gridSpots(W, D * 0.4, 6.4, 6, 3).map(([x, y]) => [x, y + D * 0.6])) L.put(6.4, 6, [[x, y]], (x, y) => F.armchair(x + 3.2, y + 3, "#7a6a4a"));
+    return L.svg(); },
   boarding() { return ""; }, stair() { return ""; }, grand() { return ""; }, landing() { return ""; }, void() { return ""; },
   promenade(fr, n, door) {
     const { W, D } = fr, L = layout(W, D, null);
@@ -222,6 +280,7 @@ const FURNISH = {
   },
   wash(fr, n, door) {
     const { W, D } = fr, L = layout(W, D, door);
+    if (W >= 16) L.put(7, 7, [[W - 8, 1]], (x, y) => F.shower(x, y));
     for (let x = 1; x + 7 <= W - 1; x += 8) L.put(7, 8, [[x, 1]], (x, y) => F.stall(x, y));
     for (let x = 1; x + 6 <= W - 1; x += 8) L.put(6, 4, [[x, D - 5]], (x, y) => F.sink(x, y));
     return L.svg();
@@ -272,6 +331,7 @@ const DEFS_BODY = `
 <pattern id="dp-deckPlanks" width="24" height="4" patternUnits="userSpaceOnUse"><rect width="24" height="4" fill="#d3b27a"/><path d="M0,4 H24 M9,0 V4" stroke="#b08e57" stroke-width="0.4"/><path d="M0,1.6 H24" stroke="#ddbd88" stroke-width="0.3"/></pattern>
 <pattern id="dp-carpetRed" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="#7b3a3a"/><path d="M4,1 L7,4 L4,7 L1,4 Z" fill="none" stroke="#8e4a47" stroke-width="0.5"/></pattern>
 <pattern id="dp-carpetPlum" width="10" height="10" patternUnits="userSpaceOnUse"><rect width="10" height="10" fill="#5a4a72"/><path d="M0,5 H10 M5,0 V10" stroke="#6b5a8a" stroke-width="0.6"/></pattern>
+<pattern id="dp-darkwood" width="16" height="4" patternUnits="userSpaceOnUse"><rect width="16" height="4" fill="#4a2e1c"/><path d="M0,4 H16 M8,0 V4" stroke="#3a2418" stroke-width="0.5"/></pattern>
 <pattern id="dp-marble" width="12" height="12" patternUnits="userSpaceOnUse"><rect width="12" height="12" fill="#e8e0cf"/><path d="M0,0 H12 V12" fill="none" stroke="#cfc4ad" stroke-width="0.5"/><path d="M2,9 Q6,5 10,7" stroke="#d8cdb5" stroke-width="0.4" fill="none"/></pattern>
 <pattern id="dp-glass" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="#b9d6e2"/><path d="M0,0 H8 M0,0 V8" stroke="#7fa3b3" stroke-width="0.5"/><path d="M1,6 L3,4" stroke="#fff" stroke-width="0.5" opacity="0.7"/></pattern>
 <pattern id="dp-roof" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="10" height="10" fill="#d2c6a8"/><line x1="0" y1="0" x2="0" y2="10" stroke="#b9ab88" stroke-width="2"/></pattern>
@@ -430,7 +490,13 @@ const DEFS_BODY = `
         const hull = out && (nr < 0 || nr >= ctx.rows);
         const X1 = ctx.colX(c) + x1 * S, Y1 = (r + y1) * S, X2 = ctx.colX(c) + x2 * S, Y2 = (r + y2) * S;
         walls += `<line x1="${X1}" y1="${Y1}" x2="${X2}" y2="${Y2}" class="${hull ? "hullwall" : "wall"}"/>`;
-        if (hull && (g.type === "promenade" || g.type === "saloon")) walls += `<rect x="${X1 + 3}" y="${Y1 - 1.6}" width="${S - 6}" height="3.2" class="window"/>`;      // windows wherever passengers sit or stroll along the hull
+        // Windows wherever a room meets the hull: long ones for public rooms, one per square for cabins, portholes for service rooms.
+        if (hull) {
+          const long = ["promenade", "saloon", "lounge", "dining", "observation", "bar", "drawing", "library", "writing", "smoking", "hall", "cinema", "chapel", "playroom"].includes(g.type);
+          if (long) walls += `<rect x="${X1 + 3}" y="${Y1 - 1.6}" width="${S - 6}" height="3.2" class="window"/>`;
+          else if (g.type === "wash" || g.type === "galley" || g.type === "barber" || g.type === "purser") walls += `<circle cx="${X1 + S / 2}" cy="${Y1}" r="1.6" class="window"/>`;
+          else if (g.type !== "corridor") walls += `<rect x="${X1 + S / 2 - 3}" y="${Y1 - 1.6}" width="6" height="3.2" class="window"/>`;
+        }
       }
     }
     // Bay labels above each block of columns.
@@ -458,11 +524,15 @@ const DEFS_BODY = `
       for (const { r, c } of cells) for (const [dr, dc, x1, y1, x2, y2] of [[-1, 0, 0, 0, 1, 0], [1, 0, 0, 1, 1, 1], [0, -1, 0, 0, 0, 1], [0, 1, 1, 0, 1, 1]]) {
         const n = inside(ctx, r + dr, c + dc) ? ctx.grid[r + dr][c + dc] : null;
         if (n && n.type === "void") continue;
-        below += `<line x1="${ctx.colX(c) + x1 * S}" y1="${(r + y1) * S}" x2="${ctx.colX(c) + x2 * S}" y2="${(r + y2) * S}" class="dp-balustrade"/>`;
+        const bx1 = ctx.colX(c) + x1 * S, by1 = (r + y1) * S, bx2 = ctx.colX(c) + x2 * S, by2 = (r + y2) * S;
+        below += `<line x1="${bx1}" y1="${by1}" x2="${bx2}" y2="${by2}" class="dp-balustrade"/><circle cx="${bx1}" cy="${by1}" r="1.3" class="dp-post"/><circle cx="${(bx1 + bx2) / 2}" cy="${(by1 + by2) / 2}" r="0.9" class="dp-post"/>`;
       }
     }
     const ghost = opts.ghost ? `<g opacity="0.22" pointer-events="none">${opts.ghost}</g>` : "";
-    return `<g class="dp">${floors}${below}${furn}${walls}${doors}${marks}${labels}${dims}${ghost}${opts.hover || ""}</g>`;
+    // The smoking room on a hydrogen ship is entered through an airlock: a double door with a vestibule.
+    let locks = "";
+    for (const room of rs) if (room.type === "smoking") { const dr = door(ctx, room); if (dr) { const c = dr.cell, x = ctx.colX(c.c), y = c.r * S; locks += `<rect x="${x + S / 2 - 4}" y="${y + S / 2 - 4}" width="8" height="8" class="dp-airlock"/><text x="${x + S / 2}" y="${y + S / 2 + 1.4}" class="dp-landtext">airlock</text>`; } }
+    return `<g class="dp">${floors}${below}${furn}${walls}${doors}${locks}${marks}${labels}${dims}${ghost}${opts.hover || ""}</g>`;
   }
   // Stairs drawn from above: treads across the flight, an arrow up it; landings show the top of the flight inside a railing.
   function stairDrawing(ctx, room) {
@@ -474,6 +544,9 @@ const DEFS_BODY = `
     for (let i = 1; i < n; i++) g += along ? `<line x1="${x0 + w * i / n}" y1="${y0 + 3}" x2="${x0 + w * i / n}" y2="${y1 - 3}" class="dp-tread"/>` : `<line x1="${x0 + 3}" y1="${y0 + h * i / n}" x2="${x1 - 3}" y2="${y0 + h * i / n}" class="dp-tread"/>`;
     const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, a = { e: [-1, 0], w: [1, 0], s: [0, -1], n: [0, 1] }[dir], L = (along ? w : h) * 0.32;
     g += `<line x1="${cx - a[0] * L}" y1="${cy - a[1] * L}" x2="${cx + a[0] * L}" y2="${cy + a[1] * L}" class="dp-climb" marker-end="url(#dp-arrow)"/>`;
+    // Walls on three sides; the side you step on from stays open, so the way up is plain.
+    const sides = { n: [x0, y0, x1, y0], s: [x0, y1, x1, y1], w: [x0, y0, x0, y1], e: [x1, y0, x1, y1] }, open = { e: "w", w: "e", n: "s", s: "n" }[dir];
+    if (room.type !== "landing") for (const [k, [ax, ay, bx, by]] of Object.entries(sides)) if (k !== open) g += `<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" class="dp-stairwall"/>`;
     if (room.type === "grand") g += `<rect x="${x0 + 2}" y="${y0 + 2}" width="${w - 4}" height="${h - 4}" rx="6" class="dp-banister"/>`;
     if (room.type === "landing") g += `<rect x="${x0 + 1.5}" y="${y0 + 1.5}" width="${w - 3}" height="${h - 3}" class="dp-railing"/><text x="${cx}" y="${cy + 3}" class="dp-landtext">stairs down</text>`;
     if (room.type === "boarding") g += `<text x="${cx}" y="${y1 - 3}" class="dp-landtext">boarding</text>`;
