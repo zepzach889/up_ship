@@ -115,6 +115,10 @@ function layout(W, D, doorU) {
     svg: () => out.join("")
   };
 }
+// Evenly spread: as many as fit with at least the given gap, then spaced equally, margins included, about the centre.
+function even(len, size, gap, max = 99) { const n = Math.max(0, Math.min(max, Math.floor((len - gap) / (size + gap)))); const sp = (len - n * size) / (n + 1); return Array.from({ length: n }, (_, i) => sp + i * (size + sp)); }
+const spread = (W, D, w, d, gap, maxX, maxY, y0 = 0, D1 = D) => { const xs = even(W, w, gap, maxX), ys = even(D1 - y0, d, gap, maxY).map(y => y + y0); const out = []; for (const y of ys) for (const x of xs) out.push([x, y]); return out; };
+const alongWall = (W, w, gap, max) => even(W, w, gap, max);
 const cornerSpots = (W, D, w, d) => [[1, 1], [W - w - 1, 1], [1, D - d - 1], [W - w - 1, D - d - 1]];
 const wallSpots = (W, D, w, d, step = 3) => {        // along the back wall, then the side walls, then the front
   const s = [];
@@ -212,28 +216,32 @@ const FURNISH = {
   saloon(fr, n, door, back, onHull) { return saloonLayout(fr, door, back, onHull).svg; },
   hall(fr, n, door) { const { W, D } = fr, L = layout(W, D, door); L.put(W * 0.6, D * 0.5, [[W * 0.2, D * 0.25]], (x, y) => F.rug(x, y, W * 0.6, D * 0.5, "#8a2a2a")); for (const [x, y] of cornerSpots(W, D, 8, 8)) L.put(8, 8, [[x, y]], (x, y) => F.planter(x + 4, y + 4)); return L.svg(); },
   writing(fr, n, door) { const { W, D } = fr, L = layout(W, D, door);
-    for (let x = 1.5; x + 9 <= W - 1; x += 11) L.put(9, 9, [[x, 0.6]], (x, y) => F.desk(x, y) + F.lamp(x + 7, y + 1.4) + F.armchair(x + 4, y + 6.4, "#5c3b25", 180));
-    if (D > 22) L.put(13, 13, [[W / 2 - 6.5, D * 0.5]], (x, y) => club(x, y, "#7a3a2a", 3));
-    for (const [x, y] of cornerSpots(W, D, 7, 7)) L.put(7, 7, [[x, y]], (x, y) => F.planter(x + 3.5, y + 3.5)); return L.svg(); },
+    for (const x of alongWall(W, 9, 3, 4)) L.put(9, 9, [[x, 0.6]], (x, y) => F.desk(x, y) + F.lamp(x + 7, y + 1.4) + F.armchair(x + 4, y + 6.4, "#5c3b25", 180));
+    if (D > 24 && W > 18) L.put(13, 13, [[W / 2 - 6.5, Math.max(11, D / 2 - 4)]], (x, y) => club(x, y, "#7a3a2a", 3));
+    for (const [x, y] of cornerSpots(W, D, 7, 7).slice(2)) L.put(7, 7, [[x, y]], (x, y) => F.planter(x + 3.5, y + 3.5)); return L.svg(); },
   smoking(fr, n, door) { const { W, D } = fr, L = layout(W, D, door);
-    for (const [x, y] of gridSpots(W, D, 14, 14, 4)) L.put(14, 14, [[x, y]], (x, y) => club(x, y, "#4a2e1c", 3 + ((x + y) | 0) % 2));
+    L.put(8, 3.6, [[W / 2 - 4, 0.6]], (x, y) => `<rect x="${x}" y="${y}" width="8" height="3.4" fill="#5c3b25" filter="url(#dp-lift)"/><rect x="${x + 1}" y="${y + 0.6}" width="6" height="1.6" fill="#8a5a3a"/>`);          // the humidor
+    for (const [x, y] of spread(W, D, 14, 14, 3, 3, 3, 4)) L.put(14, 14, [[x, y]], (x, y) => club(x, y, "#4a2e1c", 3));
     for (const [x, y] of cornerSpots(W, D, 7, 7)) L.put(7, 7, [[x, y]], (x, y) => F.planter(x + 3.5, y + 3.5)); return L.svg(); },
-  bar(fr, n, door) { const { W, D } = fr, L = layout(W, D, door);
-    // The back bar of bottles, the counter with its brass rail, stools, and a few small cocktail tables.
-    L.put(W - 2, 9, [[1, 0.5]], (x, y) => `<rect x="${x}" y="${y}" width="${W - 2}" height="1.6" fill="#3a2418"/>${Array.from({ length: Math.floor((W - 3) / 1.6) }, (_, i) => `<rect x="${x + 0.6 + i * 1.6}" y="${y + 0.2}" width="0.7" height="1.2" fill="${["#7a9a5a", "#c9a65b", "#8a3a2a", "#cfe1ea"][i % 4]}"/>`).join("")}
-      <rect x="${x + 1}" y="${y + 3.4}" width="${W - 4}" height="2.6" rx="1.2" fill="#5c3b25"/><line x1="${x + 1.5}" y1="${y + 6.2}" x2="${x + W - 3.5}" y2="${y + 6.2}" stroke="#c9a65b" stroke-width="0.5"/>${Array.from({ length: Math.floor((W - 6) / 3.6) }, (_, i) => F.stool(x + 3 + i * 3.6, y + 7.6)).join("")}`);
-    for (const [x, y] of gridSpots(W, D, 8, 8, 4)) L.put(8, 8, [[x, y]], (x, y) => `<circle cx="${x + 4}" cy="${y + 4}" r="1.8" fill="#3a2418" filter="url(#dp-lift)"/>` + F.stool(x + 1, y + 4) + F.stool(x + 7, y + 4));
+  bar(fr, n, door) { const { W, D } = fr, L = layout(W, D, door), cw = Math.min(W - 4, 30), cx = (W - cw) / 2;
+    // The back bar of bottles, the counter with its brass rail and stools, centred; small cocktail tables spread evenly.
+    L.put(cw, 9, [[cx, 0.5]], (x, y) => `<rect x="${x}" y="${y}" width="${cw}" height="1.6" fill="#3a2418"/>${Array.from({ length: Math.floor((cw - 1) / 1.6) }, (_, i) => `<rect x="${x + 0.6 + i * 1.6}" y="${y + 0.2}" width="0.7" height="1.2" fill="${["#7a9a5a", "#c9a65b", "#8a3a2a", "#cfe1ea"][i % 4]}"/>`).join("")}
+      <rect x="${x + 1}" y="${y + 3.4}" width="${cw - 2}" height="2.6" rx="1.2" fill="#5c3b25"/><line x1="${x + 1.5}" y1="${y + 6.2}" x2="${x + cw - 1.5}" y2="${y + 6.2}" stroke="#c9a65b" stroke-width="0.5"/>${alongWall(cw - 2, 2.6, 1, 12).map(sx => F.stool(x + 1 + sx + 1.3, y + 7.6)).join("")}`);
+    for (const [x, y] of spread(W, D, 9, 8, 4, 4, 3, 11)) L.put(9, 8, [[x, y]], (x, y) => `<circle cx="${x + 4.5}" cy="${y + 4}" r="1.8" fill="#3a2418" filter="url(#dp-lift)"/>` + F.stool(x + 1.2, y + 4) + F.stool(x + 7.8, y + 4));
     return L.svg(); },
   library(fr, n, door) { const { W, D } = fr, L = layout(W, D, door);
     L.put(W - 2, 3, [[1, 0.5]], (x, y) => F.shelf(x, y, W - 2));
-    if (D > 18) L.put(3, D - 8, [[0.5, 4]], (x, y) => `<g transform="rotate(90 ${x + 1.5} ${y + 1.5})">${F.shelf(x, y, D - 8)}</g>`);
+    // Shelves down both side walls, books standing along their length.
+    if (D > 18) for (const sx of [0.5, W - 3.1]) L.put(2.6, D - 12, [[sx, 4.6]], (x, y) => `<g filter="url(#dp-lift)"><rect x="${x}" y="${y}" width="2.6" height="${D - 12}" fill="#5c3b25"/>${Array.from({ length: Math.floor((D - 12) / 1.1) }, (_, i) => `<rect x="${x + 0.4}" y="${y + 0.3 + i * 1.1}" width="1.8" height="0.8" fill="${["#9b2a24", "#2d4a6b", "#3f5a3a", "#c9a65b"][i % 4]}"/>`).join("")}</g>`);
     // The rug is floor, not furniture: drawn beneath, it blocks nothing.
-    const rug = F.rug(W * 0.2, D * 0.3, W * 0.6, D * 0.5, "#3f5a3a");
-    for (const [x, y] of gridSpots(W, D, 14, 14, 10)) L.put(14, 14, [[x, y]], (x, y) => club(x, y, "#5a3a2a", 2));
+    const rug = F.rug(W * 0.2, D * 0.3, W * 0.6, D * 0.45, "#3f5a3a");
+    for (const [x, y] of spread(W - 8, D, 14, 14, 6, 2, 2, 4)) L.put(14, 14, [[x + 4, y]], (x, y) => club(x, y, "#5a3a2a", 2));
     return rug + L.svg(); },
   drawing(fr, n, door) { const { W, D } = fr, L = layout(W, D, door);
-    L.put(Math.min(22, W - 4), 16, [[W / 2 - Math.min(11, W / 2 - 2), D * 0.3]], (x, y) => { const w = Math.min(22, W - 4); return F.rug(x, y, w, 16, "#8a5a7a") + F.sofa(x + w / 2 - 7, y + 1, 14, "#c9a0b0") + F.sidetable(x + w / 2, y + 10) + F.armchair(x + w / 2 - 6, y + 13, "#c9a0b0", 0) + F.armchair(x + w / 2 + 6, y + 13, "#c9a0b0", 0); });
-    L.put(9, 6, [[W - 10, 1]], (x, y) => F.desk(x, y) + F.lamp(x + 7, y + 1.4));
+    // A conversation group sized to the room: a sofa, two armchairs, and a low table where there is space; two armchairs otherwise.
+    if (W >= 24 && D >= 22) L.put(20, 16, [[W / 2 - 10, D / 2 - 8]], (x, y) => F.rug(x, y, 20, 16, "#8a5a7a") + F.sofa(x + 3, y + 1, 14, "#c9a0b0") + F.sidetable(x + 10, y + 9.5) + F.armchair(x + 4, y + 13, "#c9a0b0", 0) + F.armchair(x + 16, y + 13, "#c9a0b0", 0));
+    else L.put(13, 13, [[W / 2 - 6.5, D / 2 - 6.5]], (x, y) => F.rug(x, y, 13, 13, "#8a5a7a") + club(x, y, "#c9a0b0", 2));
+    if (W >= 20) L.put(9, 6, [[W / 2 - 4.5, 1]], (x, y) => F.desk(x, y) + F.lamp(x + 7, y + 1.4));
     for (const [x, y] of cornerSpots(W, D, 7, 7)) L.put(7, 7, [[x, y]], (x, y) => F.planter(x + 3.5, y + 3.5)); return L.svg(); },
   chapel(fr, n, door) { const { W, D } = fr, L = layout(W, D, door);
     L.put(W - 4, 6, [[2, 0.5]], (x, y) => `<rect x="${x}" y="${y}" width="${W - 4}" height="4.4" fill="#d9cdb0"/><line x1="${x}" y1="${y + 5.2}" x2="${x + W - 4}" y2="${y + 5.2}" stroke="#c9a65b" stroke-width="0.6"/>` + F.altar(x + (W - 4) / 2 - 3.5, y + 0.6) + F.candle(x + (W - 4) / 2 - 5, y + 2) + F.candle(x + (W - 4) / 2 + 5, y + 2));
@@ -241,27 +249,33 @@ const FURNISH = {
     for (let y = 8; y + 3 <= D - 2; y += 4.4) { L.put(W / 2 - 5, 3, [[1.5, y]], (x, y) => F.pew(x, y, W / 2 - 5)); L.put(W / 2 - 5, 3, [[W / 2 + 3.5, y]], (x, y) => F.pew(x, y, W / 2 - 5)); }
     return L.svg(); },
   observation(fr, n, door) { const { W, D } = fr, L = layout(W, D, door);
-    // Framed glass panels let into the floor, with chairs and small tables around them, like a lounge.
-    for (const [x, y] of gridSpots(W, D, 16, 16, 3)) L.put(16, 16, [[x, y]], (x, y) => F.glasspanel(x + 4, y + 4, 8, 8) + F.armchair(x + 2, y + 8, "#c9a06a", 90) + F.armchair(x + 14, y + 8, "#c9a06a", -90) + F.sidetable(x + 2.2, y + 2.2) + F.sidetable(x + 13.8, y + 13.8));
+    // Framed glass panels set into the floor, centred, with chairs and small tables around them.
+    for (const [x, y] of spread(W, D, 16, 16, 3, 3, 3)) L.put(16, 16, [[x, y]], (x, y) => F.glasspanel(x + 4, y + 4, 8, 8) + F.armchair(x + 2, y + 8, "#c9a06a", 90) + F.armchair(x + 14, y + 8, "#c9a06a", -90) + F.sidetable(x + 2.2, y + 2.2) + F.sidetable(x + 13.8, y + 13.8));
     for (const [x, y] of cornerSpots(W, D, 7, 7)) L.put(7, 7, [[x, y]], (x, y) => F.planter(x + 3.5, y + 3.5)); return L.svg(); },
   cinema(fr, n, door) { const { W, D } = fr, L = layout(W, D, door);
-    // A stage with curtains and a piano, then two blocks of seats either side of a centre aisle.
     L.put(W - 2, 9, [[1, 0.5]], (x, y) => `<rect x="${x}" y="${y}" width="${W - 2}" height="7" fill="#8a5a3a"/><rect x="${x}" y="${y}" width="3" height="7" fill="#7a1f2a"/><rect x="${x + W - 5}" y="${y}" width="3" height="7" fill="#7a1f2a"/>` + F.screen(x + 4, y + 0.6, W - 10) + F.piano(x + W - 14, y + 2.4));
-    for (let y = 12; y + 6 <= D - 1; y += 7) for (let x = 1.5; x + 6 <= W - 1.5; x += 6.8) { if (x + 6 > W / 2 - 3 && x < W / 2 + 3) continue; L.put(6, 6, [[x, y]], (x, y) => F.armchair(x + 3, y + 3, "#7a2a3a", 180)); }
+    const half = (W - 6) / 2, cols = alongWall(half, 6, 0.8, 8);
+    for (let y = 12; y + 6 <= D - 1; y += 7) for (const side of [0, half + 6]) for (const x of cols) L.put(6, 6, [[side + x, y]], (x, y) => F.armchair(x + 3, y + 3, "#7a2a3a", 180));
     return L.svg(); },
   playroom(fr, n, door) { const { W, D } = fr, L = layout(W, D, door);
-    L.put(W * 0.6, D * 0.5, [[W * 0.2, D * 0.25]], (x, y) => F.rug(x, y, W * 0.6, D * 0.5, "#e6b04a") + [["#9b2a24", 0.2, 0.3], ["#2d4a6b", 0.5, 0.6], ["#3f5a3a", 0.7, 0.35]].map(([c, a, b2]) => F.toy(x + W * 0.6 * a, y + D * 0.5 * b2, c)).join(""));
-    L.put(7, 6, [[1.5, 1.5]], (x, y) => F.horse(x, y)); L.put(7, 4, [[W - 8, 1]], (x, y) => F.chest(x, y));
-    L.put(10, 9, [[W - 11, D - 10]], (x, y) => `<rect x="${x + 2}" y="${y + 3}" width="6" height="4" rx="0.8" fill="#e8c98a" filter="url(#dp-lift)"/>` + [[x + 1, y + 5], [x + 9, y + 5], [x + 5, y + 1.6], [x + 5, y + 8.4]].map(([a, b2]) => F.stool(a, b2)).join(""));
-    return L.svg(); },
+    const rug = F.rug(W * 0.2, D * 0.25, W * 0.6, D * 0.5, "#e6b04a") + [["#9b2a24", 0.2, 0.3], ["#2d4a6b", 0.5, 0.6], ["#3f5a3a", 0.7, 0.35]].map(([c, a, b2]) => F.toy(W * 0.2 + W * 0.6 * a, D * 0.25 + D * 0.5 * b2, c)).join("");
+    L.put(7, 6, [[1.5, 1.5]], (x, y) => F.horse(x, y)); L.put(7, 4, [[W - 8.5, 1.5]], (x, y) => F.chest(x, y));
+    L.put(10, 9, [[W / 2 - 5, D * 0.3]], (x, y) => `<rect x="${x + 2}" y="${y + 3}" width="6" height="4" rx="0.8" fill="#e8c98a" filter="url(#dp-lift)"/>` + [[x + 1, y + 5], [x + 9, y + 5], [x + 5, y + 1.6], [x + 5, y + 8.4]].map(([a, b2]) => F.stool(a, b2)).join(""));
+    return rug + L.svg(); },
   barber(fr, n, door) { const { W, D } = fr, L = layout(W, D, door);
-    L.put(W - 2, 9, [[1, 0.5]], (x, y) => F.mirror(x, y, W - 2) + Array.from({ length: Math.floor((W - 4) / 8) }, (_, i) => F.basin(x + 2 + i * 8, y + 1.8) + F.armchair(x + 4 + i * 8, y + 6, "#b9bcbd", 180)).join(""));
-    L.put(W - 6, 6, [[3, D - 7]], (x, y) => F.sofa(x, y, W - 6, "#7a6a4a")); for (const [x, y] of cornerSpots(W, D, 7, 7)) L.put(7, 7, [[x, y]], (x, y) => F.planter(x + 3.5, y + 3.5)); return L.svg(); },
+    // Stations along the back wall, each a mirror, a basin, and a chair; a manicure table; towels and a coat stand; waiting chairs; the striped pole.
+    for (const x of alongWall(W, 8, 1.5, 4)) L.put(8, 9, [[x, 0.5]], (x, y) => F.mirror(x + 0.5, y, 7) + F.basin(x + 2, y + 1.8) + F.armchair(x + 4, y + 6, "#b9bcbd", 180));
+    if (D > 22) L.put(10, 8, [[W / 2 - 5, D / 2 - 2]], (x, y) => `<rect x="${x + 2}" y="${y + 2.6}" width="6" height="3" rx="0.6" fill="#f5efe0" stroke="#8a8278" stroke-width="0.4" filter="url(#dp-lift)"/>` + F.stool(x + 1, y + 4) + F.stool(x + 9, y + 4));
+    L.put(4, 6, [[0.8, D * 0.45]], (x, y) => F.cabinet(x, y) + F.cabinet(x, y + 3));
+    L.put(3, 3, [[W - 4, D * 0.45]], (x, y) => `<circle cx="${x + 1.5}" cy="${y + 1.5}" r="1.4" fill="#5c3b25" filter="url(#dp-lift)"/>`);
+    for (const x of alongWall(W, 6.4, 2, 3)) L.put(6.4, 6, [[x, D - 7]], (x, y) => F.armchair(x + 3.2, y + 3, "#7a6a4a", 0));
+    if (door != null) L.put(2.4, 2.4, [[Math.min(W - 3, door + 6), D - 3]], (x, y) => `<circle cx="${x + 1.2}" cy="${y + 1.2}" r="1.1" fill="#f5efe0" stroke="#9b2a24" stroke-width="0.6" stroke-dasharray="0.8 0.6"/>`);
+    return L.svg(); },
   purser(fr, n, door) { const { W, D } = fr, L = layout(W, D, door);
-    L.put(W - 4, 5, [[2, D * 0.45]], (x, y) => F.counter(x, y, W - 4, 3) + Array.from({ length: Math.floor((W - 4) / 3) }, (_, i) => `<line x1="${x + 1 + i * 3}" y1="${y - 1.5}" x2="${x + 1 + i * 3}" y2="${y}" stroke="#c9a65b" stroke-width="0.5"/>`).join(""));
-    L.put(9, 9, [[2, 1]], (x, y) => F.desk(x, y) + F.lamp(x + 7, y + 1.4) + F.armchair(x + 4, y + 6.4, "#5c3b25", 180));
-    L.put(4, 4, [[W - 6, 1]], (x, y) => F.safe(x, y)); L.put(7, 3, [[W - 14, 1]], (x, y) => F.cabinet(x, y) + F.cabinet(x + 3.5, y));
-    for (const [x, y] of gridSpots(W, D * 0.4, 6.4, 6, 3).map(([x, y]) => [x, y + D * 0.6])) L.put(6.4, 6, [[x, y]], (x, y) => F.armchair(x + 3.2, y + 3, "#7a6a4a"));
+    L.put(W - 4, 5, [[2, D * 0.45]], (x, y) => F.counter(x, y, W - 4, 3) + alongWall(W - 4, 0.5, 2.5, 20).map(gx => `<line x1="${x + gx}" y1="${y - 1.5}" x2="${x + gx}" y2="${y}" stroke="#c9a65b" stroke-width="0.5"/>`).join(""));
+    L.put(9, 9, [[W / 2 - 4.5, 1]], (x, y) => F.desk(x, y) + F.lamp(x + 7, y + 1.4) + F.armchair(x + 4, y + 6.4, "#5c3b25", 180));
+    L.put(4, 4, [[W - 5.5, 1]], (x, y) => F.safe(x, y)); L.put(7, 3, [[1.5, 1]], (x, y) => F.cabinet(x, y) + F.cabinet(x + 3.5, y));
+    for (const x of alongWall(W, 6.4, 3, 4)) L.put(6.4, 6, [[x, D - 7]], (x, y) => F.armchair(x + 3.2, y + 3, "#7a6a4a"));
     return L.svg(); },
   boarding() { return ""; }, stair() { return ""; }, grand() { return ""; }, landing() { return ""; }, void() { return ""; },
   promenade(fr, n, door) {
@@ -531,7 +545,15 @@ const DEFS_BODY = `
     const ghost = opts.ghost ? `<g opacity="0.22" pointer-events="none">${opts.ghost}</g>` : "";
     // The smoking room on a hydrogen ship is entered through an airlock: a double door with a vestibule.
     let locks = "";
-    for (const room of rs) if (room.type === "smoking") { const dr = door(ctx, room); if (dr) { const c = dr.cell, x = ctx.colX(c.c), y = c.r * S; locks += `<rect x="${x + S / 2 - 4}" y="${y + S / 2 - 4}" width="8" height="8" class="dp-airlock"/><text x="${x + S / 2}" y="${y + S / 2 + 1.4}" class="dp-landtext">airlock</text>`; } }
+    for (const room of rs) if (room.type === "smoking") {
+      const dr = door(ctx, room); if (!dr) continue;
+      const c = dr.cell, x = ctx.colX(c.c), y = c.r * S, v = S * 0.62, side = dr.side;
+      // The vestibule sits against the wall the door is in; its outer door opens from the corridor, its inner door into the room.
+      const bx = side === "e" ? x + S - v : side === "w" ? x : x + (S - v) / 2, by = side === "s" ? y + S - v : side === "n" ? y : y + (S - v) / 2;
+      const inner = side === "s" ? [bx + v * 0.3, by, bx + v * 0.7, by] : side === "n" ? [bx + v * 0.3, by + v, bx + v * 0.7, by + v] : side === "e" ? [bx, by + v * 0.3, bx, by + v * 0.7] : [bx + v, by + v * 0.3, bx + v, by + v * 0.7];
+      locks += `<g class="dp-lock"><title>Airlock: two doors keep the smoking room sealed from the hydrogen ship</title><rect x="${bx}" y="${by}" width="${v}" height="${v}" class="dp-airlock"/>
+        <line x1="${inner[0]}" y1="${inner[1]}" x2="${inner[2]}" y2="${inner[3]}" class="dp-lockdoor"/><circle cx="${bx + v / 2}" cy="${by + v / 2}" r="0.9" fill="#c9735b"/></g>`;
+    }
     return `<g class="dp">${floors}${below}${furn}${walls}${doors}${locks}${marks}${labels}${dims}${ghost}${opts.hover || ""}</g>`;
   }
   // Stairs drawn from above: treads across the flight, an arrow up it; landings show the top of the flight inside a railing.

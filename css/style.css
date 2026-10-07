@@ -976,3 +976,6 @@ body.skipping #map svg, body.skipping .traffic-canvas { filter: saturate(0.35) b
 .dp-post { fill: #8a6a2a; stroke: #2d2418; stroke-width: 0.4; }
 .dp-balustrade { stroke: #8a6a2a; stroke-width: 2.4; stroke-dasharray: none; }
 .dp-airlock { fill: #d9cdb0; stroke: #2d2418; stroke-width: 1.2; }
+
+.dp-airlock { fill: #e8e0cf; stroke: #2d2418; stroke-width: 1.8; }
+.dp-lockdoor { stroke: #e8e0cf; stroke-width: 3; }
