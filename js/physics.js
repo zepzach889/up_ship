@@ -109,6 +109,7 @@ window.UpShip = window.UpShip || {};
     f.useful = f.gross - f.empty;
     // Crew grows with the ship's size, its engines, and its passengers.
     // The painted deck plan decides the berths once there is one; until then, an estimate from the decks.
+    if (sys.gondola) for (let b = sys.gondola.bay; b < sys.gondola.bay + sys.gondola.len && b <= Math.floor(d.bays); b++) { modWeight += 3 * k; put(3 * k, at(b)); }
     const plan = U.decks && d.plan ? U.decks.stats(d) : null;
     f.planned = !!(plan && plan.laidOut);
     f.berths = f.planned ? plan.berths : decks * Math.round(12 * k);
@@ -116,6 +117,18 @@ window.UpShip = window.UpShip || {};
     f.passengers = f.berths + f.daySeats;
     f.firstBerths = f.planned ? plan.first : 0; f.comfort = f.planned ? plan.comfort : null; f.plan = plan;
     f.cargoCap = holds * 6 * k2;
+    // Special compartments take their share of the holds: a square holds the bay's capacity spread over its squares,
+    // less for the refrigerated hold (its cooling plant) and the strongroom (its vault).
+    f.cargoMix = null;
+    if (plan && holds) {
+      const perSq = 6 * k2 / (6 * plan.holdRows), h = plan.holdSq;
+      const mix = { mail: h.mailroom * perSq, reefer: h.reefer * perSq * 0.8, strong: h.strongroom * perSq * 0.5, garage: h.garage * perSq };
+      if (mix.mail + mix.reefer + mix.strong + mix.garage > 0) {
+        f.cargoMix = Object.fromEntries(Object.entries(mix).map(([k0, v]) => [k0, Math.round(v * 10) / 10]));
+        f.cargoCap = Math.max(0, f.cargoCap - (h.mailroom + h.reefer + h.strongroom + h.garage) * perSq) + mix.mail + mix.reefer + mix.strong + mix.garage;
+      }
+    }
+    f.crewQ = plan ? plan.crewQ : null;
     f.crew = Math.round(4 + 2 * engines + f.berths / 5 + holds + L / 50);
     f.crewBerths = crewBays * Math.round(14 * k) + 8;
     // Ships carry only the ballast they need to land, about 6% of their lift, however much tank space they have.
@@ -149,6 +162,7 @@ window.UpShip = window.UpShip || {};
     for (const k of ["nose", "tail", "fins", "car"]) drag *= opt(k).drag || 1;
     drag *= (has(state, "structures4") ? 0.9 : 1) * (1 + 0.01 * engines) * f.trimDrag;
     drag *= 1 + 0.006 * sys.engines.filter(e => e.mount === "sides").length;          // outrigger struts
+    if (sys.gondola) drag *= 1 + 0.035 * sys.gondola.len;                               // a hanging gondola
     const cruise = f.power * 0.7 * (1 + 0.03 * (sys.engines.length ? f.rearEngines / sys.engines.length : 0));
     f.speed = f.power ? 122 * Math.cbrt(cruise / (drag * Math.pow(f.volume, 2 / 3))) : 0;
     f.fuelPerKm = f.speed ? cruise * lim.sfc / f.speed / 1000 : 0;       // tonnes per km

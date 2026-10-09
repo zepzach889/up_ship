@@ -23,7 +23,8 @@ window.UpShip = window.UpShip || {};
       speedKmh: Math.round(f.speed), rangeKm: Math.round(f.range / 100) * 100, crew: f.crew,
       price: f.price, dailyCost: f.daily, fuelPerKm: Math.round(f.fuelPerKm * FUEL_COST * 1000) / 1000, buildDays: f.buildDays,
       shedSize: f.shed ? f.shed.n : 3, liner: f.L > 200, gas: d.gas || "hydrogen",
-      firstShare: berths && f.passengers ? first / f.passengers : 0, seats, fuelCal: FUEL_COST, comfort: f.planned && f.comfort != null ? f.comfort : 55,
+      firstShare: berths && f.passengers ? first / f.passengers : 0, seats, fuelCal: FUEL_COST,
+      cargoMix: f.cargoMix ? Object.fromEntries(Object.entries(f.cargoMix).map(([k0, v]) => [k0, Math.round(v * lift * 10) / 10])) : null, crewQ: f.crewQ, comfort: f.planned && f.comfort != null ? f.comfort : 55,
       baked: U.research.builtWith(state), names: [entry.name], requires: [],
       design: d, rev: 1, revs: { 1: JSON.parse(JSON.stringify(d.livery)) }, art: artKey(id, 1)
     };

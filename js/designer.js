@@ -90,7 +90,8 @@ window.UpShip = window.UpShip || {};
         const f = P().figures(st, e.d), lift = f.demand > 0 ? Math.max(0, Math.min(1, f.payloadRoom / f.demand)) : 1;
         const cost = Math.round(U.SHIP_CLASSES[ship.classId].price * 0.08 / 100) * 100;
         if (confirm(`Plan this new interior for ${ship.name}? It goes in at her next overhaul: about £${cost.toLocaleString("en-GB")} and two weeks more in the shed. Passengers: ${Math.floor(f.passengers * lift)}${f.daySeats ? ` (${Math.floor(f.daySeats * lift)} in seats)` : ""}, comfort ${f.comfort ?? "—"}.`))
-          ship.refitInterior = { passengers: Math.floor(f.passengers * lift), seats: Math.floor((f.daySeats || 0) * lift), firstShare: f.passengers ? (f.firstBerths || 0) / f.passengers : 0, comfort: f.comfort ?? 50, plan: e.d.plan };
+          ship.refitInterior = { passengers: Math.floor(f.passengers * lift), seats: Math.floor((f.daySeats || 0) * lift), firstShare: f.passengers ? (f.firstBerths || 0) / f.passengers : 0, comfort: f.comfort ?? 50, plan: e.d.plan,
+            cargoMix: f.cargoMix ? Object.fromEntries(Object.entries(f.cargoMix).map(([k0, v]) => [k0, Math.round(v * lift * 10) / 10])) : null, crewQ: f.crewQ };
       }
       st.designs = st.designs.filter(x => x !== e);
       st.openDesign = e.returnTo || (st.designs[0] && st.designs[0].id);
@@ -494,7 +495,7 @@ window.UpShip = window.UpShip || {};
         ${row("Engines", f.engines ? `${f.engines} × ${fmt(f.hpEach)} hp` : "None")}${row("Cruising speed", `${fmt(f.speed)} km/h`)}${row("Range", `${fmt(Math.round(f.range / 50) * 50)} km`)}</dl>
       ${trimGauge(f)}
       <h3>Capacity</h3><dl>
-        ${row("Passengers", f.planned ? `${f.passengers}${f.daySeats ? ` (${f.berths} berths, ${f.daySeats} seats)` : ""}` : `about ${f.berths}`)}${f.planned && f.firstBerths ? row("First class", f.firstBerths) : ""}${f.planned && f.berths ? row("Comfort", `${f.comfort} of 100`) : ""}${row("Cargo", `${fmt(f.cargoCap, 1)} t`)}${row("Crew", `${f.crew} needed, ${f.crewBerths} berths`)}</dl>
+        ${row("Passengers", f.planned ? `${f.passengers}${f.daySeats ? ` (${f.berths} berths, ${f.daySeats} seats)` : ""}` : `about ${f.berths}`)}${f.planned && f.firstBerths ? row("First class", f.firstBerths) : ""}${f.planned && f.berths ? row("Comfort", `${f.comfort} of 100`) : ""}${row("Cargo", `${fmt(f.cargoCap, 1)} t`)}${f.cargoMix ? row("Special holds", Object.entries({ mail: "mail", reefer: "refrigerated", strong: "strongroom", garage: "garage" }).filter(([k0]) => f.cargoMix[k0]).map(([k0, n0]) => `${n0} ${fmt(f.cargoMix[k0], 1)} t`).join(", ")) : ""}${f.crewQ != null ? row("Crew quarters", f.crewQ >= 0.8 ? "Good" : f.crewQ >= 0.5 ? "Fair" : "Poor") : ""}${row("Crew", `${f.crew} needed, ${f.crewBerths} berths`)}</dl>
       <h3>Cost and building</h3><dl>
         ${row("Price", money(f.price))}${row("Build time", `${fmt(f.buildDays / 30.4, 1)} months`)}${row("Running cost", `${money(f.daily)} a day`)}${row("Shed needed", f.shed ? f.shed.name : "None large enough")}</dl>
       <h3>Notes</h3><ul class="do-notes">${f.notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul>
@@ -675,7 +676,10 @@ window.UpShip = window.UpShip || {};
     return `<h3>${P().isHalf(d, b) ? `Half bay ${b - 1}½` : `Bay ${b}`}</h3>${P().isHalf(d, b) ? `<p class="do-hint">A half bay holds gas, fittings, and engines, but no module.</p>` : ""}
       <p class="do-bay-mod">${m ? MODULE_NAMES[m] : "Clear to gas"}${m && m !== "control" ? ` <button class="btn-quiet" data-clear-bay="${b}">Clear</button>` : ""}</p>
       ${m === "passenger" ? `<div class="do-seg" role="group" aria-label="Decks">${[1, 2].map(n => `<button data-decks="${n}" aria-pressed="${decks === n}" ${n === 2 && !f.twoDecksOk ? "disabled" : ""}>${n === 1 ? "One deck" : "Two decks"}</button>`).join("")}</div>
-        ${!f.twoDecksOk ? `<small class="do-hint">Two decks need a hull at least ${P().TWO_DECKS} m wide.</small>` : ""}` : ""}
+        ${!f.twoDecksOk ? `<small class="do-hint">Two decks need a hull at least ${P().TWO_DECKS} m wide.</small>` : ""}
+      <h4>Hanging gondola</h4>
+      ${d.systems.gondola ? `<p class="do-hint">A gondola hangs beneath bays ${d.systems.gondola.bay} to ${d.systems.gondola.bay + d.systems.gondola.len - 1}.</p><button class="btn-quiet" data-gondola="0">Remove the gondola</button>`
+        : b > 1 ? `<div class="do-seg" role="group" aria-label="Hang a gondola">${[1, 2, 3].filter(n => b + n - 1 <= Math.floor(d.bays)).map(n => `<button data-gondola="${n}">${n} bay${n > 1 ? "s" : ""}</button>`).join("")}</div><small class="do-hint">A passenger gondola beneath this bay: windows all round, some drag.</small>` : ""}` : ""}
       <h4>Fittings (up to 2)</h4>
       ${fits.length ? `<ul class="do-list">${fits.map((k, i) => `<li>${k === "fuel" ? "Fuel tanks" : "Water ballast"} <button class="btn-quiet" data-remove-fit="${i}" aria-label="Remove">✕</button></li>`).join("")}</ul>` : `<p class="do-hint">None</p>`}
       <h4>Engines</h4>
@@ -843,18 +847,21 @@ window.UpShip = window.UpShip || {};
   function accTab(st, d, f) {
     const D = U.decks, lower = D.context(d, "lower"), upper = D.context(d, "upper"), hasUpper = upper.cols.some(c => !c.absent);
     if (accDeck === "upper" && !hasUpper) accDeck = "lower";
-    const ctx = accDeck === "upper" ? upper : lower;
+    if (!["lower", "upper"].includes(accDeck) && !D.context(d, accDeck).cols.length) accDeck = "lower";
+    if (!D.allowedOn(accTool, accDeck) && !isPiece(accTool) && accTool !== "erase") accTool = { hold: "hold", crew: "bunks" }[accDeck] || "cabin";
+    const ctx = accDeck === "upper" ? upper : accDeck === "lower" ? lower : D.context(d, accDeck);
     // The palette: rooms, then stairs (placed whole, turned with R), then openings on the upper deck.
     const btn = ([k, t]) => `<button data-acc-tool="${k}" aria-pressed="${accTool === k}"><span class="sw" style="background:${t.sw}"></span>${t.name}</button>`;
     const all = Object.entries(D.TYPES).filter(([, t]) => !t.auto);
-    const tools = all.filter(([, t]) => !t.piece && !t.upperOnly).map(btn).join("")
-      + `<span class="do-pal-sep">Stairs</span>` + all.filter(([, t]) => t.piece).map(btn).join("")
-      + `<button data-acc-rotate title="Turn the stair (R)"${isPiece(accTool) ? "" : " disabled"}>↻ Climbs ${DIR_NAME[accDir]}</button>`
+    const fit = all.filter(([k, t]) => !t.piece && !t.upperOnly && D.allowedOn(k, accDeck));
+    const tools = fit.map(btn).join("")
+      + (accDeck === "lower" ? `<span class="do-pal-sep">Stairs</span>` + all.filter(([, t]) => t.piece).map(btn).join("")
+      + `<button data-acc-rotate title="Turn the stair (R)"${isPiece(accTool) ? "" : " disabled"}>↻ Climbs ${DIR_NAME[accDir]}</button>` : "")
       + (accDeck === "upper" ? `<span class="do-pal-sep">Openings</span>` + all.filter(([, t]) => t.upperOnly).map(btn).join("") : "")
       + `<button data-acc-tool="first" aria-pressed="${accTool === "first"}" title="Click a cabin to make it first class, or back"><span class="sw sw-first">1</span>First class</button>`
       + `<button data-acc-tool="erase" aria-pressed="${accTool === "erase"}"><span class="sw" style="background:#e4d8bb"></span>Clear a square</button>`;
     const head = `<div class="do-acc-bar">
-        <div class="do-seg" role="group" aria-label="Deck"><button data-acc-deck="lower" aria-pressed="${accDeck === "lower"}">Lower deck</button><button data-acc-deck="upper" aria-pressed="${accDeck === "upper"}" ${hasUpper ? "" : "disabled"}>Upper deck</button></div>
+        <div class="do-seg" role="group" aria-label="Deck"><button data-acc-deck="lower" aria-pressed="${accDeck === "lower"}">Lower deck</button><button data-acc-deck="upper" aria-pressed="${accDeck === "upper"}" ${hasUpper ? "" : "disabled"}>Upper deck</button>${D.context(d, "gondola").cols.length ? `<button data-acc-deck="gondola" aria-pressed="${accDeck === "gondola"}">Gondola</button>` : ""}${D.context(d, "hold").cols.length ? `<button data-acc-deck="hold" aria-pressed="${accDeck === "hold"}">Holds</button>` : ""}${D.context(d, "crew").cols.length ? `<button data-acc-deck="crew" aria-pressed="${accDeck === "crew"}">Crew quarters</button>` : ""}</div>
         <span class="do-acc-info">${ctx.cols.length ? `${ctx.bays.length} bay${ctx.bays.length > 1 ? "s" : ""}, ${ctx.rows} squares wide. Each stroke paints one room; start inside a room to extend it. Right-click to clear squares.` : ""}</span>
         ${!hasUpper ? (d.D >= P().TWO_DECKS ? `<button class="btn-quiet" data-acc="twodecks">Give passenger bays two decks</button>` : `<span class="do-hint">An upper deck needs a hull at least ${P().TWO_DECKS} m across.</span>`) : ""}<button class="btn-quiet" data-acc="grid" aria-pressed="${accGrid}">Show the grid</button><button class="btn-quiet" data-acc="other" aria-pressed="${accOther}" ${hasUpper ? "" : "disabled"}>Show the other deck</button><button class="btn-quiet" data-acc="standard">Standard layout</button><button class="btn-quiet" data-acc="clear">Clear this deck</button></div>`;
     if (!ctx.cols.length) return `<div class="do-sheet do-later"><p>This ship has no passenger decks. Place a passenger deck module in a bay on the Systems tab, then lay it out here.</p></div>`;
@@ -1161,6 +1168,7 @@ window.UpShip = window.UpShip || {};
     if (b.dataset.emblemRemove != null) { lv.emblems.splice(+paintSel.split(":")[1], 1); paintSel = null; render(); return; }
     const sys = d.systems;
     if (b.dataset.clearBay) { remove({ type: "module", bay: +b.dataset.clearBay }); refresh(); return; }
+    if (b.dataset.gondola != null) { if (blockedEdit()) return; const d = draft(U.state), n = +b.dataset.gondola; if (n) d.systems.gondola = { bay: selBay, len: n }; else delete d.systems.gondola; render(); return; }
     if (b.dataset.decks) { sys.deckCount = sys.deckCount || {}; sys.deckCount[selBay] = +b.dataset.decks; refresh(); return; }
     if (b.dataset.removeFit != null) { remove({ type: "fit", bay: selBay, i: +b.dataset.removeFit }); refresh(); return; }
     if (b.dataset.removeEng) { remove({ type: "eng", bay: +b.dataset.removeEng }); refresh(); return; }

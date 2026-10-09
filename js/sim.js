@@ -300,6 +300,7 @@ window.UpShip = window.UpShip || {};
   }
 
   const DAY_HOURS = 12;
+  const SPECIAL = { mail: { share: 0.25, premium: 2.2 }, reefer: { share: 0.3, premium: 1.7 }, strong: { share: 0.04, premium: 5 }, garage: { share: 0.05, premium: 2.5 } };
   function board(state, ship, route, reserved = 0) {
     const c = U.research.stats(state, ship);
     const from = route.stops[ship.stop];
@@ -308,6 +309,9 @@ window.UpShip = window.UpShip || {};
     const b = U.passengers.berths(state, ship), cut = b.total ? Math.min(1, room.pax / b.total) : 0;
     let seats1 = Math.floor(b.first * cut), daySeats = Math.floor((b.seats || 0) * cut), seats2 = Math.floor(b.second * cut) - daySeats;
     let hold = Math.min(c.cargoTons - reserved, room.tons), revenue = 0, tons = 0, p1 = 0, p2 = 0;
+    const mix0 = (ship.interior && ship.interior.cargoMix) || cls(ship).cargoMix, cap = {};
+    if (mix0) for (const [k0, v] of Object.entries(mix0)) { cap[k0] = v * (room.tons / Math.max(0.1, c.cargoTons)); hold -= cap[k0]; }
+    hold = Math.max(0, hold);
     for (const to of downstream(route, ship)) {
       const w = state.waiting[pairKey(from, to)];
       if (!w) continue;
@@ -320,6 +324,13 @@ window.UpShip = window.UpShip || {};
       w.p1 = Math.max(0, w.p1 - a); w.p2 = Math.max(0, w.p2 - s2); w.tons -= t;
       seats1 -= a; seats2 -= s2 - fromSeats; hold -= t; p1 += a; p2 += s2; tons += t;
       revenue += a * fr.first + s2 * fr.second + t * freightRate(km);
+      // Mail, perishables, valuables, and motor cars: each a share of the freight between two cities, paying a premium.
+      for (const [k0, X] of Object.entries(SPECIAL)) {
+        if (!cap[k0] || (k0 === "garage" && km < 600)) continue;
+        const want = dailyFreight(from, to) * X.share * 1.5, ld = Math.min(cap[k0], Math.floor(want * 10) / 10);
+        if (ld <= 0) continue;
+        cap[k0] -= ld; tons += ld; revenue += ld * freightRate(km) * X.premium;
+      }
     }
     const pax = p1 + p2;
     const fee = U.facilities.recordBoarding(state, from, pax, tons);

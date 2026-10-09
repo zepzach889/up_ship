@@ -29,7 +29,15 @@ window.UpShip = window.UpShip || {};
     stair:     { name: "Stair", sw: "#a88a4a", floor: "url(#dp-marble)", piece: [1, 2] },
     grand:     { name: "Grand staircase", sw: "#d9b56a", floor: "url(#dp-marble)", piece: [2, 3] },
     landing:   { name: "Landing", sw: "#a88a4a", floor: "url(#dp-marble)", auto: true },
-    void:      { name: "Open to below", sw: "#ebe0c4", floor: "none", upperOnly: true }
+    void:      { name: "Open to below", sw: "#ebe0c4", floor: "none", upperOnly: true },
+    hold:      { name: "General hold", sw: "#8a7a5a", floor: "url(#dp-deckPlanks)", decks: ["hold"] },
+    mailroom:  { name: "Mail room", sw: "#4a5a7a", floor: "url(#dp-deckPlanks)", decks: ["hold"] },
+    reefer:    { name: "Refrigerated hold", sw: "#9fc2cf", floor: "url(#dp-whiteTiles)", decks: ["hold"] },
+    strongroom:{ name: "Strongroom", sw: "#3a3a3a", floor: "url(#dp-tiles)", decks: ["hold"] },
+    garage:    { name: "Garage", sw: "#6a6a6a", floor: "url(#dp-bare)", decks: ["hold"] },
+    bunks:     { name: "Crew bunk room", sw: "#6a5a4a", floor: "url(#dp-deckPlanks)", decks: ["crew"] },
+    mess:      { name: "Crew mess", sw: "#8a6a4a", floor: "url(#dp-deckPlanks)", decks: ["crew"] },
+    officers:  { name: "Officers' cabin", sw: "#5a4a6a", floor: "url(#dp-carpetBlue)", decks: ["crew"] }
   };
   // How many squares wide a deck is: a little over half the hull's diameter.
   // The decks sit in the lower hull, where it is still nearly full width: about 72% of the diameter.
@@ -277,6 +285,14 @@ const FURNISH = {
     L.put(4, 4, [[W - 5.5, 1]], (x, y) => F.safe(x, y)); L.put(7, 3, [[1.5, 1]], (x, y) => F.cabinet(x, y) + F.cabinet(x + 3.5, y));
     for (const x of alongWall(W, 6.4, 3, 4)) L.put(6.4, 6, [[x, D - 7]], (x, y) => F.armchair(x + 3.2, y + 3, "#7a6a4a"));
     return L.svg(); },
+  hold(fr, n, door) { const { W, D } = fr, L = layout(W, D, door); for (const [x, y] of spread(W, D, 6, 6, 1.5)) L.put(6, 6, [[x, y]], (x, y) => `<rect x="${x}" y="${y}" width="6" height="6" fill="#a88a5a" stroke="#6b4529" stroke-width="0.5" filter="url(#dp-lift)"/><path d="M${x},${y} L${x + 6},${y + 6} M${x + 6},${y} L${x},${y + 6}" stroke="#6b4529" stroke-width="0.4"/>`); return L.svg(); },
+  mailroom(fr, n, door) { const { W, D } = fr, L = layout(W, D, door); L.put(W - 2, 3, [[1, 0.5]], (x, y) => F.shelf(x, y, W - 2)); L.put(Math.min(14, W - 4), 5, [[W / 2 - Math.min(7, W / 2 - 2), D / 2 - 2.5]], (x, y) => `<rect x="${x}" y="${y}" width="${Math.min(14, W - 4)}" height="4" fill="#c9b48a" stroke="#6b4529" stroke-width="0.5" filter="url(#dp-lift)"/>` + Array.from({ length: 4 }, (_, i) => `<rect x="${x + 1 + i * 3}" y="${y + 0.8}" width="2.2" height="1.6" fill="#f5efe0"/>`).join("")); for (const [x, y] of spread(W, D * 0.3, 5, 5, 3, 4, 1, D * 0.7, D)) L.put(5, 5, [[x, y]], (x, y) => `<rect x="${x}" y="${y}" width="5" height="5" fill="#4a5a7a" filter="url(#dp-lift)"/>`); return L.svg(); },
+  reefer(fr, n, door) { const { W, D } = fr, L = layout(W, D, door); for (const [x, y] of spread(W, D, 6, 6, 2)) L.put(6, 6, [[x, y]], (x, y) => `<rect x="${x}" y="${y}" width="6" height="6" fill="#e8f0f2" stroke="#7fa3b3" stroke-width="0.6" filter="url(#dp-lift)"/>`); return `<rect x="0.6" y="0.6" width="${W - 1.2}" height="${D - 1.2}" fill="none" stroke="#9fc2cf" stroke-width="1.4"/>` + L.svg(); },
+  strongroom(fr, n, door) { const { W, D } = fr, L = layout(W, D, door); L.put(10, 10, [[W / 2 - 5, D / 2 - 5]], (x, y) => `<circle cx="${x + 5}" cy="${y + 5}" r="4.6" fill="#5a5a5a" stroke="#c9a65b" stroke-width="0.8"/><circle cx="${x + 5}" cy="${y + 5}" r="1.4" fill="#c9a65b"/>`); for (const [x, y] of cornerSpots(W, D, 4, 4)) L.put(4, 4, [[x, y]], (x, y) => F.safe(x, y)); return L.svg(); },
+  garage(fr, n, door) { const { W, D } = fr, L = layout(W, D, door); for (const [x, y] of spread(W, D, 7, 13, 3, 4, 2)) L.put(7, 13, [[x, y]], (x, y) => `<g filter="url(#dp-lift)"><rect x="${x}" y="${y}" width="7" height="13" rx="2.4" fill="#2d3f66"/><rect x="${x + 1}" y="${y + 3}" width="5" height="3" rx="0.8" fill="#9fc2cf"/><rect x="${x + 1}" y="${y + 8}" width="5" height="3" rx="0.8" fill="#9fc2cf"/></g>`); return L.svg(); },
+  bunks(fr, n, door) { const { W, D } = fr, L = layout(W, D, door); for (const x of alongWall(W, 6, 1.5, 8)) { L.put(6, 12, [[x, 0.6]], (x, y) => F.bed(x, y, 6, 12, "#6a5a4a")); } return L.svg(); },
+  mess(fr, n, door) { const { W, D } = fr, L = layout(W, D, door); for (const [x, y] of spread(W, D, 16, 9, 3, 3, 3)) L.put(16, 9, [[x, y]], (x, y) => `<g filter="url(#dp-lift)"><rect x="${x}" y="${y + 3}" width="16" height="3" fill="#8a6a4a"/><rect x="${x}" y="${y}" width="16" height="1.8" fill="#5c3b25"/><rect x="${x}" y="${y + 7.2}" width="16" height="1.8" fill="#5c3b25"/></g>`); return L.svg(); },
+  officers(fr, n, door) { const { W, D } = fr, L = layout(W, D, door); placeBed(L, W, D, "#5a4a6a", false); L.put(8, 4, [[W - 9, D - 6]], (x, y) => F.desk(x, y)); return L.svg(); },
   boarding() { return ""; }, stair() { return ""; }, grand() { return ""; }, landing() { return ""; }, void() { return ""; },
   promenade(fr, n, door) {
     const { W, D } = fr, L = layout(W, D, null);
@@ -360,6 +376,8 @@ const DEFS_BODY = `
   // form blocks, and a bulkhead separates blocks that are not next to each other.
   function deckBays(d, deck) {
     const sys = d.systems, f = { twoOk: d.D >= U.physics.TWO_DECKS };
+    if (deck === "gondola") { const g = sys.gondola; if (!g) return []; const out = []; for (let b = g.bay; b < g.bay + g.len && b <= Math.floor(d.bays); b++) out.push(b); return out; }
+    if (deck === "hold" || deck === "crew") { const m = deck === "hold" ? "cargo" : "crew"; return Object.keys(sys.modules).map(Number).filter(b => sys.modules[b] === m && b <= d.bays).sort((a, b) => a - b); }
     return Object.keys(sys.modules).map(Number).filter(b => sys.modules[b] === "passenger" && b <= d.bays
       && (deck === "lower" || (f.twoOk && ((sys.deckCount || {})[b] || 1) > 1))).sort((a, b) => a - b);
   }
@@ -368,7 +386,8 @@ const DEFS_BODY = `
     plan.dirs = plan.dirs || {};
     // The upper deck lines up with the lower: same bays, with those that have only one deck shown as roof.
     const up = deck === "upper", two = new Set(deckBays(d, "upper"));
-    const bays = up ? (two.size ? deckBays(d, "lower") : []) : deckBays(d, deck), rows = widthSq(d.D), cols = [];
+    const bays = up ? (two.size ? deckBays(d, "lower") : []) : deckBays(d, deck), cols = [];
+    const rows = deck === "gondola" ? Math.max(3, Math.round(widthSq(d.D) / 3)) : widthSq(d.D);          // the gondola is about a third of the hull's width
     let block = -1, prev = null;
     for (const b of bays) { if (prev === null || b !== prev + 1) block++; prev = b; for (let x = 0; x < BAY_SQ; x++) cols.push({ bay: b, x, block, absent: up && !two.has(b) }); }
     const grid = Array.from({ length: rows }, () => Array(cols.length).fill(null));
@@ -501,13 +520,14 @@ const DEFS_BODY = `
         if (n && OPEN.has(g.type) && OPEN.has(n.type)) continue;
         if (n && dr === 1) continue;                                       // each shared edge drawn once, from above
         if (n && dc === 1) continue;
-        const hull = out && (nr < 0 || nr >= ctx.rows);
+        const hull = out && (nr < 0 || nr >= ctx.rows || (ctx.deck === "gondola" && (nc < 0 || nc >= ctx.cols.length))) && ctx.deck !== "hold" && ctx.deck !== "crew";
         const X1 = ctx.colX(c) + x1 * S, Y1 = (r + y1) * S, X2 = ctx.colX(c) + x2 * S, Y2 = (r + y2) * S;
         walls += `<line x1="${X1}" y1="${Y1}" x2="${X2}" y2="${Y2}" class="${hull ? "hullwall" : "wall"}"/>`;
         // Windows wherever a room meets the hull: long ones for public rooms, one per square for cabins, portholes for service rooms.
         if (hull) {
           const long = ["promenade", "saloon", "lounge", "dining", "observation", "bar", "drawing", "library", "writing", "smoking", "hall", "cinema", "chapel", "playroom"].includes(g.type);
-          if (long) walls += `<rect x="${X1 + 3}" y="${Y1 - 1.6}" width="${S - 6}" height="3.2" class="window"/>`;
+          if (X1 === X2) walls += `<rect x="${X1 - 1.6}" y="${Math.min(Y1, Y2) + 3}" width="3.2" height="${S - 6}" class="window"/>`;          // an end wall
+          else if (long || ctx.deck === "gondola") walls += `<rect x="${X1 + 3}" y="${Y1 - 1.6}" width="${S - 6}" height="3.2" class="window"/>`;
           else if (g.type === "wash" || g.type === "galley" || g.type === "barber" || g.type === "purser") walls += `<circle cx="${X1 + S / 2}" cy="${Y1}" r="1.6" class="window"/>`;
           else if (g.type !== "corridor") walls += `<rect x="${X1 + S / 2 - 3}" y="${Y1 - 1.6}" width="6" height="3.2" class="window"/>`;
         }
@@ -592,12 +612,22 @@ const DEFS_BODY = `
     const here = ctx.grid[r][c];
     if (here && (here.type === "landing" || (TYPES[here.type].piece && stroke.tool !== "erase"))) return;          // stairs are placed and removed whole
     if (stroke.tool === "void" && ctx.deck !== "upper") return;
+    if (stroke.tool !== "erase" && !allowedOn(stroke.tool, ctx.deck)) return;
     if (here && TYPES[here.type].piece && stroke.tool === "erase") { removePiece(ctx.d, ctx, here.id); return; }
     const k = key(ctx, r, c);
     if (stroke.tool === "erase") delete ctx.plan.cells[k]; else ctx.plan.cells[k] = { type: stroke.tool, id: stroke.id };
     ctx.grid[r][c] = ctx.plan.cells[k] || null;
   }
   const paintEnd = () => { stroke = null; };
+  // Holds take cargo compartments, crew quarters take crew rooms (with corridors, washrooms, and a galley); passenger decks take the rest.
+  function allowedOn(type, deck) {
+    const T = TYPES[type]; if (!T) return false;
+    if (T.decks) return T.decks.includes(deck);
+    if (deck === "hold") return type === "corridor";
+    if (deck === "crew") return ["corridor", "wash", "galley"].includes(type);
+    if (deck === "gondola") return !T.piece && !T.upperOnly;
+    return true;
+  }
   // Stair pieces: a fixed footprint, long along the direction of climb. Returns a reason if it cannot go there.
   function footprint(kind, dir) { const [w, l] = TYPES[kind].piece; return dir === "n" || dir === "s" ? { w, h: l } : { w: l, h: w }; }
   function placePiece(d, ctx, r, c, kind, dir) {
@@ -639,7 +669,17 @@ const DEFS_BODY = `
   // What the plan adds up to: berths by class, seats, public space, and anything missing.
   function stats(d) {
     const out = { laidOut: false, daySeats: 0, roomKinds: new Set(), voidSq: 0, grand: false, boarding: false, observation: false, berths: 0, first: 0, second: 0, seats: 0, publicSq: 0, windowsSq: 0, washSq: 0, galley: false, noDoor: 0, empty: [], comfort: 0 };
-    for (const deck of ["lower", "upper"]) {
+    out.holdSq = { general: 0, mailroom: 0, reefer: 0, strongroom: 0, garage: 0 }; out.holdRows = widthSq(d.D);
+    for (const deck of ["hold", "crew"]) {
+      const ctx = context(d, deck);
+      for (const room of rooms(ctx)) {
+        if (deck === "hold" && out.holdSq[room.type === "hold" ? "general" : room.type] != null) out.holdSq[room.type === "hold" ? "general" : room.type] += room.cells.length;
+        if (deck === "crew") { out.crewPlan = true; if (room.type === "bunks") out.bunkSq = (out.bunkSq || 0) + room.cells.length; if (room.type === "mess") out.mess = true; if (room.type === "officers") out.officers = true; if (room.type === "wash") out.crewWash = true; }
+      }
+    }
+    // Crew quarters: bunks enough for the crew (a square sleeps about four), a mess, officers' cabins, and a washroom.
+    out.crewQ = out.crewPlan ? Math.min(1, (out.bunkSq || 0) * 4 / Math.max(1, (d.crewNeed || 20))) * 0.4 + (out.mess ? 0.25 : 0) + (out.officers ? 0.2 : 0) + (out.crewWash ? 0.15 : 0) : null;
+    for (const deck of ["lower", "upper", "gondola"]) {
       const ctx = context(d, deck);
       for (const b of ctx.bays) if (!ctx.cols.some((c, i) => c.bay === b && ctx.grid.some(row => row[i]))) out.empty.push(`${deck === "upper" ? "upper" : "lower"} deck of bay ${b}`);
       for (const room of rooms(ctx)) {
@@ -739,5 +779,5 @@ const DEFS_BODY = `
     }
   }
 
-  U.decks = { placePiece, removePiece, syncLandings, footprint, DECK_SHARE, TYPES, S, BAY_SQ, widthSq, context, render, defs, paintStart, paintAt, paintEnd, painting, stats, standardLayout, rooms };
+  U.decks = { allowedOn, placePiece, removePiece, syncLandings, footprint, DECK_SHARE, TYPES, S, BAY_SQ, widthSq, context, render, defs, paintStart, paintAt, paintEnd, painting, stats, standardLayout, rooms };
 })(window.UpShip);

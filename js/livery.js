@@ -142,7 +142,7 @@ window.UpShip = window.UpShip || {};
       return `<g data-drag="emblem:${i}" class="lv-emblem">${U.emblem.svg(em, sz, `x="${(X(x) - sz / 2).toFixed(1)}" y="${(Y(y) - sz / 2).toFixed(1)}" style="width:${sz.toFixed(1)}px;height:${sz.toFixed(1)}px"`)}</g>`;
     }).join("") : "";
     // Gondolas in their colors.
-    const car = carShape(d, f, X, Y, r, lv.car);
+    const car = carShape(d, f, X, Y, r, lv.car) + gondolaShape(d, f, X, Y, r, lv.gondolas || "#b9bcbd");
     const engines = d.systems.engines.map(e => engineShape(P().bayCentre(d, f.ln, e.bay), e.mount, r, X, Y, D, lv.engines)).join("");
     return `<defs><clipPath id="${id}c"><path d="${outline}"/></clipPath>${shade}</defs>
       ${fins}${finDeco}
@@ -243,5 +243,11 @@ window.UpShip = window.UpShip || {};
   const emblemY = (e, rx, R) => Math.abs(e.y) <= 1 ? e.y * rx : Math.sign(e.y) * (rx + (Math.abs(e.y) - 1) * R);
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
+  function gondolaShape(d, f, X, Y, r, col) {
+    const g = d.systems && d.systems.gondola; if (!g) return "";
+    const a = f.ln + (g.bay - 1) * 15 + 1, b = f.ln + (g.bay - 1 + g.len) * 15 - 1, top = r((a + b) / 2) * 0.96, h = Math.max(3, d.D * 0.16);
+    let wins = ""; for (let x = a + 2.5; x < b - 2; x += 3) wins += `<rect x="${Math.min(X(x), X(x + 1.6))}" y="${Y(top + h * 0.3)}" width="${Math.abs(X(1.6) - X(0))}" height="${Y(h * 0.32) - Y(0)}" fill="#cfe1ea"/>`;
+    return `<g class="lv-gondola"><rect x="${Math.min(X(a), X(b))}" y="${Y(top)}" width="${Math.abs(X(b) - X(a))}" height="${Y(h) - Y(0)}" rx="${Math.min(8, (Y(h) - Y(0)) * 0.45)}" fill="${col}" class="lv-edge"/>${wins}</g>`;
+  }
   U.livery = { builders, emblemY, PALETTE, FONTS, DECOR, fresh, presets, applyPreset, side, top, finShapes };
 })(window.UpShip);

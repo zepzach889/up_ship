@@ -96,6 +96,9 @@ window.UpShip = window.UpShip || {};
     }
     const st = STAFFING[effectiveStaffing(state, ship)];
     m.incidents *= st.incidents * (1.3 - 0.5 * state.crew.skill);
+    // Crew quarters: rested crews have fewer incidents. Without a plan, quarters count as ordinary.
+    const cq = ship.interior && ship.interior.crewQ != null ? ship.interior.crewQ : (U.SHIP_CLASSES[ship.classId].crewQ ?? 0.5);
+    m.incidents *= 1.1 - 0.2 * cq; m.risk *= 1.05 - 0.1 * cq;
     m.wear *= st.wear; m.comfort += st.comfort;
     return m;
   }
