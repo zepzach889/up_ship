@@ -854,9 +854,21 @@ const DEFS_BODY = `
     const gon = context(d, "gondola");
     if (gon.cols.length > 3) {
       const room = (t, r0, r1, c0, c1) => { paintStart(gon, r0, c0, t); for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) paintAt(gon, r, c); paintEnd(); };
-      const n = gon.cols.length, half = 3 + Math.floor((n - 3) / 2);
-      room("lounge", 0, gon.rows - 1, 3, half - 1); room("dining", 0, gon.rows - 1, half, n - 1);
-      placePiece(d, context(d, "gondola"), Math.floor(gon.rows / 2), 3, "boarding", "e");
+      const n = gon.cols.length, R = gon.rows, mid = Math.floor(R / 2), hullDecks = context(d, "lower").cols.length > 0;
+      if (hullDecks) { const half = 3 + Math.floor((n - 3) / 2); room("lounge", 0, R - 1, 3, half - 1); room("dining", 0, R - 1, half, n - 1); }
+      else {
+        // The whole of the passenger space is in the gondola, as on the Graf Zeppelin: a dining saloon forward,
+        // then cabins either side of a corridor, with the galley and washrooms.
+        const saloonEnd = Math.min(n - 5, 3 + 5);
+        room("dining", 0, R - 1, 3, saloonEnd);
+        room("corridor", mid, mid, saloonEnd + 1, n - 2);
+        room("galley", 0, mid - 1, saloonEnd + 1, saloonEnd + 1);
+        let c = saloonEnd + 2;
+        if (mid + 1 <= R - 1) room("cabin", mid + 1, R - 1, saloonEnd + 1, saloonEnd + 1);
+        for (; c + 1 <= n - 2; c += 2) { room("cabin", 0, mid - 1, c, c + 1); if (mid + 1 <= R - 1) room("cabin", mid + 1, R - 1, c, c + 1); }
+        room("wash", 0, R - 1, Math.min(c, n - 1), n - 1);          // the washroom takes whatever the cabins leave at the stern
+      }
+      placePiece(d, context(d, "gondola"), mid, 3, "boarding", "e");
       const low0 = context(d, "lower"), gi = gon.cols.findIndex((col, i) => i >= 5 && low0.cols.some(x => x.bay === col.bay && x.x === col.x));
       if (gi >= 0 && gi + 1 < n) placePiece(d, context(d, "gondola"), Math.floor(gon.rows / 2), gi, "gstair", "e");
     }

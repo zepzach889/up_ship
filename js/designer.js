@@ -856,6 +856,8 @@ window.UpShip = window.UpShip || {};
     const D = U.decks, lower = D.context(d, "lower"), upper = D.context(d, "upper"), hasUpper = upper.cols.some(c => !c.absent);
     if (accDeck === "upper" && !hasUpper) accDeck = "lower";
     if (!["lower", "upper"].includes(accDeck) && !D.context(d, accDeck).cols.length) accDeck = "lower";
+    // A ship may have no passenger decks in the hull (a gondola only, or holds only): open whichever deck it has.
+    if (accDeck === "lower" && !lower.cols.length) { const alt = ["gondola", "hold", "crew"].find(k => D.context(d, k).cols.length); if (alt) accDeck = alt; }
     if (!D.allowedOn(accTool, accDeck) && !isPiece(accTool) && accTool !== "erase") accTool = { hold: "hold", crew: "bunks" }[accDeck] || "cabin";
     const ctx = accDeck === "upper" ? upper : accDeck === "lower" ? lower : D.context(d, accDeck);
     // The palette: rooms, then stairs (placed whole, turned with R), then openings on the upper deck.
@@ -870,10 +872,10 @@ window.UpShip = window.UpShip || {};
       + `<button data-acc-tool="first" aria-pressed="${accTool === "first"}" title="Click a cabin to make it first class, or back"><span class="sw sw-first">1</span>First class</button>`
       + `<button data-acc-tool="erase" aria-pressed="${accTool === "erase"}"><span class="sw" style="background:#e4d8bb"></span>Clear a square</button>`;
     const head = `<div class="do-acc-bar">
-        <div class="do-seg" role="group" aria-label="Deck"><button data-acc-deck="lower" aria-pressed="${accDeck === "lower"}">Lower deck</button><button data-acc-deck="upper" aria-pressed="${accDeck === "upper"}" ${hasUpper ? "" : "disabled"}>Upper deck</button>${D.context(d, "gondola").cols.length ? `<button data-acc-deck="gondola" aria-pressed="${accDeck === "gondola"}">Gondola</button>` : ""}${D.context(d, "hold").cols.length ? `<button data-acc-deck="hold" aria-pressed="${accDeck === "hold"}">Holds</button>` : ""}${D.context(d, "crew").cols.length ? `<button data-acc-deck="crew" aria-pressed="${accDeck === "crew"}">Crew quarters</button>` : ""}</div>
+        <div class="do-seg" role="group" aria-label="Deck"><button data-acc-deck="lower" aria-pressed="${accDeck === "lower"}" ${lower.cols.length ? "" : "disabled title=\"No passenger deck in the hull\""}>Lower deck</button><button data-acc-deck="upper" aria-pressed="${accDeck === "upper"}" ${hasUpper ? "" : "disabled"}>Upper deck</button>${D.context(d, "gondola").cols.length ? `<button data-acc-deck="gondola" aria-pressed="${accDeck === "gondola"}">Gondola</button>` : ""}${D.context(d, "hold").cols.length ? `<button data-acc-deck="hold" aria-pressed="${accDeck === "hold"}">Holds</button>` : ""}${D.context(d, "crew").cols.length ? `<button data-acc-deck="crew" aria-pressed="${accDeck === "crew"}">Crew quarters</button>` : ""}</div>
         <span class="do-acc-info">${ctx.cols.length ? `${ctx.bays.length} bay${ctx.bays.length > 1 ? "s" : ""}, ${ctx.rows} squares wide. Each stroke paints one room; start inside a room to extend it. Right-click to clear squares.` : ""}</span>
         ${!hasUpper ? (d.D >= P().TWO_DECKS ? `<button class="btn-quiet" data-acc="twodecks">Give passenger bays two decks</button>` : `<span class="do-hint">An upper deck needs a hull at least ${P().TWO_DECKS} m across.</span>`) : ""}<button class="btn-quiet" data-acc="grid" aria-pressed="${accGrid}">Show the grid</button><button class="btn-quiet" data-acc="other" aria-pressed="${accOther}" ${hasUpper ? "" : "disabled"}>Show the other deck</button><button class="btn-quiet" data-acc="standard">Standard layout</button><button class="btn-quiet" data-acc="clear">Clear this deck</button></div>`;
-    if (!ctx.cols.length) return `<div class="do-sheet do-later"><p>This ship has no passenger decks. Place a passenger deck module in a bay on the Systems tab, then lay it out here.</p></div>`;
+    if (!ctx.cols.length) return `<div class="do-sheet do-later"><p>This ship has nothing to lay out yet. On the Systems tab, place a passenger deck, cargo hold, or crew quarters in a bay, or extend the control car into a passenger gondola, then lay it out here.</p></div>`;
     return `${head}<div class="do-sheet do-accsheet">${accSvg(ctx)}</div><div class="do-palette" role="group" aria-label="Room type">${tools}</div>`;
   }
   function accSvg(ctx) {
@@ -1164,7 +1166,7 @@ window.UpShip = window.UpShip || {};
     }
     if (b.dataset.accDeck) { accDeck = b.dataset.accDeck; render(); return; }
     if (b.dataset.acc === "grid") { accGrid = !accGrid; render(); return; }
-    if (b.dataset.acc === "standard") { if (!d.plan || !Object.keys(d.plan.cells).length || confirm("Replace both decks with the standard layout?")) { U.decks.standardLayout(d); render(); } return; }
+    if (b.dataset.acc === "standard") { if (!d.plan || !Object.keys(d.plan.cells).length || confirm("Replace the layout of every deck with the standard layout?")) { U.decks.standardLayout(d); render(); } return; }
     if (b.dataset.acc === "clear") { if (confirm("Clear everything painted on this deck?")) { for (const k of Object.keys((d.plan || {}).cells || {})) if (k.startsWith(accDeck + ":")) delete d.plan.cells[k]; render(); } return; }
     // Paint
     const lv = d.livery;
