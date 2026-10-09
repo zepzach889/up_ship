@@ -142,11 +142,18 @@ window.UpShip = window.UpShip || {};
       return `<g data-drag="emblem:${i}" class="lv-emblem">${U.emblem.svg(em, sz, `x="${(X(x) - sz / 2).toFixed(1)}" y="${(Y(y) - sz / 2).toFixed(1)}" style="width:${sz.toFixed(1)}px;height:${sz.toFixed(1)}px"`)}</g>`;
     }).join("") : "";
     // Gondolas in their colors.
-    const car = carShape(d, f, X, Y, r, lv.car) + gondolaShape(d, f, X, Y, r, lv.gondolas || "#b9bcbd");
+    const car = carShape(d, f, X, Y, r, d.systems && d.systems.gondola ? (lv.gondolas || lv.car) : lv.car);
+    // Windows along the hull wherever there are passenger decks: one row for each deck, low on the hull.
+    let hullWins = "";
+    for (const [b0, m] of Object.entries((d.systems || {}).modules || {})) {
+      if (m !== "passenger" || +b0 > d.bays) continue;
+      const a = f.ln + (+b0 - 1) * 15, rows = ((d.systems.deckCount || {})[b0] || 1) > 1 && d.D >= P().TWO_DECKS ? [0.62, 0.44] : [0.62];
+      for (const fy of rows) for (let x = a + 1.2; x < a + 14; x += 2.5) hullWins += `<rect x="${Math.min(X(x), X(x + 1.4))}" y="${Y(r(x) * fy)}" width="${Math.abs(X(1.4) - X(0))}" height="${Math.max(1, Y(D * 0.035) - Y(0))}" class="lv-hullwin"/>`;
+    }
     const engines = d.systems.engines.map(e => engineShape(P().bayCentre(d, f.ln, e.bay), e.mount, r, X, Y, D, lv.engines)).join("");
     return `<defs><clipPath id="${id}c"><path d="${outline}"/></clipPath>${shade}</defs>
       ${fins}${finDeco}
-      <g clip-path="url(#${id}c)">${body}<path d="${outline}" fill="url(#${id}s)"/><g class="lv-seams">${seams}</g></g>
+      <g clip-path="url(#${id}c)">${body}${hullWins}<path d="${outline}" fill="url(#${id}s)"/><g class="lv-seams">${seams}</g></g>
       <path d="${outline}" class="lv-outline"/>${car}${engines}${nameSvg}${emblems}`;
   }
   // The fins as shapes, shared by the side and top views.
@@ -164,10 +171,12 @@ window.UpShip = window.UpShip || {};
     } };
   }
   function carShape(d, f, X, Y, r, color) {
-    const D = d.D, a = f.ln + 1, b = f.ln + Math.min(14, f.mid - 1), h = Math.max(2.4, D * 0.11), yb = r(a + 3);
+    // With a gondola, the control car runs on aft beneath the gondola's bays: one long car, control room forward.
+    const g = d.systems && d.systems.gondola;
+    const D = d.D, a = f.ln + 1, b = g ? f.ln + g.len * 15 - 1 : f.ln + Math.min(14, f.mid - 1), h = g ? Math.max(3, D * 0.15) : Math.max(2.4, D * 0.11), yb = r(a + 3);
     const top = d.car === "recessed" ? yb - h * 0.5 : yb, bottom = top + h;
     const wins = Array.from({ length: Math.max(3, Math.floor((b - a) / 2.2)) }, (_, i) => `<rect x="${Math.min(X(a + 1.5 + i * 2.2), X(a + 2.7 + i * 2.2))}" y="${Y(top + h * 0.25)}" width="${Math.max(1.5, Math.abs(X(1.2) - X(0)))}" height="${Math.max(1.5, Y(h * 0.3) - Y(0))}" class="lv-win"/>`).join("");
-    if (d.car === "streamlined") return `<path d="M${X(a)},${Y(top)} C${X(a - 2)},${Y(bottom)} ${X(a + 4)},${Y(bottom + 1)} ${X(a + 8)},${Y(bottom)} L${X(b)},${Y(top + h * 0.45)} L${X(b)},${Y(top)} Z" fill="${color}" class="lv-edge"/>`;
+    if (d.car === "streamlined" && !g) return `<path d="M${X(a)},${Y(top)} C${X(a - 2)},${Y(bottom)} ${X(a + 4)},${Y(bottom + 1)} ${X(a + 8)},${Y(bottom)} L${X(b)},${Y(top + h * 0.45)} L${X(b)},${Y(top)} Z" fill="${color}" class="lv-edge"/>`;
     return `<rect ${span(X(a), X(b))} y="${Y(top)}" height="${Y(h) - Y(0)}" rx="${Math.min(6, (Y(h) - Y(0)) * 0.35)}" fill="${color}" class="lv-edge"/>${wins}`;
   }
   function engineShape(x, mount, r, X, Y, D, color) {
@@ -237,6 +246,9 @@ window.UpShip = window.UpShip || {};
     }
     const shade = `<linearGradient id="${id}s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0.3"/><stop offset="0.35" stop-color="#fff" stop-opacity="0.18"/><stop offset="0.5" stop-color="#fff" stop-opacity="0.3"/><stop offset="0.65" stop-color="#fff" stop-opacity="0.18"/><stop offset="1" stop-color="#000" stop-opacity="0.3"/></linearGradient>`;
     return `<defs><clipPath id="${id}c"><path d="${outline}"/></clipPath>${shade}</defs>${fins}
+      ${(d.systems && d.systems.engines || []).map(e => { const x = P().bayCentre(d, f.ln, e.bay), w = Math.max(3, d.D * 0.24), ry = Math.max(1.2, d.D * 0.05);
+        // Engine cars seen from above: out on struts either side of the hull.
+        return [1, -1].map(sd => `<line x1="${X(x)}" y1="${Y(sd * r(x) * 0.9)}" x2="${X(x)}" y2="${Y(sd * (r(x) + d.D * 0.1))}" stroke="#5a5650" stroke-width="0.8"/><ellipse cx="${X(x)}" cy="${Y(sd * (r(x) + d.D * 0.12))}" rx="${Math.abs(X(w / 2) - X(0))}" ry="${Math.abs(Y(ry) - Y(0))}" fill="${lv.engines || "#b9bcbd"}" class="lv-edge"/>`).join(""); }).join("")}
       <g clip-path="url(#${id}c)">${body}${hullEmblems}<path d="${outline}" fill="url(#${id}s)"/></g><path d="${outline}" class="lv-outline"/>${spineFin}${emblems}`;
   }
   // On the hull, y is a share of the local radius; beyond +/-1 it is on a fin, measured out from the hull's surface in radii.

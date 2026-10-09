@@ -109,7 +109,7 @@ window.UpShip = window.UpShip || {};
     f.useful = f.gross - f.empty;
     // Crew grows with the ship's size, its engines, and its passengers.
     // The painted deck plan decides the berths once there is one; until then, an estimate from the decks.
-    if (sys.gondola) for (let b = sys.gondola.bay; b < sys.gondola.bay + sys.gondola.len && b <= Math.floor(d.bays); b++) { modWeight += 3 * k; put(3 * k, at(b)); }
+    if (sys.gondola) for (let b = 2; b <= sys.gondola.len && b <= Math.floor(d.bays); b++) { modWeight += 3 * k; put(3 * k, at(b)); }
     const plan = U.decks && d.plan ? U.decks.stats(d) : null;
     f.planned = !!(plan && plan.laidOut);
     f.berths = f.planned ? plan.berths : decks * Math.round(12 * k);

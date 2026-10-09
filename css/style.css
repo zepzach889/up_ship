@@ -979,3 +979,8 @@ body.skipping #map svg, body.skipping .traffic-canvas { filter: saturate(0.35) b
 
 .dp-airlock { fill: #e8e0cf; stroke: #2d2418; stroke-width: 1.8; }
 .dp-lockdoor { stroke: #e8e0cf; stroke-width: 3; }
+
+.lv-hullwin { fill: #2d3f66; opacity: 0.55; }
+
+.dp-hatch { fill: #9a9a96; stroke: #3a3a38; stroke-width: 1.2; }
+.dp-ladder { stroke: #3a3a38; stroke-width: 0.7; }
