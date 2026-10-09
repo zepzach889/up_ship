@@ -678,10 +678,10 @@ window.UpShip = window.UpShip || {};
     return `<h3>${P().isHalf(d, b) ? `Half bay ${b - 1}½` : `Bay ${b}`}</h3>${P().isHalf(d, b) ? `<p class="do-hint">A half bay holds gas, fittings, and engines, but no module.</p>` : ""}
       <p class="do-bay-mod">${m ? MODULE_NAMES[m] : "Clear to gas"}${m && m !== "control" ? ` <button class="btn-quiet" data-clear-bay="${b}">Clear</button>` : ""}</p>
       ${m === "passenger" ? `<div class="do-seg" role="group" aria-label="Decks">${[1, 2].map(n => `<button data-decks="${n}" aria-pressed="${decks === n}" ${n === 2 && !f.twoDecksOk ? "disabled" : ""}>${n === 1 ? "One deck" : "Two decks"}</button>`).join("")}</div>
-        ${!f.twoDecksOk ? `<small class="do-hint">Two decks need a hull at least ${P().TWO_DECKS} m wide.</small>` : ""}
-      <h4>Hanging gondola</h4>
+        ${!f.twoDecksOk ? `<small class="do-hint">Two decks need a hull at least ${P().TWO_DECKS} m wide.</small>` : ""}` : ""}
+      ${b === 1 ? `<h4>Passenger gondola</h4>` : ""}
       ${b === 1 ? (d.systems.gondola ? `<p class="do-hint">The control car runs on aft as a passenger gondola beneath bays 2 to ${d.systems.gondola.len}.</p><button class="btn-quiet" data-gondola="0">An ordinary control car</button>`
-        : `<div class="do-seg" role="group" aria-label="Passenger gondola">${[1, 2, 3].filter(n => 1 + n <= Math.floor(d.bays)).map(n => `<button data-gondola="${n}">${n} bay${n > 1 ? "s" : ""}</button>`).join("")}</div><small class="do-hint">Extend the control car aft into a passenger gondola, control room forward, as on the Bodensee and Graf Zeppelin. Windows all round; some drag.</small>`) : ""}` : ""}
+        : `<div class="do-seg" role="group" aria-label="Passenger gondola">${[1, 2, 3].filter(n => 1 + n <= Math.floor(d.bays)).map(n => `<button data-gondola="${n}">${n} bay${n > 1 ? "s" : ""}</button>`).join("")}</div><small class="do-hint">Extend the control car aft into a passenger gondola, control room forward, as on the Bodensee and Graf Zeppelin. Windows all round; some drag.</small>`) : ""}
       <h4>Fittings (up to 2)</h4>
       ${fits.length ? `<ul class="do-list">${fits.map((k, i) => `<li>${k === "fuel" ? "Fuel tanks" : "Water ballast"} <button class="btn-quiet" data-remove-fit="${i}" aria-label="Remove">✕</button></li>`).join("")}</ul>` : `<p class="do-hint">None</p>`}
       <h4>Engines</h4>
