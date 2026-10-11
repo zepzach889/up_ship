@@ -6,8 +6,8 @@ window.UpShip = window.UpShip || {};
   const P = M.projection;
   const rad = Math.PI / 180;
 
-  // Lambert azimuthal equal-area, matching tools/build_map.py.
-  function project(lon, lat) {
+  // Lambert azimuthal equal-area, matching tools/build_map.py: the simulation's own coordinates (weather, traffic).
+  function flat(lon, lat) {
     const l = (lon - P.lon0) * rad, p = lat * rad, p1 = P.lat0 * rad;
     const k = Math.sqrt(2 / (1 + Math.sin(p1) * Math.sin(p) + Math.cos(p1) * Math.cos(p) * Math.cos(l)));
     const x = k * Math.cos(p) * Math.sin(l);
@@ -15,6 +15,20 @@ window.UpShip = window.UpShip || {};
     return [(x - P.x0) * P.scale, (P.y1 - y) * P.scale];
   }
 
+  // The flat projection run backwards: the simulation's coordinates to latitude and longitude.
+  function flatInv(x, y) {
+    const X = x / P.scale + P.x0, Y = P.y1 - y / P.scale, rho = Math.hypot(X, Y);
+    if (rho < 1e-12) return [P.lon0, P.lat0];
+    const c = 2 * Math.asin(Math.min(1, rho / 2)), p1 = P.lat0 * rad;
+    const lat = Math.asin(Math.cos(c) * Math.sin(p1) + Y * Math.sin(c) * Math.cos(p1) / rho);
+    const lon = P.lon0 * rad + Math.atan2(X * Math.sin(c), rho * Math.cos(p1) * Math.cos(c) - Y * Math.sin(p1) * Math.sin(c));
+    return [lon / rad, lat / rad];
+  }
+  // A point in the simulation's coordinates, on screen now; null on the far side of the globe.
+  function flatToScreen(x, y) { const ll = flatInv(x, y); if (!U.globe.facing(ll[0], ll[1])) return null; const q = U.globe.screen(ll[0], ll[1]); return { x: q[0], y: q[1] }; }
+  // Where a place is on screen right now, on the globe.
+  function project(lon, lat) { return U.globe.screen(lon, lat); }
+  const dLon = c => c.realLon ?? c.lon, dLat = c => c.realLat ?? c.lat;          // gateways sit at their true places on the globe
   function el(tag, attrs, parent) {
     const e = document.createElementNS(NS, tag);
     for (const k in attrs) if (attrs[k] != null) e.setAttribute(k, attrs[k]);
@@ -63,14 +77,15 @@ window.UpShip = window.UpShip || {};
 
   let svg, world, layers = {}, view = { x: 0, y: 0, w: M.width, h: M.height }, zoom = 1, zoom0 = null;
   // Symbols, ships, and city dots grow partway as you zoom in: at half the map's rate, up to a ceiling.
-  const grow = () => 1.15 * Math.min(2.4, Math.sqrt(zoom / (zoom0 || zoom)));
+  const grow = () => 1.15 * Math.max(0.7, Math.min(1.7, Math.sqrt((U.globe ? U.globe.view.k : 3.2) / 3.2)));          // city dots and ships grow a little as you zoom in
   const cityNodes = {}, shipNodes = {}, routeNodes = {}, countryNodes = {};
   let setupMode = null;
   let onSelect = () => {};
 
   function init(container, handlers) {
     onSelect = handlers.onSelect;
-    svg = el("svg", { class: "map", viewBox: `0 0 ${M.width} ${M.height}`, role: "img", "aria-label": "Map of Europe" }, container);
+    U.globe.init(container, () => schedule());
+    svg = el("svg", { class: "map", role: "img", "aria-label": "The world, on a globe" }, container);
     const defs = el("defs", {}, svg);
     // All countries together form the land; used for the water lining and the coastline.
     const landShape = el("g", { id: "land-shape" }, defs);
@@ -110,7 +125,7 @@ window.UpShip = window.UpShip || {};
       });
       const o = LABELS[c.name];
       if (!o) continue;
-      const [x, y] = o.map ? c.label : project(o.lon, o.lat);
+      const [x, y] = o.map ? c.label : flat(o.lon, o.lat);
       // Wide letter spacing leaves a trailing space after the last letter; shifting by half of it centres the word.
       const t = el("text", { x, y, dx: o.lines ? null : "0.16em", class: "country-label" }, layers.countryLabels);
       if (o.rotate) t.setAttribute("transform", `rotate(${o.rotate} ${x} ${y})`);
@@ -124,7 +139,7 @@ window.UpShip = window.UpShip || {};
     }
     // The Saar Territory, under the League of Nations from 1920 to 1935, is not drawn as its own shape; it is labelled where it lies.
     {
-      const [x, y] = project(6.95, 49.38);
+      const [x, y] = flat(6.95, 49.38);
       const t = el("text", { x, y, dx: "0.16em", class: "country-label" }, layers.countryLabels);
       t.dataset.size = 5.5; t.textContent = "Saar";
     }
@@ -132,6 +147,9 @@ window.UpShip = window.UpShip || {};
     world.insertBefore(lines, layers.countryLabels);
     el("path", { d: M.borders, class: "borders" }, lines);
 
+    // The flat map's own drawing (countries, coast, labels, weather, traffic) gives way to the globe beneath.
+    for (const k of ["graticule", "waterlines", "land", "countries", "countryLabels", "weather", "traffic"]) layers[k].style.display = "none";
+    lines.style.display = "none"; world.querySelector("rect.sea").style.display = "none";
     for (const city of U.CITIES) drawCity(city);
     setupZoomPan();
     applyView();
@@ -141,20 +159,20 @@ window.UpShip = window.UpShip || {};
     let d = "";
     for (let lon = -30; lon <= 50; lon += 5) {
       let seg = [];
-      for (let lat = 28; lat <= 72; lat += 1) seg.push(project(lon, lat));
+      for (let lat = 28; lat <= 72; lat += 1) seg.push(flat(lon, lat));
       d += "M" + seg.map(p => p[0].toFixed(1) + "," + p[1].toFixed(1)).join("L");
     }
     for (let lat = 30; lat <= 70; lat += 5) {
       let seg = [];
-      for (let lon = -35; lon <= 55; lon += 1) seg.push(project(lon, lat));
+      for (let lon = -35; lon <= 55; lon += 1) seg.push(flat(lon, lat));
       d += "M" + seg.map(p => p[0].toFixed(1) + "," + p[1].toFixed(1)).join("L");
     }
     el("path", { d }, layers.graticule);
   }
 
   function drawCity(city) {
-    const [x, y] = project(city.lon, city.lat);
-    city.x = x; city.y = y;
+    const [x, y] = flat(city.lon, city.lat);
+    city.x = x; city.y = y;                                   // the simulation's coordinates, unchanged
     const g = el("g", { class: `city tier-${city.tier}${city.id === U.homeCity ? " is-home" : ""}`, tabindex: 0, role: "button", "aria-label": city.name }, layers.cities);
     const hit = el("circle", { cx: x, cy: y, class: "city-hit" }, g);
     const dot = el("circle", { cx: x, cy: y, class: "city-dot" }, g);
@@ -167,8 +185,18 @@ window.UpShip = window.UpShip || {};
     cityNodes[city.id] = { g, hit, dot, ring, label, city };
   }
 
+  // Each city's place on screen, and whether it faces the viewer.
+  function placeCities() {
+    for (const c of U.CITIES) { c.vis = U.globe.facing(dLon(c), dLat(c)); const p = project(dLon(c), dLat(c)); c.sx = c.vis ? p[0] : -9999; c.sy = c.vis ? p[1] : -9999; }
+  }
   function layoutCities() {
     const z = zoom;
+    placeCities();
+    for (const id in cityNodes) {
+      const n0 = cityNodes[id];
+      n0.g.style.display = n0.city.vis ? "" : "none";
+      for (const e of [n0.hit, n0.dot, n0.ring]) if (e) { e.setAttribute("cx", n0.city.sx); e.setAttribute("cy", n0.city.sy); }
+    }
     for (const id in cityNodes) {
       const n = cityNodes[id], c = n.city, r = U.TIERS[c.tier].r * grow() / z * (layerMode === "passengers" || layerMode === "freight" ? 0.45 : 1);
       n.dot.setAttribute("r", r);
@@ -177,7 +205,7 @@ window.UpShip = window.UpShip || {};
       const fs = (c.tier === "major" ? 15 : c.tier === "large" ? 13.5 : c.tier === "medium" ? 12.5 : 11.5) / z;
       n.label.setAttribute("font-size", fs);
       const gap = r + 4 / z;
-      let x = c.x, y = c.y, anchor = "start", base = "middle";
+      let x = c.sx, y = c.sy, anchor = "start", base = "middle";
       if (c.label === "r") { x += gap; }
       else if (c.label === "l") { x -= gap; anchor = "end"; }
       else if (c.label === "t") { y -= gap; anchor = "middle"; base = "auto"; }
@@ -186,13 +214,15 @@ window.UpShip = window.UpShip || {};
       n.label.setAttribute("text-anchor", anchor);
       n.label.setAttribute("dominant-baseline", base === "middle" ? "central" : "auto");
     }
-    for (const t of layers.countryLabels.children) t.setAttribute("font-size", (+t.dataset.size || 15) / z);
+
     svg.style.setProperty("--z", z);
   }
 
   // Routes and ships -------------------------------------------------------
   function routePathD(stops, circuit) {
-    return "M" + stops.map(id => U.cityById[id]).map(c => c.x.toFixed(1) + "," + c.y.toFixed(1)).join("L") + (circuit && stops.length > 2 ? "Z" : "");
+    const pts = stops.map(id => U.cityById[id]).map(c => [dLon(c), dLat(c)]);
+    if (circuit && stops.length > 2) pts.push(pts[0]);
+    return U.globe.linePath(pts);
   }
 
   function syncRoutes(state) {
@@ -222,6 +252,7 @@ window.UpShip = window.UpShip || {};
   // The route being drawn, before it is confirmed.
   let draftNode = null;
   function drawDraft(stops, circuit) {
+    lastDraft = stops && stops.length ? { stops, circuit } : null;
     draftDemand(stops);
     if (!draftNode) draftNode = el("path", { class: "route-draft" }, layers.routes);
     draftNode.setAttribute("d", stops && stops.length > 1 ? routePathD(stops, circuit) : "");
@@ -240,6 +271,10 @@ window.UpShip = window.UpShip || {};
     const p = U.sim.positionAt(ship, hour);
     if (p.flying) {
       const a = U.cityById[p.leg.from], b = U.cityById[p.leg.to], f = p.fraction;
+      // On the globe: along the great circle, facing along it. (Diversions around weather return with weather on the globe.)
+      const gi = d3.geoInterpolate([dLon(a), dLat(a)], [dLon(b), dLat(b)]), here = gi(f), ahead = gi(Math.min(1, f + 0.01)), behind = gi(Math.max(0, f - 0.01));
+      const s1 = project(...here), s2 = project(...ahead), s0 = project(...behind);
+      return { x: s1[0], y: s1[1], angle: Math.atan2(s2[1] - s0[1], s2[0] - s0[0]) * 180 / Math.PI, flying: true, fraction: f, leg: p.leg, hour, vis: U.globe.facing(...here) };
       if (p.leg.via) {
         // A diversion: follow the curve, facing along it.
         const q = U.weather.bez(a, p.leg.via, b, f), v = p.leg.via;
@@ -250,7 +285,7 @@ window.UpShip = window.UpShip || {};
         flying: true, fraction: f, leg: p.leg, hour };
     }
     const c = U.cityById[p.at];
-    return { x: c.x, y: c.y, angle: 0, flying: false, at: p.at, leg: p.leg || null, upcoming: p.upcoming || null, hour };
+    return { x: c.sx, y: c.sy, angle: 0, flying: false, at: p.at, leg: p.leg || null, upcoming: p.upcoming || null, hour, vis: !!c.vis };
   }
 
   let tip = null;
@@ -310,6 +345,7 @@ window.UpShip = window.UpShip || {};
         const ox = off * (Math.cos(a) * 0.8 - Math.sin(a) * 1), oy = off * (Math.sin(a) * 0.8 + Math.cos(a) * 1);
         n.shadow.setAttribute("cx", ox.toFixed(2)); n.shadow.setAttribute("cy", oy.toFixed(2));
       }
+      n.g.style.display = p.vis === false ? "none" : "";
       n.g.setAttribute("transform", `translate(${p.x + dx},${p.y + dy}) rotate(${angle}) scale(${s})`);
       n.g.classList.toggle("is-moored", !p.flying);
       n.g.classList.toggle("is-idle", !ship.routeId);
@@ -321,94 +357,45 @@ window.UpShip = window.UpShip || {};
   }
 
   // Zoom and pan ------------------------------------------------------------
+  // Redrawing after the globe turns or zooms: everything placed on it follows. Coalesced to once a frame.
+  let scheduled = false, lastDraft = null;
+  function schedule() { if (scheduled) return; scheduled = true; requestAnimationFrame(() => { scheduled = false; applyView(); }); }
   function applyView() {
-    trafficDirty = true; if (U.state) requestAnimationFrame(() => drawTraffic());
-    setTimeout(() => syncExtras(U.state), 0);
-    svg.setAttribute("viewBox", `${view.x} ${view.y} ${view.w} ${view.h}`);
-    // zoom = screen pixels per map unit, so labels and icons keep a fixed on-screen size.
-    const r = svg.getBoundingClientRect();
-    zoom = (r.width || M.width) / view.w;
-    if (!zoom0 || view.w >= M.width * 0.98) zoom0 = zoom0 ? Math.min(zoom0, zoom) : zoom;
+    const { W, H } = U.globe.size();
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+    zoom = 1; zoom0 = 1;
     layoutCities();
-    if (U.state) drawShips(U.state, U.progress || 0);
+    if (U.state) { syncRoutes(U.state); drawShips(U.state, U.progress || 0); }
+    if (lastDraft) drawDraft(lastDraft.stops, lastDraft.circuit);
+    drawLines(); trafficDirty = true;
   }
-
-  function clampView() {
-    const r = svg.getBoundingClientRect();
-    const aspectW = r.width && r.height ? r.width / r.height : M.width / M.height;
-    const minW = M.width / 5, maxW = M.height * aspectW * 1.001;
-    const aspect = view.h / view.w;
-    view.w = Math.min(maxW, Math.max(minW, view.w)); view.h = view.w * aspect;
-    view.x = Math.min(M.width + M.width * 0.25 - view.w, Math.max(-M.width * 0.25, view.x));
-    if (view.w > M.width * 1.5) view.x = (M.width - view.w) / 2;
-    view.y = Math.min(M.height + M.height * 0.12 - view.h, Math.max(-M.height * 0.12, view.y));
-    if (view.h > M.height) view.y = (M.height - view.h) / 2;
-  }
-
-  // Match the view to the window's shape. On first load, show the whole map.
-  function fitAspect(whole) {
-    const r = svg.getBoundingClientRect();
-    if (!r.width || !r.height) return;
-    const aspect = r.height / r.width;
-    if (whole) {
-      // Show the full height of the map; narrow screens crop the sides.
-      view.h = M.height; view.w = view.h / aspect;
-      view.x = (M.width - view.w) / 2; view.y = 0;
-      return;
-    }
-    const cx = view.x + view.w / 2, cy = view.y + view.h / 2;
-    view.h = view.w * aspect;
-    view.x = cx - view.w / 2; view.y = cy - view.h / 2;
-  }
-
-  // A smooth glide to a point, ending with the given view width.
-  function glideTo(x, y, w, ms = 1200, done) {
-    const v0 = { ...view }, ratio = view.h / view.w, w1 = Math.min(M.width, w), h1 = w1 * ratio, t0 = performance.now();
-    const step = now => {
-      const k = Math.min(1, (now - t0) / ms), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
-      view.w = v0.w + (w1 - v0.w) * e; view.h = v0.h + (h1 - v0.h) * e;
-      view.x = v0.x + (x - w1 / 2 - v0.x) * e; view.y = v0.y + (y - h1 / 2 - v0.y) * e;
-      clampView(); applyView();
-      if (k < 1) requestAnimationFrame(step); else if (done) done();
-    };
-    requestAnimationFrame(step);
-  }
-  function zoomBy(factor, clientX, clientY) {
-    const r = svg.getBoundingClientRect();
-    const fx = clientX == null ? 0.5 : (clientX - r.left) / r.width;
-    const fy = clientY == null ? 0.5 : (clientY - r.top) / r.height;
-    const px = view.x + view.w * fx, py = view.y + view.h * fy;
-    view.w /= factor; view.h /= factor;
-    clampView();
-    view.x = px - view.w * fx; view.y = py - view.h * fy;
-    clampView();
-    applyView();
-  }
-
+  function clampView() {}
+  // A glide on the globe to a place and zoom (by latitude and longitude).
+  function focus(lon, lat, k, ms, done) { U.globe.glide(lon, lat, k, ms, done); }
+  // The flat-map glide (the crash scene) waits for weather on the globe; for now it simply carries on.
+  function glideTo(x, y, w, ms, done) { if (done) done(); }
+  function zoomBy(factor) { U.globe.zoomBy(factor); }
   function setupZoomPan() {
-    svg.addEventListener("wheel", e => { e.preventDefault(); zoomBy(e.deltaY < 0 ? 1.2 : 1 / 1.2, e.clientX, e.clientY); }, { passive: false });
+    svg.addEventListener("wheel", e => { e.preventDefault(); U.globe.zoomBy(e.deltaY < 0 ? 1.18 : 1 / 1.18); }, { passive: false });
     let drag = null;
     svg.addEventListener("pointerdown", e => {
       if (e.button !== 0) return;
-      drag = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y, moved: false };
+      drag = { x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, moved: false };
     });
     window.addEventListener("pointermove", e => {
       if (!drag) return;
-      const r = svg.getBoundingClientRect();
-      const dx = (e.clientX - drag.x) * view.w / r.width, dy = (e.clientY - drag.y) * view.h / r.height;
       if (Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y) > 4) drag.moved = true;
-      if (drag.moved) { svg.classList.add("is-dragging"); view.x = drag.vx - dx; view.y = drag.vy - dy; clampView(); applyView(); }
+      if (drag.moved) { svg.classList.add("is-dragging"); U.globe.turnBy(e.clientX - drag.lx, e.clientY - drag.ly); drag.lx = e.clientX; drag.ly = e.clientY; }
     });
     window.addEventListener("pointerup", () => {
-      if (drag && drag.moved) {
-        // Swallow the click that follows a drag.
-        window.addEventListener("click", ev => ev.stopPropagation(), { capture: true, once: true });
-      }
+      if (drag && drag.moved) window.addEventListener("click", ev => ev.stopPropagation(), { capture: true, once: true });          // swallow the click after a drag
       drag = null; svg.classList.remove("is-dragging");
     });
-    svg.addEventListener("click", () => onSelect(null));
-    window.addEventListener("resize", () => { fitAspect(); clampView(); applyView(); });
-    fitAspect(true);
+    // A click on the map: in setup, the country under it; otherwise, clearing the selection.
+    svg.addEventListener("click", e => {
+      if (setupMode === "country") { const r = svg.getBoundingClientRect(), name = U.globe.countryAt(e.clientX - r.left, e.clientY - r.top); if (name) { onSelect({ type: "country", id: name }); return; } }
+      onSelect(null);
+    });
   }
 
   function highlight(sel) {
@@ -423,10 +410,7 @@ window.UpShip = window.UpShip || {};
     setupMode = mode;
     svg.classList.toggle("is-setup", !!mode);
     for (const m of ["country", "city", "identity"]) svg.classList.toggle("setup-" + m, mode === m);
-    for (const name in countryNodes) {
-      countryNodes[name].classList.toggle("playable", mode === "country" && PLAYABLE.includes(name));
-      countryNodes[name].classList.toggle("chosen", !!mode && mode !== "country" && name === data.country);
-    }
+    U.globe.setHighlight(mode === "country" ? PLAYABLE : [], mode && mode !== "country" ? data.country : null);
     for (const id in cityNodes) {
       cityNodes[id].g.classList.toggle("choosable", (mode === "city" && (data.cities || []).includes(id)) || (mode === "country" && U.cityById[id].home));
       cityNodes[id].g.classList.toggle("chosen-home", !!mode && id === data.chosen);
@@ -522,6 +506,7 @@ window.UpShip = window.UpShip || {};
     wind: [{ ax: 0.04, ay: 0.05, s: 0.04, p: 7, o: [0.7, 1] }]
   };
   function drawWeather(state, progress, force) {
+    return;                                                   // on the globe from stage 3
     if (!state || !state.weather || !layers.weather) return;
     const nowMs = performance.now();
     if (!force && nowMs - wxLast < 40) return;             // smooth on a desktop: about 25 updates a second
@@ -598,7 +583,7 @@ window.UpShip = window.UpShip || {};
     const a = poly.pts[lo], b = poly.pts[hi], seg = poly.len[hi] - poly.len[lo] || 1, f = (d - poly.len[lo]) / seg;
     return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, ang: Math.atan2(b.y - a.y, b.x - a.x) };
   }
-  const toMap = ll => { const [x, y] = project(ll[1], ll[0]); return { x, y }; };
+  const toMap = ll => { const [x, y] = flat(ll[1], ll[0]); return { x, y }; };
   const polyD = poly => "M" + poly.pts.map(p => p.x.toFixed(1) + "," + p.y.toFixed(1)).join(" L");
   let vehicles = [], transportKey = "", polys = null;
   function buildPolys() {
@@ -607,6 +592,24 @@ window.UpShip = window.UpShip || {};
     for (const l of U.competition.LINKS) for (const sg of l.segs) polys.push({ link: l, type: sg.type, express: l.express || l.type === "boat", poly: smooth(sg.pts.map(toMap)) });
     return polys;
   }
+  // A track or lane on screen: broken where it passes round the far side of the globe.
+  function polyScreenD(poly) {
+    let d = "", pen = false;
+    for (const p of poly.pts) { const q = flatToScreen(p.x, p.y); if (!q) { pen = false; continue; } d += (pen ? "L" : "M") + q.x.toFixed(1) + "," + q.y.toFixed(1); pen = true; }
+    return d;
+  }
+  function drawLines() {
+    if (!layers.transport || !transportLines) return;
+    layers.transport.innerHTML = "";
+    if (U.globe.isMoving()) return;
+    for (const L0 of transportLines) {
+      const d = polyScreenD(L0.poly); if (!d) continue;
+      if (L0.type === "rail") { el("path", { d, class: "tr-rail" + (L0.express ? " express" : "") }, layers.transport); el("path", { d, class: "tr-ties" + (L0.express ? " express" : "") }, layers.transport); }
+      else if (L0.type === "air") el("path", { d, class: "tr-air" }, layers.transport);
+      else el("path", { d, class: "tr-lane" }, layers.transport);
+    }
+  }
+  let transportLines = null;
   function syncTransport(state) {
     if (!state || !layers.transport) return;
     const C = U.competition, month = C.monthIndex(state);
@@ -614,18 +617,14 @@ window.UpShip = window.UpShip || {};
     const key = layerMode + ":" + air.length + ":" + ((state.settings || {}).traffic !== false);
     if (key === transportKey) return;
     transportKey = key;
-    layers.transport.innerHTML = ""; vehicles = [];
+    layers.transport.innerHTML = ""; vehicles = []; transportLines = null;
     if (layerMode !== "normal" && layerMode !== "competition") return;
     const full = layerMode === "competition";
     layers.transport.setAttribute("class", "transport-layer" + (full ? "" : " muted"));
     const P = buildPolys();
-    for (const p of P) {
-      const d = polyD(p.poly);
-      if (p.type === "rail") { el("path", { d, class: "tr-rail" + (p.express ? " express" : "") }, layers.transport); el("path", { d, class: "tr-ties" + (p.express ? " express" : "") }, layers.transport); }
-      else el("path", { d, class: "tr-lane" }, layers.transport);
-    }
     const airPolys = air.map(s => ({ type: "air", poly: smooth([toMap(pt(s[0])), toMap(pt(s[1]))], 2) }));
-    for (const a of airPolys) el("path", { d: polyD(a.poly), class: "tr-air" }, layers.transport);
+    transportLines = P.concat(airPolys);
+    drawLines();
     if ((state.settings || {}).traffic === false) return;
     // Traffic: two trains on express lines, one on others; a steamer per crossing; a plane per air service.
     for (const p of P.concat(airPolys)) {
@@ -692,9 +691,10 @@ window.UpShip = window.UpShip || {};
     const ctx = cv.getContext("2d");
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height);
     if (!vehicles.length && !puffs.length) return;
-    const r = svg.getScreenCTM(), unit = r.a;                 // screen pixels per map unit
+    // Screen pixels per simulation unit, measured on the globe near the middle of Europe.
+    const ref = flatToScreen(800, 700), ref2 = flatToScreen(810, 700), unit = ref && ref2 ? Math.max(0.05, Math.hypot(ref2.x - ref.x, ref2.y - ref.y) / 10) : 1;
     const S = 0.5 * grow();                                    // screen pixels per drawing unit
-    const toScr = p => ({ x: (r.a * p.x + r.c * p.y + r.e - sb.left), y: (r.b * p.x + r.d * p.y + r.f - sb.top) });
+    const toScr = p => flatToScreen(p.x, p.y) || { x: -9999, y: -9999 };
     const onScreen = q => q.x > -60 && q.y > -60 && q.x < w + 60 && q.y < h + 60;
     const alpha = layerMode === "competition" ? 1 : 0.8;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -720,7 +720,8 @@ window.UpShip = window.UpShip || {};
         if (d < 0 || d > v.poly.total) continue;
         const a = along(v.poly, d), q = toScr(a);
         if (!onScreen(q)) continue;
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.translate(q.x, q.y); ctx.rotate(a.ang); ctx.scale(S, S);
+        const q2 = toScr(along(v.poly, d + 1)), ang = q2.x > -9000 ? Math.atan2(q2.y - q.y, q2.x - q.x) : a.ang;          // heading as it looks on the globe
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.translate(q.x, q.y); ctx.rotate(ang); ctx.scale(S, S);
         ctx.globalAlpha = alpha;
         if (v.kind === "train") paintCar(ctx, i); else if (v.kind === "ship") paintShip(ctx); else paintPlane(ctx);
         if (i === 0) head = a;
@@ -765,7 +766,7 @@ window.UpShip = window.UpShip || {};
     // Demand circles: by city in the Passengers and Freight layers, or relative to the last stop while drawing.
     const origin = draftStops && draftStops.length ? draftStops[draftStops.length - 1] : null;
     if (origin || layerMode === "passengers" || layerMode === "freight") {
-      for (const c of U.CITIES) {
+      for (const c of U.CITIES) { if (!c.vis) continue;
         let pax, tons;
         if (origin) {
           if (c.id === origin) continue;
@@ -777,12 +778,12 @@ window.UpShip = window.UpShip || {};
         else { pax = U.TIERS[c.tier].demand * U.SPECIALTIES[c.specialty].passengerBoost; tons = U.TIERS[c.tier].demand / 6 * U.SPECIALTIES[c.specialty].freightBoost; }
         if (origin || layerMode === "passengers") {
           const r = Math.sqrt(pax) * 2.2 / z;
-          const circ = el("circle", { cx: c.x, cy: c.y, r, class: "demand-pax" }, layers.overlay);
+          const circ = el("circle", { cx: c.sx, cy: c.sy, r, class: "demand-pax" }, layers.overlay);
           el("title", {}, circ).textContent = origin ? `${c.name}: about ${Math.round(pax)} passengers and ${Math.round(tons)} tons a day each way with ${U.cityById[origin].name}` : `${c.name}: passenger demand`;
         }
         if (origin || layerMode === "freight") {
           const r = Math.sqrt(tons) * (origin ? 3.2 : 4.6) / z;
-          el("rect", { x: c.x - r, y: c.y - r, width: 2 * r, height: 2 * r, class: origin ? "demand-freight ring" : "demand-freight" }, layers.overlay);
+          el("rect", { x: c.sx - r, y: c.sy - r, width: 2 * r, height: 2 * r, class: origin ? "demand-freight ring" : "demand-freight" }, layers.overlay);
         }
       }
     }
@@ -791,7 +792,7 @@ window.UpShip = window.UpShip || {};
     if (layerMode === "passengers" || layerMode === "freight") return;
     const full = layerMode === "facilities";
     const sc = 0.62 * grow() * (full ? 1.35 : 1) / z;
-    for (const c of U.CITIES) {
+    for (const c of U.CITIES) { if (!c.vis) continue;
       const own = state.facilities[c.id] || {}, pub = F.hasPublic(c.id), dotR = U.TIERS[c.tier].r * grow() / z;
       const items = [];
       for (const t of ["mast", "terminal", "shed", "gasplant", "hestore", "school", "refinery"]) {
@@ -799,8 +800,8 @@ window.UpShip = window.UpShip || {};
         else if (full && (t === "gasplant" ? F.publicGas(c.id) : t !== "hestore" && t !== "school" && t !== "refinery" && pub)) items.push({ t, own: false, level: t === "gasplant" ? 1 : 2 });
       }
       const warn = F.congested(state, c.id, hour);
-      if (pub && !full) el("circle", { cx: c.x, cy: c.y, r: dotR + 2.6 / z * grow(), class: "pub-ring" }, layers.fac);
-      if (warn) el("use", { href: "#fac-warn", transform: `translate(${c.x - dotR - 6 * sc},${c.y}) scale(${sc})` }, layers.fac);
+      if (pub && !full) el("circle", { cx: c.sx, cy: c.sy, r: dotR + 2.6 / z * grow(), class: "pub-ring" }, layers.fac);
+      if (warn) el("use", { href: "#fac-warn", transform: `translate(${c.sx - dotR - 6 * sc},${c.sy}) scale(${sc})` }, layers.fac);
       if (!items.length) continue;
       // Rows of at most three, the lower rows holding more.
       // Up to two sit side by side; three or more split into rows, e.g. 1 over 2, 2 over 2, 2 over 3.
@@ -809,7 +810,7 @@ window.UpShip = window.UpShip || {};
       for (let r = 0; r < rowCount; r++) { const take = Math.ceil(left / (rowCount - r)); rows.push(take); left -= take; }
       rows.sort((a, b) => a - b);                           // top to bottom, fullest row at the bottom
       const below = c.label === "t";                        // label above the dot: stack below it instead
-      const g = el("g", { class: "fac", transform: `translate(${c.x},${below ? c.y + dotR + 1 / z : c.y - dotR - 1 / z}) scale(${sc})` }, layers.fac);
+      const g = el("g", { class: "fac", transform: `translate(${c.sx},${below ? c.sy + dotR + 1 / z : c.sy - dotR - 1 / z}) scale(${sc})` }, layers.fac);
       const rowH = 23, gap = 1.5;
       let k = 0;
       rows.forEach((count, ri) => {
@@ -827,5 +828,5 @@ window.UpShip = window.UpShip || {};
   }
   function draftDemand(stops) { draftStops = stops && stops.length ? stops : null; syncExtras(U.state); }
 
-  U.map = { glideTo, mapWidth: () => M.width, buildPolys, drawTraffic, syncTransport, drawWeather, init, syncRoutes, drawShips, drawDraft, zoomBy, highlight, shipPosition, project, setSetup, setHome, setLayer, syncExtras, draftDemand };
+  U.map = { focus, flat, zoomLevel: () => U.globe.view.k, glideTo, mapWidth: () => M.width, buildPolys, drawTraffic, syncTransport, drawWeather, init, syncRoutes, drawShips, drawDraft, zoomBy, highlight, shipPosition, project, setSetup, setHome, setLayer, syncExtras, draftDemand };
 })(window.UpShip);

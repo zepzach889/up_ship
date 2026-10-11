@@ -1012,3 +1012,8 @@ body.skipping #map svg, body.skipping .traffic-canvas { filter: saturate(0.35) b
 .cr-cloud { fill: #5a6070; opacity: 0.75; }
 .cr-rain { stroke: #8fa3b8; stroke-width: 0.8; opacity: 0.7; }
 .cr-bolt { fill: none; stroke: #f5efc0; stroke-width: 1.6; }
+
+/* The globe: a canvas beneath the map's SVG, which works in screen pixels above it. */
+#map { background: radial-gradient(ellipse at 50% 45%, #1f3150 0%, #15233a 60%, #0f1a2c 100%); }
+.globe-base { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#map svg.map { position: absolute; inset: 0; width: 100%; height: 100%; background: transparent; }
