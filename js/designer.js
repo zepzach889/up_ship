@@ -865,9 +865,9 @@ window.UpShip = window.UpShip || {};
     const all = Object.entries(D.TYPES).filter(([, t]) => !t.auto);
     const fit = all.filter(([k, t]) => !t.piece && !t.upperOnly && D.allowedOn(k, accDeck));
     const tools = fit.map(btn).join("")
-      + (() => { const P0 = { lower: ["boarding", "stair", "grand", "hatch"], gondola: ["boarding", "gstair"], hold: ["hatch"], crew: ["hatch"] }[accDeck] || [];
+      + (() => { const P0 = { lower: ["boarding", "stair", "grand"], gondola: ["boarding", "gstair"] }[accDeck] || [];
           const list = all.filter(([k]) => P0.includes(k) && !(k === "boarding" && (accDeck === "lower") === !!d.systems.gondola));
-          return list.length ? `<span class="do-pal-sep">Stairs and hatches</span>` + list.map(btn).join("") + (list.some(([k]) => k !== "hatch") ? `<button data-acc-rotate title="Turn the stair (R)"${isPiece(accTool) && accTool !== "hatch" ? "" : " disabled"}>↻ Climbs ${DIR_NAME[accDir]}</button>` : "") : ""; })()
+          return list.length ? `<span class="do-pal-sep">Stairs</span>` + list.map(btn).join("") + (list.some(([k]) => k !== "hatch") ? `<button data-acc-rotate title="Turn the stair (R)"${isPiece(accTool) && accTool !== "hatch" ? "" : " disabled"}>↻ Climbs ${DIR_NAME[accDir]}</button>` : "") : ""; })()
       + (accDeck === "upper" ? `<span class="do-pal-sep">Openings</span>` + all.filter(([, t]) => t.upperOnly).map(btn).join("") : "")
       + `<button data-acc-tool="first" aria-pressed="${accTool === "first"}" title="Click a cabin to make it first class, or back"><span class="sw sw-first">1</span>First class</button>`
       + `<button data-acc-tool="erase" aria-pressed="${accTool === "erase"}"><span class="sw" style="background:#e4d8bb"></span>Clear a square</button>`;

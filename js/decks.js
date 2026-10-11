@@ -581,6 +581,16 @@ const DEFS_BODY = `
         below += `<line x1="${bx1}" y1="${by1}" x2="${bx2}" y2="${by2}" class="dp-balustrade"/><circle cx="${bx1}" cy="${by1}" r="1.3" class="dp-post"/><circle cx="${(bx1 + bx2) / 2}" cy="${(by1 + by2) / 2}" r="0.9" class="dp-post"/>`;
       }
     }
+    let keel = "";
+    if (["lower", "hold", "crew"].includes(ctx.deck) && ctx.d) {
+      const blocks = {}; ctx.cols.forEach((col, i) => { (blocks[col.block] = blocks[col.block] || []).push(i); });
+      const yc = Math.floor(ctx.rows / 2) * S + S / 2;
+      for (const [blk, cols] of Object.entries(blocks)) for (const end of keelEnds(ctx.d, ctx.deck, +blk)) {
+        const x = end === "fore" ? ctx.colX(cols[0]) : ctx.colX(cols[cols.length - 1]) + S, dir = end === "fore" ? -1 : 1;
+        keel += `<g class="dp-keeldoor"><title>Keel door: to the catwalk along the keel</title><rect x="${x - 1.6}" y="${yc - 5}" width="3.2" height="10" class="dp-keelgap"/>
+          <path d="M${x},${yc - 5} a10,10 0 0 ${dir > 0 ? 1 : 0} ${-dir * 9},9" class="dp-keelleaf"/><text x="${x + dir * 5}" y="${yc + 9}" class="dp-landtext">keel</text></g>`;
+      }
+    }
     const ghost = opts.ghost ? `<g opacity="0.22" pointer-events="none">${opts.ghost}</g>` : "";
     // The smoking room on a hydrogen ship is entered through an airlock: a double door with a vestibule.
     let locks = "";
@@ -593,18 +603,33 @@ const DEFS_BODY = `
       locks += `<g class="dp-lock"><title>Airlock: two doors keep the smoking room sealed from the hydrogen ship</title><rect x="${bx}" y="${by}" width="${v}" height="${v}" class="dp-airlock"/>
         <line x1="${inner[0]}" y1="${inner[1]}" x2="${inner[2]}" y2="${inner[3]}" class="dp-lockdoor"/><circle cx="${bx + v / 2}" cy="${by + v / 2}" r="0.9" fill="#c9735b"/></g>`;
     }
-    return `<g class="dp">${floors}${below}${furn}${walls}${doors}${locks}${marks}${labels}${dims}${ghost}${opts.hover || ""}</g>`;
+    return `<g class="dp">${floors}${below}${furn}${walls}${doors}${locks}${keel}${marks}${labels}${dims}${ghost}${opts.hover || ""}</g>`;
   }
   // Stairs drawn from above: treads across the flight, an arrow up it; landings show the top of the flight inside a railing.
   // The control room at the gondola's bow: the wheel, the elevator wheel, a chart table, and the engine telegraphs.
+  // The control car, laid out as the Graf Zeppelin's: the control room forward with the rudder wheel on the centreline,
+  // the elevator wheel to port, and the engine telegraphs to starboard; the navigation room with its chart table;
+  // then the radio room to port and, to starboard, the ladder up to the keel catwalk.
   function bridgeDrawing(ctx, room) {
     const xs = room.cells.map(k => ctx.colX(k.c)), ys = room.cells.map(k => k.r * S);
     const x0 = Math.min(...xs), y0 = Math.min(...ys), w = Math.max(...xs) + S - x0, h = Math.max(...ys) + S - y0, cy = y0 + h / 2;
-    return `<g><title>Control room</title><circle cx="${x0 + 7}" cy="${cy}" r="4" fill="none" stroke="#6b4529" stroke-width="1.4"/><circle cx="${x0 + 7}" cy="${cy}" r="0.9" fill="#6b4529"/>
-      <circle cx="${x0 + 7}" cy="${cy - h * 0.3}" r="3" fill="none" stroke="#6b4529" stroke-width="1.1"/>
-      <rect x="${x0 + w * 0.45}" y="${cy - 5}" width="${w * 0.35}" height="10" fill="#c9b48a" stroke="#6b4529" stroke-width="0.6"/>
-      ${[0.3, 0.7].map(t => `<rect x="${x0 + w * 0.88}" y="${y0 + h * t - 2}" width="3" height="4" rx="1" fill="#c9a65b" stroke="#6b4529" stroke-width="0.5"/>`).join("")}
-      <text x="${x0 + w / 2}" y="${y0 + h - 3}" class="dp-landtext">control room</text></g>`;
+    const a = x0 + w * 0.42, b = x0 + w * 0.72, wheel = (x, y, r) => `<circle cx="${x}" cy="${y}" r="${r}" fill="none" stroke="#5c3b25" stroke-width="1"/>${[0, 45, 90, 135].map(t => `<line x1="${x + r * Math.cos(t * Math.PI / 180)}" y1="${y + r * Math.sin(t * Math.PI / 180)}" x2="${x - r * Math.cos(t * Math.PI / 180)}" y2="${y - r * Math.sin(t * Math.PI / 180)}" stroke="#5c3b25" stroke-width="0.5"/>`).join("")}<circle cx="${x}" cy="${y}" r="0.8" fill="#5c3b25"/>`;
+    const partition = (x, gapAt, gap) => `<line x1="${x}" y1="${y0}" x2="${x}" y2="${gapAt - gap / 2}" class="wall"/><line x1="${x}" y1="${gapAt + gap / 2}" x2="${x}" y2="${y0 + h}" class="wall"/>`;
+    // Control room
+    let g = `<rect x="${x0 + 1.5}" y="${cy - 1.5}" width="3" height="3" fill="#8a6a4a"/>` + wheel(x0 + 7, cy, 3.6);                 // the rudder wheel, by the forward windows
+    g += wheel(x0 + w * 0.22, y0 + 4.2, 3) + `<rect x="${x0 + w * 0.22 - 1.5}" y="${y0 + 0.8}" width="3" height="1.2" fill="#8a6a4a"/>`;   // the elevator wheel, to port
+    g += [0.32, 0.5].map(t => `<g filter="url(#dp-lift)"><rect x="${x0 + w * t - 2}" y="${y0 + h - 5.6}" width="4" height="4" rx="0.6" fill="#c9a65b" stroke="#5c3b25" stroke-width="0.5"/><circle cx="${x0 + w * t}" cy="${y0 + h - 3.6}" r="1.2" fill="#f5efe0" stroke="#5c3b25" stroke-width="0.3"/></g>`).join("");   // engine telegraphs, to starboard
+    // Navigation room
+    g += partition(a, cy, 6) + `<g filter="url(#dp-lift)"><rect x="${a + 3}" y="${cy - 4}" width="${b - a - 6}" height="8" fill="#e8dcc0" stroke="#5c3b25" stroke-width="0.6"/>
+      <path d="M${a + 4},${cy - 2} q${(b - a - 8) / 2},3 ${b - a - 8},0 M${a + 4},${cy + 1.5} l${b - a - 8},0" stroke="#8a6a4a" stroke-width="0.35" fill="none"/></g>
+      <circle cx="${(a + b) / 2}" cy="${y0 + 2.2}" r="1.4" fill="#f5efe0" stroke="#5c3b25" stroke-width="0.5"/><rect x="${(a + b) / 2 - 4}" y="${y0 + h - 3.4}" width="8" height="2.6" fill="#7a6a4a"/>`;
+    // Radio room to port, ladder to starboard
+    g += partition(b, cy, 6) + `<line x1="${b}" y1="${cy}" x2="${x0 + w}" y2="${cy}" class="wall"/>
+      <rect x="${b + 1.5}" y="${y0 + 1}" width="${x0 + w - b - 3}" height="3" fill="#6b4529" filter="url(#dp-lift)"/><rect x="${b + 2.5}" y="${y0 + 1.5}" width="3" height="2" fill="#3a3a38"/><rect x="${b + 6.5}" y="${y0 + 1.5}" width="3" height="2" fill="#3a3a38"/>`
+      + `<g><title>Ladder up to the keel catwalk</title>${[0.38, 0.62].map(t => `<line x1="${b + (x0 + w - b) * t}" y1="${cy + 2}" x2="${b + (x0 + w - b) * t}" y2="${y0 + h - 2}" class="dp-ladder"/>`).join("")}
+        ${[0.25, 0.45, 0.65, 0.85].map(t => `<line x1="${b + (x0 + w - b) * 0.38}" y1="${cy + (h / 2) * t}" x2="${b + (x0 + w - b) * 0.62}" y2="${cy + (h / 2) * t}" class="dp-ladder"/>`).join("")}</g>`;
+    g += `<text x="${(a + b) / 2}" y="${cy + 7.5}" class="dp-landtext">navigation</text><text x="${(b + x0 + w) / 2}" y="${cy - 2}" class="dp-landtext">radio</text>`;
+    return `<g><title>Control car</title>${g}</g>`;
   }
   function stairDrawing(ctx, room) {
     if (room.type === "hatch") {
@@ -703,19 +728,17 @@ const DEFS_BODY = `
     }
     return areas.sort((a, b) => a.first - b.first);
   }
+  // Keel connections are doors in each space's end walls, placed by rule; old hatch squares go back to floor.
   function ensureHatches(d) {
-    const areas = hullAreas(d);
-    areas.forEach((A, i) => {
-      const need = areas.length === 1 || i === 0 || i === areas.length - 1 ? 1 : 2, mid = Math.floor(A.ctx.rows / 2);
-      const have = new Set(); for (const c of A.cols) { const g = A.ctx.grid[mid][c]; if (g && g.type === "hatch") have.add(g.id); }
-      const spots = [A.cols[0], A.cols[A.cols.length - 1]];
-      for (let k = have.size; k < need; k++) {
-        const c = spots[k] ?? spots[0], g = A.ctx.grid[mid][c];
-        if (g && TYPES[g.type].piece) continue;
-        if (g) delete A.ctx.plan.cells[key(A.ctx, mid, c)];
-        placePiece(d, A.ctx, mid, c, "hatch", "e");
-      }
-    });
+    const plan = d.plan; if (!plan) return;
+    for (const [k, g] of Object.entries(plan.cells)) if (g.type === "hatch") { delete plan.cells[k]; if (plan.dirs) delete plan.dirs[g.id]; }
+  }
+  // Which ends of a space have keel doors: the forward-most space at its aft end, the last at its forward end, any between at both.
+  function keelEnds(d, deck, block) {
+    const areas = hullAreas(d), i = areas.findIndex(A => A.deck === deck && A.ctx.cols[A.cols[0]].block === block);
+    if (i < 0) return [];
+    if (areas.length === 1) return ["aft"];
+    return i === 0 ? ["aft"] : i === areas.length - 1 ? ["fore"] : ["fore", "aft"];
   }
   // Moving a hatch: it slides along the centreline to the chosen square, the nearest in that space moving.
   function moveHatch(d, ctx, r, c) {

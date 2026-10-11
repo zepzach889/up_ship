@@ -177,7 +177,58 @@ window.UpShip = window.UpShip || {};
       : `record attempt fails stop ${ship.name} ${name(o.a)} to ${name(o.b)} in ${hours} hours against ${rec.hours} stop${damaged ? " ship strained and in need of repair stop" : " a creditable run stop"}`, true, { type: "ship", id: ship.id });
     return { ship, won, hours };
   }
+  // The ship that would fly a record attempt: the fastest with the range.
+  function recordShip(state, offerId) {
+    const o = state.offers.find(x => x.id === offerId); if (!o) return null;
+    const ok = state.ships.filter(s => s.deliveryTick <= state.tick && !s.lost && !s.overhaulUntil && U.research.stats(state, s).rangeKm >= o.km);
+    return ok.sort((x, y) => U.research.stats(state, y).speedKmh - U.research.stats(state, x).speedKmh)[0] || null;
+  }
+  // Settling an attempt flown at the helm: the time and any damage come from the flight itself.
+  function attemptFlown(state, offerId, ship, hours, damage) {
+    const o = state.offers.find(x => x.id === offerId); if (!o) return null;
+    state.offers = state.offers.filter(x => x !== o);
+    const now = nowHour(state), key = o.a + ">" + o.b, rec = state.records[key], won = hours < rec.hours;
+    ship.readyHour = Math.max(ship.readyHour, now) + Math.ceil(hours * 2 + 24);
+    if (damage > 0) ship.condition = Math.max(0.2, ship.condition - damage);
+    if (won) { state.records[key] = { hours, by: ship.name }; S().addIncome(state, o.prize, "prizes"); }
+    state.rep = Math.min(100, (state.rep || 50) + (won ? 7 : 1));
+    return { won, prize: o.prize, rec: rec.hours };
+  }
+  // Government offers with conditions, about twice a year: opening a far destination, diplomatic mail, a grant for two ships.
+  const FAR = { germany: ["moscow", "constantinople", "cairo"], britain: ["cairo", "bombay", "newyork"], france: ["algiers", "tunis", "cairo"], italy: ["tunis", "cairo", "constantinople"] };
+  const CAPITALS = ["london", "paris", "berlin", "rome", "moscow", "madrid", "vienna"];
+  function maybeGovernment(state) {
+    if (Math.random() > 0.17) return;
+    const nat = state.company.nation, home = state.company.home, gov = U.NATIONS[nat].name, now = nowHour(state), kind = Math.floor(Math.random() * 3);
+    if (kind === 0) {
+      const options = (FAR[nat] || FAR.germany).filter(id => U.cityById[id] && !state.routes.some(r => r.stops.includes(id)));
+      if (!options.length) return;
+      const city = options[Math.floor(Math.random() * options.length)], pay = Math.round((20000 + S().distanceKm(home, city) * 12) / 1000) * 1000;
+      state.offers.push({ id: "o" + state.nextId++, kind: "goal", city, pay, authority: gov, expiresHour: now + 30 * 24, warned: false });
+      S().telegram(state, now, `government offer stop open a regular service to ${name(city)} within two years stop ${gbp(pay)} on success stop see contracts stop`, false, { type: "contracts" });
+    } else if (kind === 1) {
+      const capital = CAPITALS.filter(id => U.cityById[id] && U.cityById[id].country !== U.cityById[home].country)[Math.floor(Math.random() * 6)] || "paris";
+      const offer = mailOffer(state, home, capital, { perWeek: 3, years: 2, generous: 1.8 });
+      offer.diplomatic = true; offer.authority = "your foreign ministry";
+      state.offers.push(offer);
+      S().telegram(state, now, `foreign ministry offers diplomatic mail ${name(home)} to ${name(capital)} stop well paid stop see contracts stop`, false, { type: "contracts" });
+    } else {
+      state.offers.push({ id: "o" + state.nextId++, kind: "build", share: 0.2, count: 2, expiresHour: now + 30 * 24, warned: false });
+      S().telegram(state, now, `government offers construction grant stop twenty percent of your next two ships built at home stop see contracts stop`, false, { type: "contracts" });
+    }
+  }
+  // A destination opened in time pays out: a route to it with a ship on it.
+  function checkGoals(state) {
+    const now = nowHour(state);
+    for (const g of [...(state.goals || [])]) {
+      const served = state.routes.some(r => r.stops.includes(g.city) && state.ships.some(s => s.routeId === r.id && s.deliveryTick <= state.tick));
+      if (served) { S().addIncome(state, g.pay, "grants"); state.rep = Math.min(100, (state.rep || 50) + 4); state.goals = state.goals.filter(x => x !== g);
+        S().telegram(state, now, `government pays ${gbp(g.pay)} stop regular service to ${name(g.city)} opened as agreed stop`, false, { type: "finances" }); }
+      else if (now > g.until) { state.goals = state.goals.filter(x => x !== g); S().telegram(state, now, `government offer for a service to ${name(g.city)} has lapsed stop`, false, { type: "contracts" }); }
+    }
+  }
   function describe(o) {
+    if (o.kind === "goal") return `government offer stop open a regular service to ${name(o.city)} within two years stop ${gbp(o.pay)} on success stop`;
     if (o.kind === "record") { const r = (U.state.records || {})[o.a + ">" + o.b]; return `aero club prize stop fastest ${name(o.a)} to ${name(o.b)} stop ${o.km.toLocaleString("en-GB")} km stop record ${r ? r.hours + " hours by " + r.by : "unclaimed"} stop ${gbp(o.prize)} to beat it stop`; }
     if (o.kind === "charter") return `charter for ${o.who} stop ${o.what} stop ${o.days} days for ${gbp(o.pay)} stop needs a ship with ${o.range.toLocaleString("en-GB")} km of range stop`;
     if (o.kind === "mail") return `mail contract ${name(o.a)} to ${name(o.b)} stop ${o.perWeek === 7 ? "daily" : o.perWeek + " times weekly"} each way stop ${gbp(o.monthly)} monthly for ${o.years} year${o.years > 1 ? "s" : ""} stop`;
@@ -192,11 +243,13 @@ window.UpShip = window.UpShip || {};
     state.offers = state.offers.filter(x => x !== o);
     const now = nowHour(state);
     if (o.kind === "mail") {
+      if (o.diplomatic) state.rep = Math.max(0, (state.rep || 50) - 3);          // other governments take note
       const k = { id: "c" + state.nextId++, a: o.a, b: o.b, perWeek: o.perWeek, monthly: o.monthly, authority: o.authority,
         startHour: now, endHour: now + o.years * 365 * 24, week: { ab: 0, ba: 0 }, made: 0, required: 0, weeks: 0, penalties: 0, paid: 0, tutorial: o.tutorial };
       state.contracts.push(k);
       return k;
     }
+    if (o.kind === "goal") { state.goals = state.goals || []; const g = { city: o.city, pay: o.pay, until: now + 2 * 365 * 24 }; state.goals.push(g); return g; }
     if (o.kind === "charter") {
       // The ship that can go and earns least on her route goes; she rejoins it when the charter ends.
       const ok = state.ships.filter(s => s.deliveryTick <= state.tick && !s.lost && !s.overhaulUntil && U.research.stats(state, s).rangeKm >= o.range);
@@ -214,7 +267,7 @@ window.UpShip = window.UpShip || {};
       state.grants.push(g);
       return g;
     }
-    state.buildGrant = { share: o.share, until: now + E().buildGrantMonths * 30 * 24 };
+    state.buildGrant = { share: o.share, until: now + E().buildGrantMonths * 30 * 24, count: o.count || 1 };
     return state.buildGrant;
   }
   function decline(state, offerId) { state.offers = state.offers.filter(x => x.id !== offerId); }
@@ -311,6 +364,8 @@ window.UpShip = window.UpShip || {};
   function monthly(state) {
     maybeCharter(state);
     maybeRecord(state);
+    maybeGovernment(state);
+    checkGoals(state);
     const now = nowHour(state);
     for (const k of state.contracts.slice()) {
       S().addIncome(state, k.monthly, "mail"); k.paid += k.monthly;
@@ -394,10 +449,10 @@ window.UpShip = window.UpShip || {};
     return Math.round(price * g.share / 1000) * 1000;
   }
   function useBuildGrant(state, amount) {
-    state.buildGrant = null;
+    if (state.buildGrant && state.buildGrant.count > 1) state.buildGrant.count--; else state.buildGrant = null;
     state.year.grants = (state.year.grants || 0) + amount;
   }
 
-  U.contracts = { attempt, init, dropContract, accept, decline, describe, loadMail, recordGrantFlight, daily, weekly, monthly,
+  U.contracts = { recordShip, attemptFlown, attempt, init, dropContract, accept, decline, describe, loadMail, recordGrantFlight, daily, weekly, monthly,
     loanLimit, borrow, repay, setInstallment, buildGrantFor, useBuildGrant, mailMonthly };
 })(window.UpShip);

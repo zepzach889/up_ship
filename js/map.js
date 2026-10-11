@@ -361,6 +361,18 @@ window.UpShip = window.UpShip || {};
     view.x = cx - view.w / 2; view.y = cy - view.h / 2;
   }
 
+  // A smooth glide to a point, ending with the given view width.
+  function glideTo(x, y, w, ms = 1200, done) {
+    const v0 = { ...view }, ratio = view.h / view.w, w1 = Math.min(M.width, w), h1 = w1 * ratio, t0 = performance.now();
+    const step = now => {
+      const k = Math.min(1, (now - t0) / ms), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+      view.w = v0.w + (w1 - v0.w) * e; view.h = v0.h + (h1 - v0.h) * e;
+      view.x = v0.x + (x - w1 / 2 - v0.x) * e; view.y = v0.y + (y - h1 / 2 - v0.y) * e;
+      clampView(); applyView();
+      if (k < 1) requestAnimationFrame(step); else if (done) done();
+    };
+    requestAnimationFrame(step);
+  }
   function zoomBy(factor, clientX, clientY) {
     const r = svg.getBoundingClientRect();
     const fx = clientX == null ? 0.5 : (clientX - r.left) / r.width;
@@ -815,5 +827,5 @@ window.UpShip = window.UpShip || {};
   }
   function draftDemand(stops) { draftStops = stops && stops.length ? stops : null; syncExtras(U.state); }
 
-  U.map = { buildPolys, drawTraffic, syncTransport, drawWeather, init, syncRoutes, drawShips, drawDraft, zoomBy, highlight, shipPosition, project, setSetup, setHome, setLayer, syncExtras, draftDemand };
+  U.map = { glideTo, mapWidth: () => M.width, buildPolys, drawTraffic, syncTransport, drawWeather, init, syncRoutes, drawShips, drawDraft, zoomBy, highlight, shipPosition, project, setSetup, setHome, setLayer, syncExtras, draftDemand };
 })(window.UpShip);

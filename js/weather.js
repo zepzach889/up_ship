@@ -173,7 +173,9 @@ window.UpShip = window.UpShip || {};
       text = `${ship.name} lost by fire near ${where} stop ${lost} of ${aboard} aboard did not survive stop an inquiry will follow${cover}${pays} stop`;
     }
     if (U.crew) text = text.replace(/ stop$/, "") + U.crew.afterAccident(state, ship, kind, bold, t) + " stop";
-    S().telegram(state, t, text, true, kind === "disaster" && ship.gas !== "helium" && state.ships.some(s => s !== ship && s.gas !== "helium") ? { type: "gasdecision" } : { type: "finances" });
+    const target = kind === "disaster" && ship.gas !== "helium" && state.ships.some(s => s !== ship && s.gas !== "helium") ? { type: "gasdecision" } : { type: "finances" };
+    target.crash = { kind, from: leg.from, to: leg.to, at: 0.35 + Math.random() * 0.3, name: ship.name };          // for the scene on the map
+    S().telegram(state, t, text, true, target);
     if (kind !== "damage") state.ships = state.ships.filter(s => s !== ship);
   }
   function placeNear(leg) {

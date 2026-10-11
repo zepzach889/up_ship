@@ -984,3 +984,31 @@ body.skipping #map svg, body.skipping .traffic-canvas { filter: saturate(0.35) b
 
 .dp-hatch { fill: #9a9a96; stroke: #3a3a38; stroke-width: 1.2; }
 .dp-ladder { stroke: #3a3a38; stroke-width: 0.7; }
+
+.dp-keelgap { fill: #9a9a96; stroke: #3a3a38; stroke-width: 0.6; }
+.dp-keelleaf { fill: none; stroke: #3a3a38; stroke-width: 0.7; stroke-dasharray: 1.2 0.8; }
+
+/* Taking the helm */
+.helm { position: fixed; right: 16px; top: 78px; width: 340px; max-height: calc(100vh - 100px); overflow: auto; z-index: 750; background: var(--ink-2); color: var(--ivory); border: 1px solid var(--brass); box-shadow: 0 8px 26px rgba(0,0,0,0.5); padding: 14px 16px 12px; font-size: 13.5px; }
+.helm h2 { font-family: var(--deco); font-weight: 400; color: var(--brass-hi); margin: 0 0 2px; font-size: 22px; }
+.helm .sub { color: var(--ivory-dim); margin: 0 0 8px; font-size: 12.5px; }
+.helm dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 8px 0; } .helm dt { color: var(--ivory-dim); } .helm dd { margin: 0; text-align: right; }
+.helm-warn { color: #e6a88a; } .helm-log { padding-left: 18px; margin: 8px 0; color: var(--ivory-dim); } .helm-ask { border-top: 1px solid var(--brass-dim); margin-top: 10px; padding-top: 8px; }
+.helm .btn-row { margin-top: 8px; }
+.helm-course { fill: none; stroke: #c9a65b; stroke-width: 3; stroke-dasharray: 8 4; }
+.helm-point { fill: #f5efe0; stroke: #8a6a2a; stroke-width: 1.5; } .helm-point.end { fill: #c9a65b; }
+.helm-forecast { fill: rgba(120, 130, 150, 0.12); stroke: rgba(80, 90, 110, 0.6); stroke-width: 1.2; stroke-dasharray: 4 3; }
+.helm-drift { stroke: rgba(80, 90, 110, 0.6); stroke-width: 1; stroke-dasharray: 2 2; }
+.helm-ship { fill: #9b2a24; stroke: #f5efe0; stroke-width: 2; }
+
+/* The crash scene */
+.cr-hull { fill: #c9cbc8; stroke: #2d2418; stroke-width: 0.45; }
+.cr-fin { fill: #8a2a24; stroke: #2d2418; stroke-width: 0.35; }
+.cr-glow { fill: #e8702a; opacity: 0.85; }
+.cr-flame { fill: #f3b03a; stroke: #e8702a; stroke-width: 0.6; opacity: 0.9; }
+.cr-smoke { fill: #4a4440; }
+.cr-frame { stroke: #3a2e22; stroke-width: 0.4; }
+.cr-ground { stroke: #6b5a43; stroke-width: 1.5; stroke-dasharray: 6 4; }
+.cr-cloud { fill: #5a6070; opacity: 0.75; }
+.cr-rain { stroke: #8fa3b8; stroke-width: 0.8; opacity: 0.7; }
+.cr-bolt { fill: none; stroke: #f5efc0; stroke-width: 1.6; }

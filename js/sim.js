@@ -643,11 +643,12 @@ window.UpShip = window.UpShip || {};
   // Stops the game saving itself, so a game just loaded from a file is not overwritten as the page reloads.
   function stopSaving() { saving = false; }
   // A survey flight to a gateway: the ship leaves her route for the round trip and two days there; landing rights follow.
-  function surveyFlight(state, gatewayId, shipId) {
+  function surveyFlight(state, gatewayId, shipId, flownHours, damage) {
     const ship = state.ships.find(s => s.id === shipId), g = U.cityById[gatewayId], c = cls(ship), now = H(state.tick);
     const km = distanceKm(ship.location, gatewayId), rs = U.research.stats(state, ship);
     if (rs.rangeKm < km) return `${ship.name} cannot reach ${g.name}: ${Math.round(km)} km, against her range of ${rs.rangeKm} km.`;
-    const hours = Math.round(km / rs.speedKmh * 2 + 48), cost = Math.round(km * 2 * c.fuelPerKm * E().costFactor + 4000);
+    const hours = flownHours ? Math.round(flownHours * 2 + 48) : Math.round(km / rs.speedKmh * 2 + 48), cost = Math.round(km * 2 * c.fuelPerKm * E().costFactor + 4000);
+    if (damage > 0) ship.condition = Math.max(0.2, ship.condition - damage);
     addCost(state, ship, cost);
     ship.readyHour = Math.max(ship.readyHour, now) + hours;
     state.gateways = state.gateways || {};

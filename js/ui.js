@@ -241,7 +241,7 @@ window.UpShip = window.UpShip || {};
       ${open ? `<p class="status">Open. Landing rights won by ${esc(g.by)}'s survey flight; routes may end here.</p>`
         : g ? `<p class="status">${esc(g.by)} is flying the survey. Landing rights follow on ${shortDate(U.sim.dateOf((g.openAt) / 12))}.</p>`
         : `<p>Before routes can end here, a survey flight must prove the way and win landing rights. The ship leaves her route for the round trip and two days on the ground; the flight costs her fuel and about £4,000 in fees.</p>
-          <ul class="plain-list">${rows.map(r => `<li>${esc(r.x.name)}: ${Math.round(r.km).toLocaleString("en-GB")} km from ${esc(city(r.x.location).name)}, ${r.ok ? `about ${r.days} days away <button class="btn-quiet" data-survey="${id}:${r.x.id}">Send her</button>` : `<span class="small">out of range (${r.range.toLocaleString("en-GB")} km)</span>`}</li>`).join("") || `<li class="note">No ship is free.</li>`}</ul>`}`;
+          <ul class="plain-list">${rows.map(r => `<li>${esc(r.x.name)}: ${Math.round(r.km).toLocaleString("en-GB")} km from ${esc(city(r.x.location).name)}, ${r.ok ? `about ${r.days} days away <button class="btn-quiet" data-survey="${id}:${r.x.id}">Send her</button> <button class="btn-quiet" data-survey-helm="${id}:${r.x.id}">Take the helm</button>` : `<span class="small">out of range (${r.range.toLocaleString("en-GB")} km)</span>`}</li>`).join("") || `<li class="note">No ship is free.</li>`}</ul>`}`;
   }
   function cityPanel(state, id) {
     if (city(id).gateway) return gatewayPanel(state, id);
@@ -999,10 +999,16 @@ window.UpShip = window.UpShip || {};
 
   function offerText(o) {
     const a = city(o.a || o.b || "berlin"), b = o.b ? city(o.b) : null;
+    if (o.kind === "charter") return `<h4>Charter: ${esc(o.who)}</h4><p>${esc(o.what[0].toUpperCase() + o.what.slice(1))}. ${o.days} days for ${money(o.pay)}, paid on acceptance. The ship that can cover ${o.range.toLocaleString("en-GB")} km and earns least on her route goes, and rejoins it afterwards.</p>`;
+    if (o.kind === "record") { const r = (U.state.records || {})[o.a + ">" + o.b]; return `<h4>Record attempt: ${a.name} to ${b.name}</h4><p>${km(o.km)}. The record stands at ${r ? r.hours + " hours, set by " + esc(r.by) : "nothing yet"}. Beat it for ${money(o.prize)} and standing. Your fastest ship with the range flies it.</p>`; }
+    if (o.kind === "goal") return `<h4>Government offer: a service to ${city(o.city).name}</h4><p>Open a regular service to ${city(o.city).name}, with a ship on the route, within two years of accepting. ${money(o.pay)} and standing on success; nothing is lost if it lapses.</p>`;
+    if (o.kind === "mail" && o.diplomatic) return `<h4>Diplomatic mail: ${a.name} to ${b.name}</h4>
+      <p>${o.perWeek} flights a week each way for ${o.years} years, ${money(o.monthly)} a month from ${esc(o.authority)}. Carrying another government's pouches costs a little standing.</p>`;
     if (o.kind === "mail") return `<h4>Mail contract: ${a.name} to ${b.name}</h4>
       <p>${o.perWeek === 7 ? "One flight a day" : o.perWeek + " flights a week"} each way, ${km(U.sim.distanceKm(o.a, o.b))} apart. ${money(o.monthly)} a month for ${o.years} year${o.years > 1 ? "s" : ""}. Offered by ${o.authority === U.NATIONS[U.state.company.nation].name ? "your government's postal ministry" : "the postal authority of " + esc(o.authority)}.</p>`;
     if (o.kind === "route") return `<h4>Route grant: ${a.name} to ${b.name}</h4>
       <p>Open a service between them within ${U.ECONOMY.grantOpenMonths} months and fly it at least ${U.ECONOMY.grantMinPerMonth} times each way every month for ${o.years} years. ${money(o.upfront)} when the service opens, then ${money(o.monthly)} a month. Stopping early means repaying part of the opening grant.</p>`;
+    if (o.count > 1) return `<h4>Construction grant: two ships</h4><p>The government pays ${Math.round(o.share * 100)}% of each of your next two national-built ships (not war-surplus) ordered within ${U.ECONOMY.buildGrantMonths} months.</p>`;
     return `<h4>Construction grant</h4><p>The government pays ${Math.round(o.share * 100)}% of your next national-built ship (not war-surplus) ordered within ${U.ECONOMY.buildGrantMonths} months, in exchange for keeping it registered at home.</p>`;
   }
 
@@ -1011,7 +1017,7 @@ window.UpShip = window.UpShip || {};
     const offers = state.offers.map(o => `<section class="card offer">${offerText(o)}
       <p class="note">Open until ${shortDate(U.sim.dateAtHour(o.expiresHour))}.</p>
       <div class="btn-row"><button class="btn-quiet" data-decline="${o.id}">Decline</button>${o.kind === "record"
-        ? `<button class="btn-quiet" data-record="${o.id}:steady" title="No extra risk">Fly it steady</button><button class="btn-quiet" data-record="${o.id}:hard" title="Faster, some risk of strain">Push hard</button><button class="btn" data-record="${o.id}:allout" title="Fastest, real risk of damage">All out</button>`
+        ? `<button class="btn" data-record-helm="${o.id}" title="Plot the course and make the calls yourself">Take the helm</button><button class="btn-quiet" data-record="${o.id}:steady" title="No extra risk">Fly it steady</button><button class="btn-quiet" data-record="${o.id}:hard" title="Faster, some risk of strain">Push hard</button><button class="btn" data-record="${o.id}:allout" title="Fastest, real risk of damage">All out</button>`
         : `<button class="btn" data-accept="${o.id}">Accept</button>`}</div></section>`).join("");
     const mail = state.contracts.map(k => {
       const rel = k.required ? Math.round(k.made / k.required * 100) + "%" : "New";
@@ -1198,6 +1204,24 @@ window.UpShip = window.UpShip || {};
       const o = s.offers.find(x => x.id === b.dataset.accept), res = U.contracts.accept(s, b.dataset.accept);
       if (o && o.kind === "charter") notify(res ? `${res.ship.name} leaves her route for ${o.days} days on charter for ${o.who}. ${money(o.pay)} paid.` : `No ship has the ${o.range.toLocaleString("en-GB")} km of range this charter needs.`);
       h.changed(); render(); return;
+    }
+    if (b.dataset.recordHelm) {
+      const oid = b.dataset.recordHelm, o = s.offers.find(x => x.id === oid), ship = U.contracts.recordShip(s, oid);
+      if (!o) { notify("That offer has gone."); return; }
+      if (!ship) { notify("No ship has the range for this run."); return; }
+      const rec = s.records[o.a + ">" + o.b].hours;
+      U.helm.start({ title: `Record attempt: ${city(o.a).name} to ${city(o.b).name}`, ship, from: o.a, to: o.b, record: rec, cancelText: "Leave it for now",
+        judge: hours => hours < rec ? { headline: `A new record: ${hours} hours.`, text: `${ship.name} beat the record of ${rec} hours. The prize of ${money(o.prize)} is yours.` }
+          : { headline: `Short of the record: ${hours} hours.`, text: `The record of ${rec} hours stands. A creditable run, all the same.` },
+        onFinish: r => { U.contracts.attemptFlown(s, oid, ship, r.hours, r.damage); h.changed(); render(); } });
+      return;
+    }
+    if (b.dataset.surveyHelm) {
+      const [gid, sid] = b.dataset.surveyHelm.split(":"), ship = s.ships.find(x => x.id === sid);
+      U.helm.start({ title: `Survey flight to ${city(gid).name}`, ship, from: ship.location, to: gid, cancelText: "Not now",
+        judge: hours => ({ headline: `Arrived over ${city(gid).name} in ${hours} hours.`, text: "The survey is under way; landing rights follow when she is home again." }),
+        onFinish: r => { const why = U.sim.surveyFlight(s, gid, sid, r.hours, r.damage); if (why) notify(why); h.changed(); render(); } });
+      return;
     }
     if (b.dataset.record) {
       const [oid, push] = b.dataset.record.split(":"), r = U.contracts.attempt(s, oid, push);
@@ -1469,7 +1493,8 @@ window.UpShip = window.UpShip || {};
     if ($("#telegrams").querySelector(".telegram.is-major")) return;
     if (U.game) U.game.resumeFromTelegram();
   }
-  function closeTelegram(card, t) { card.remove(); updateStack(); onTelegramClosed(t); }
+  function closeTelegram(card, t) {
+    if (t && t.target && t.target.crash && U.crash) U.crash.clear(); card.remove(); updateStack(); onTelegramClosed(t); }
   function updateStack() {
     const stack = $("#telegrams"), cards = stack.querySelectorAll(".telegram");
     stack.hidden = !cards.length;
