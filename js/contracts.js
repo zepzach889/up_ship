@@ -27,7 +27,7 @@ window.UpShip = window.UpShip || {};
     const km = S().distanceKm(a, b);
     const perWeek = opts.perWeek || pick([3, 7, 7]);
     const years = opts.years || pick([1, 2, 2, 3]);
-    const monthly = Math.round(mailMonthly(km, perWeek) * (opts.generous || 1) / 10) * 10;
+    const monthly = Math.round(mailMonthly(km, perWeek) * (opts.generous || 1) * (state.company.nation === "usa" ? 1.3 : 1) / 10) * 10;          // America's Post Office pays well
     const authority = opts.authority || U.NATIONS[state.company.nation].name;
     return { id: "o" + state.nextId++, kind: "mail", a, b, perWeek, years, monthly, authority,
       expiresHour: nowHour(state) + E().offerOpenDays * 24, warned: false, tutorial: !!opts.tutorial };
@@ -137,10 +137,13 @@ window.UpShip = window.UpShip || {};
     ["a scientific congress", "upper-air research flights over the North Sea", 12, 1000],
     ["a shipping magnate", "a private pleasure cruise for his guests", 9, 1200]
   ];
+  const NAVY = [["the United States Navy", "scouting for the Atlantic Fleet's exercises", 14, 2000], ["the United States Navy", "carrying officers to the Pacific Fleet at San Diego", 8, 3000],
+    ["the Navy Department", "trials of a new mooring mast on a ship at sea", 6, 1000]];
   // Now and then a charter: good pay and standing, but the ship leaves her route for days or weeks.
   function maybeCharter(state) {
     if (Math.random() > 0.3 || !state.ships.some(s => s.deliveryTick <= state.tick)) return;
-    const [who, what, days, range] = CHARTERS[Math.floor(Math.random() * CHARTERS.length)];
+    const pool = state.company.nation === "usa" && Math.random() < 0.5 ? NAVY : CHARTERS;          // the Navy as a partner
+    const [who, what, days, range] = pool[Math.floor(Math.random() * pool.length)];
     const pay = Math.round(days * (900 + Math.random() * 600) / 100) * 100;
     state.offers.push({ id: "o" + state.nextId++, kind: "charter", who, what, days, range, pay, expiresHour: nowHour(state) + 14 * 24, warned: false });
     S().telegram(state, nowHour(state), `charter offered by ${who} stop ${what} stop ${days} days for ${gbp(pay)} stop see contracts stop`, false, { type: "contracts" });

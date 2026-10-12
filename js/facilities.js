@@ -28,7 +28,7 @@ window.UpShip = window.UpShip || {};
   const UPKEEP = 0.02;                                  // of building cost, per year
 
   // Public masts, terminals, and sheds stand at major and large cities and capitals.
-  const hasPublic = id => { const c = U.cityById[id]; return c.tier === "major" || c.tier === "large" || c.specialty === "capital"; };
+  const hasPublic = id => { const c = U.cityById[id]; return c.tier === "major" || c.tier === "large" || c.specialty === "capital" || !!c.station; };
 
   // Ship sizes: 1919 purpose-built ships are small; surplus, medium passenger, and freighter medium; liners large.
   function shipSize(classId) {
@@ -66,7 +66,7 @@ window.UpShip = window.UpShip || {};
     if (pub) return { level: pub, own: false };
     return { level: 0, own: false };
   }
-  const canLand = (state, id) => { const c = U.cityById[id]; if (c && c.gateway && !(U.sim && U.sim.gatewayOpen(state, id))) return false; return effective(state, id, "mast").level > 0; };
+  const canLand = (state, id) => { if (U.sim && U.sim.hasRights && !U.sim.hasRights(state, id)) return false; return effective(state, id, "mast").level > 0; };
 
   function terminalLimits(state, id) {
     const t = effective(state, id, "terminal");
@@ -83,7 +83,7 @@ window.UpShip = window.UpShip || {};
     return lvl >= TYPES[type].costs.length ? null : TYPES[type].costs[lvl];
   }
   function build(state, id, type) {
-    const c = U.cityById[id]; if (c && c.gateway && !(U.sim && U.sim.gatewayOpen(state, id))) return false;          // landing rights first
+    if (U.sim && U.sim.hasRights && !U.sim.hasRights(state, id)) return false;          // landing rights first
     const cost = nextCost(state, id, type);
     if (cost == null || state.money < cost) return false;
     state.money -= cost;

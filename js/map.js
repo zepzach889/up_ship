@@ -413,7 +413,7 @@ window.UpShip = window.UpShip || {};
   }
 
   // New-game setup: highlight the playable countries, then the home cities.
-  const PLAYABLE = ["Germany", "United Kingdom", "France", "Italy"];
+  const PLAYABLE = ["Germany", "United Kingdom", "France", "Italy", "United States"];
   function setSetup(mode, data = {}) {
     setupMode = mode;
     svg.classList.toggle("is-setup", !!mode);

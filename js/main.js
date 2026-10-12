@@ -29,6 +29,7 @@ window.UpShip = window.UpShip || {};
   function begin() {
     U.homeCity = U.state.company.home;
     U.map.setHome(U.homeCity);
+    { const h = U.cityById[U.homeCity]; if (h && U.map.focus) U.map.focus(h.realLon ?? h.lon, h.realLat ?? h.lat, 3.2, 0); }          // open over the home city
     U.ui.showCompany(U.state);
     U.map.syncRoutes(U.state);
     U.ui.select(null);

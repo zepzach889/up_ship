@@ -33,6 +33,8 @@ window.UpShip = window.UpShip || {};
       rate: m => [0.08, 0.06, 0.03, 0.01, 0, 0, 0, 0, 0.02, 0.06, 0.09, 0.1][m] },
     { kind: "storm", name: "Rocky Mountain weather", lon: [-113, -105], lat: [36, 46], bearing: [80, 100], kmh: [3, 8], km: [[260, 360], [200, 300]], life: [40, 90],
       rate: m => [0.07, 0.07, 0.06, 0.05, 0.04, 0.03, 0.03, 0.03, 0.04, 0.05, 0.06, 0.07][m] },
+    { kind: "storm", name: "North Atlantic gale", lon: [-48, -24], lat: [42, 56], bearing: [55, 95], kmh: [35, 55], km: [[520, 720], [260, 360]], life: [60, 110],
+      rate: m => [0.14, 0.12, 0.09, 0.06, 0.03, 0.02, 0.02, 0.03, 0.06, 0.1, 0.13, 0.15][m] },
     { kind: "fog", name: "Pacific coast fog", lon: [-124, -122], lat: [36.5, 39], bearing: [80, 100], kmh: [1, 4], km: [[110, 170], [80, 120]], life: [20, 50],
       rate: m => [0.01, 0.01, 0.02, 0.04, 0.07, 0.1, 0.12, 0.12, 0.08, 0.04, 0.02, 0.01][m] },
     { kind: "fog", name: "Grand Banks fog", lon: [-54, -48], lat: [44, 48], bearing: [40, 90], kmh: [3, 8], km: [[260, 380], [180, 260]], life: [30, 70],
@@ -171,10 +173,13 @@ window.UpShip = window.UpShip || {};
     if (ship.gas === "helium") p *= 0.5;
     if (ship.gas === "aetherium") p *= 0.4;
     if (U.research.has(state, "operations1")) p *= 0.8;
+    const ocean = U.sim.oceanLeg && U.sim.oceanLeg(leg.from, leg.to);
+    if (ocean) p *= 1.6;                                                       // longer exposure, nowhere to put down
     if (Math.random() > p) return null;
     const fatalChance = ship.gas === "aetherium" ? 0 : ship.gas === "helium" ? lvl.fatalHe : lvl.fatalH;
     const r = Math.random();
-    return r < fatalChance ? "disaster" : r < fatalChance + (1 - fatalChance) * 0.4 ? "wreck" : "damage";
+    const kind = r < fatalChance ? "disaster" : r < fatalChance + (1 - fatalChance) * 0.4 ? "wreck" : "damage";
+    return ocean && kind === "damage" ? "wreck" : kind;                        // over the open ocean there is no field to land in
   }
 
   // What happens after a serious accident: the ship, the insurance, the standing, the telegram.

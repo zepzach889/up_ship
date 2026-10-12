@@ -237,7 +237,7 @@ window.UpShip = window.UpShip || {};
     const ready = state.ships.filter(x => x.deliveryTick <= state.tick && !x.lost && !x.overhaulUntil);
     const rows = ready.map(x => { const km = U.sim.distanceKm(x.location, id), rs = U.research.stats(state, x), days = Math.round((km / rs.speedKmh * 2 + 48) / 24);
       return { x, km, days, ok: rs.rangeKm >= km, range: rs.rangeKm }; }).sort((a, b) => a.km - b.km);
-    return `<h2>${esc(c.name)}</h2><p class="sub">${c.region === "na" ? `${esc(c.country)}, ${c.via}` : `Gateway to the wider world, ${c.via}`}. Your ships can land here once a survey flight has won landing rights.</p>
+    return `<h2>${esc(c.name)}</h2><p class="sub">${!c.via && !c.station ? `${esc(c.country)}: a foreign country for your company` : c.station ? `${esc(c.country)}: a refuelling station. Few passengers of its own, but its mast and fuel let ships cross the ocean in shorter legs` : c.region === "na" ? `${esc(c.country)}, ${c.via}` : `Gateway to the wider world, ${c.via}`}. Your ships can land here once a survey flight has won landing rights.</p>
       ${open ? `<p class="status">Open. Landing rights won by ${esc(g.by)}'s survey flight; routes may end here.</p>`
         : g ? `<p class="status">${esc(g.by)} is flying the survey. Landing rights follow on ${shortDate(U.sim.dateOf((g.openAt) / 12))}.</p>`
         : U.sim.needsPermit(state, id) ? (state.permits && state.permits[U.sim.regionOf(id)]
@@ -248,7 +248,7 @@ window.UpShip = window.UpShip || {};
           <ul class="plain-list">${rows.map(r => `<li>${esc(r.x.name)}: ${Math.round(r.km).toLocaleString("en-GB")} km from ${esc(city(r.x.location).name)}, ${r.ok ? `about ${r.days} days away <button class="btn-quiet" data-survey="${id}:${r.x.id}">Send her</button> <button class="btn-quiet" data-survey-helm="${id}:${r.x.id}">Take the helm</button>` : `<span class="small">out of range (${r.range.toLocaleString("en-GB")} km)</span>`}</li>`).join("") || `<li class="note">No ship is free.</li>`}</ul>`}`;
   }
   function cityPanel(state, id) {
-    if (city(id).gateway && !U.sim.gatewayOpen(state, id)) return gatewayPanel(state, id);
+    if (!U.sim.hasRights(state, id)) return gatewayPanel(state, id);
     const c = city(id), tier = U.TIERS[c.tier], sp = U.SPECIALTIES[c.specialty];
     const routes = state.routes.filter(r => r.stops.includes(c.id));
     const here = state.ships.filter(s => s.deliveryTick <= state.tick && !s.leg && s.location === c.id);

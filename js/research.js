@@ -53,36 +53,37 @@ window.UpShip = window.UpShip || {};
   // Classes unlocked by research. German figures are the baseline; other countries scale them.
   const UNLOCKS = [
     { role: "medium", kind: "passenger", requires: ["engines1", "structures2"], base: { passengers: 45, cargoTons: 2, speedKmh: 115, rangeKm: 2500, crew: 18, price: 150000, dailyCost: 220, fuelPerKm: 0.13, buildDays: 150 },
-      names: { germany: "Möwe", britain: "Kittiwake", france: "Mouette", italy: "Rondine" }, roleName: "Medium passenger ship" },
+      names: { germany: "Möwe", britain: "Kittiwake", france: "Mouette", italy: "Rondine", usa: "Clipper" }, roleName: "Medium passenger ship" },
     { role: "freighter", kind: "cargo", requires: ["structures3", "operations3"], base: { passengers: 0, cargoTons: 25, speedKmh: 95, rangeKm: 3000, crew: 16, price: 140000, dailyCost: 200, fuelPerKm: 0.14, buildDays: 150 },
-      names: { germany: "Pelikan", britain: "Cormorant", france: "Pélican", italy: "Pellicano" }, roleName: "Heavy freighter" },
+      names: { germany: "Pelikan", britain: "Cormorant", france: "Pélican", italy: "Pellicano", usa: "Conestoga" }, roleName: "Heavy freighter" },
     { role: "liner", kind: "passenger", requires: ["structures3", "engines3", "operations2"], base: { passengers: 60, cargoTons: 8, speedKmh: 115, rangeKm: 7000, crew: 36, price: 280000, dailyCost: 420, fuelPerKm: 0.22, buildDays: 240 },
-      names: { germany: "Albatros", britain: "Imperial", france: "Frégate", italy: "Falco" }, roleName: "Long-range liner", liner: true },
+      names: { germany: "Albatros", britain: "Imperial", france: "Frégate", italy: "Falco", usa: "Constellation" }, roleName: "Long-range liner", liner: true },
     { role: "express", kind: "passenger", era: 2, requires: ["engines7", "structures5"], base: { passengers: 30, cargoTons: 3, speedKmh: 160, rangeKm: 4000, crew: 20, price: 170000, dailyCost: 260, fuelPerKm: 0.15, buildDays: 150 },
-      names: { germany: "Falke", britain: "Merlin", france: "Faucon", italy: "Sparviero" }, roleName: "Express ship" },
+      names: { germany: "Falke", britain: "Merlin", france: "Faucon", italy: "Sparviero", usa: "Hornet" }, roleName: "Express ship" },
     { role: "skyfreighter", kind: "cargo", era: 2, requires: ["structures7", "operations7"], base: { passengers: 0, cargoTons: 70, speedKmh: 105, rangeKm: 5000, crew: 24, price: 260000, dailyCost: 380, fuelPerKm: 0.3, buildDays: 240 },
-      names: { germany: "Kondor", britain: "Titan", france: "Condor", italy: "Grifone" }, roleName: "Sky freighter" },
+      names: { germany: "Kondor", britain: "Titan", france: "Condor", italy: "Grifone", usa: "Mammoth" }, roleName: "Sky freighter" },
     { role: "greatliner", kind: "passenger", era: 2, requires: ["structures8", "gas7"], base: { passengers: 150, cargoTons: 15, speedKmh: 135, rangeKm: 10000, crew: 60, price: 650000, dailyCost: 900, fuelPerKm: 0.45, buildDays: 420 },
-      names: { germany: "Adler", britain: "Empire", france: "Transatlantique", italy: "Regina" }, roleName: "Great liner", liner: true }
+      names: { germany: "Adler", britain: "Empire", france: "Transatlantique", italy: "Regina", usa: "America" }, roleName: "Great liner", liner: true }
   ];
   const NATION_SCALE = {
     germany: { cap: 1, range: 1, speed: 1, price: 1, days: 0 },
     britain: { cap: 1.2, range: 1.15, speed: 0.93, price: 1.12, days: 30 },
     france: { cap: 0.9, range: 1, speed: 1, price: 0.88, days: 0 },
-    italy: { cap: 0.8, range: 0.85, speed: 1, price: 0.8, days: -30 }
+    italy: { cap: 0.8, range: 0.85, speed: 1, price: 0.8, days: -30 },
+    usa: { cap: 1.1, range: 1.1, speed: 0.98, price: 1.15, days: 0 }
   };
   const SHIP_NAMES = {
-    medium: { germany: ["Allgäu", "Schwarzwald", "Taunus", "Harz", "Eifel", "Spessart"], britain: ["Pennine", "Cotswold", "Chiltern", "Mendip", "Quantock", "Malvern"],
+    medium: { usa: ["Wyoming", "Ohio", "Dakota", "Kansas", "Oregon", "Nevada"], germany: ["Allgäu", "Schwarzwald", "Taunus", "Harz", "Eifel", "Spessart"], britain: ["Pennine", "Cotswold", "Chiltern", "Mendip", "Quantock", "Malvern"],
       france: ["Champagne", "Bourgogne", "Auvergne", "Savoie", "Anjou", "Berry"], italy: ["Piemonte", "Veneto", "Marche", "Abruzzo", "Calabria", "Molise"] },
-    freighter: { germany: ["Hansa", "Ruhr", "Saar", "Mosel", "Neckar", "Main"], britain: ["Tyneside", "Clydeside", "Humber", "Solent", "Medway", "Wear"],
+    freighter: { usa: ["Hudson", "Delaware", "Potomac", "Susquehanna", "Platte", "Arkansas"], germany: ["Hansa", "Ruhr", "Saar", "Mosel", "Neckar", "Main"], britain: ["Tyneside", "Clydeside", "Humber", "Solent", "Medway", "Wear"],
       france: ["Loire", "Seine", "Rhône", "Garonne", "Marne", "Saône"], italy: ["Po", "Arno", "Adige", "Piave", "Brenta", "Isonzo"] },
-    express: { germany: ["Blitz", "Pfeil", "Komet", "Meteor", "Wirbel", "Sturmvogel"], britain: ["Arrow", "Dart", "Comet", "Flyer", "Mercury", "Swiftsure"],
+    express: { usa: ["Arrow", "Zephyr", "Comet", "Rocket", "Flyer", "Meteor"], germany: ["Blitz", "Pfeil", "Komet", "Meteor", "Wirbel", "Sturmvogel"], britain: ["Arrow", "Dart", "Comet", "Flyer", "Mercury", "Swiftsure"],
       france: ["Flèche", "Éclair", "Comète", "Mistral", "Rapide", "Étoile Filante"], italy: ["Freccia", "Lampo", "Cometa", "Saetta", "Baleno", "Fulmine"] },
-    skyfreighter: { germany: ["Atlas", "Goliath", "Koloss", "Riese", "Herkules", "Titan"], britain: ["Samson", "Colossus", "Behemoth", "Leviathan", "Goliath", "Atlas"],
+    skyfreighter: { usa: ["Paul Bunyan", "Titan", "Colossus", "Juggernaut", "Mammoth", "Leviathan"], germany: ["Atlas", "Goliath", "Koloss", "Riese", "Herkules", "Titan"], britain: ["Samson", "Colossus", "Behemoth", "Leviathan", "Goliath", "Atlas"],
       france: ["Hercule", "Colosse", "Géant", "Atlas", "Titan", "Samson"], italy: ["Ercole", "Colosso", "Gigante", "Atlante", "Titano", "Sansone"] },
-    greatliner: { germany: ["Vaterland", "Kaiserin", "Imperator", "Germania", "Hansa", "Europa"], britain: ["Britannic", "Majestic", "Olympic", "Oceanic", "Sovereign", "Empress"],
+    greatliner: { usa: ["America", "Columbia", "Liberty", "Independence", "Union", "Republic"], germany: ["Vaterland", "Kaiserin", "Imperator", "Germania", "Hansa", "Europa"], britain: ["Britannic", "Majestic", "Olympic", "Oceanic", "Sovereign", "Empress"],
       france: ["France", "Paris", "Liberté", "Majestueux", "Souveraine", "Impératrice"], italy: ["Italia", "Roma", "Augusta", "Imperatrice", "Regina Elena", "Sovrana"] },
-    liner: { germany: ["Rheinland", "Westfalen", "Pommern", "Holstein", "Thüringen", "Franken"], britain: ["Britannia", "Empire", "Dominion", "Commonwealth", "Endeavour", "Resolution"],
+    liner: { usa: ["Virginia", "Pennsylvania", "Massachusetts", "California", "Texas", "New York"], germany: ["Rheinland", "Westfalen", "Pommern", "Holstein", "Thüringen", "Franken"], britain: ["Britannia", "Empire", "Dominion", "Commonwealth", "Endeavour", "Resolution"],
       france: ["Atlantide", "Méridien", "Horizon", "Zénith", "Étoile", "Aurore"], italy: ["Vittoria", "Aurora", "Serenissima", "Fortuna", "Concordia", "Speranza"] }
   };
 

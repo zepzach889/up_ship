@@ -30,7 +30,7 @@ window.UpShip = window.UpShip || {};
   const freightRate = km => E().freightBase + E().freightPerKm * km;
   // A city's tier, allowing for booms (Oklahoma City's oil from 1928).
   const tierOf = c => c.boom && U.state && dateOf(U.state.tick).getUTCFullYear() >= c.boom.year ? c.boom.tier : c.tier;
-  function paxWeight(c) { return U.TIERS[tierOf(c)].demand * U.SPECIALTIES[c.specialty].passengerBoost; }
+  function paxWeight(c) { return U.TIERS[tierOf(c)].demand * U.SPECIALTIES[c.specialty].passengerBoost * (c.station ? 0.15 : 1); }
   function freightWeight(c) { return U.TIERS[tierOf(c)].demand / 6 * U.SPECIALTIES[c.specialty].freightBoost; }
   // Seasons: travel peaks in high summer and falls off in winter, about 15% either way.
   const season = () => { if (!U.state) return 1; const m = dateOf(U.state.tick).getUTCMonth(); return 1 + 0.15 * Math.cos((m - 6.5) / 12 * 2 * Math.PI); };
@@ -136,6 +136,7 @@ window.UpShip = window.UpShip || {};
     U.research.init(state);
     U.facilities.init(state);
     U.passengers.init(state);
+    if (config.nation === "usa") state.gasPolicy = { all: "helium" };          // America's helium, from the start
     U.weather.init(state);
     for (const id of catalog(state)) if (U.SHIP_CLASSES[id].kind === "surplus") state.surplusLeft[id] = E().surplusStock;
     const first = catalog(state)[0];
@@ -143,6 +144,7 @@ window.UpShip = window.UpShip || {};
     U.crew.init(state);
     U.contracts.init(state);
     state.tutorial = config.tutorial ? { step: 1 } : null;
+    if (config.nation === "usa") for (const sh of state.ships) { sh.gas = "helium"; if (U.facilities.GAS && U.facilities.GAS.helium) sh.gasLeft = U.facilities.GAS.helium.range; }          // the first ship too
     return state;
   }
 
@@ -202,7 +204,7 @@ window.UpShip = window.UpShip || {};
     if (longest > c.rangeKm) return `A leg of ${Math.round(longest)} km is beyond its ${c.rangeKm.toLocaleString("en-GB")} km range`;
     if (ship.gas === "helium" && state.company.nation !== "usa" && route.stops.some(id => U.cityById[id].country === "United States"))
       return "America sells no helium to foreign lines: American routes need a hydrogen ship";
-    const closed = route.stops.find(id => U.cityById[id].gateway && !gatewayOpen(state, id));
+    const closed = route.stops.find(id => !hasRights(state, id));
     if (closed) return `No landing rights at ${U.cityById[closed].name} yet: send a survey flight first`;
     return null;
   }
@@ -659,7 +661,15 @@ window.UpShip = window.UpShip || {};
   const regionOf = id => (U.cityById[id] && U.cityById[id].region) || "eu";
   const homeRegion = state => regionOf(state.company.home);
   const REGION_GOV = { na: { name: "Washington", country: "America" }, eu: { name: "the European governments", country: "Europe" } };
-  function needsPermit(state, id) { const r = regionOf(id); return r !== homeRegion(state) && !(state.permits && state.permits[r] && state.permits[r].grantAt <= H(state.tick)); }
+  // An ocean leg: to or from a station, or between regions.
+  function oceanLeg(a, b) { const A = U.cityById[a], B = U.cityById[b]; return !!(A && B && (A.station || B.station || regionOf(a) !== regionOf(b))); }
+  function hasRights(state, id) {
+    const c = U.cityById[id]; if (!c) return false;
+    const r = regionOf(id);
+    if (r === homeRegion(state) && !c.station && !(c.gateway && r === "eu")) return true;
+    return gatewayOpen(state, id);
+  }
+  function needsPermit(state, id) { const r = regionOf(id); if (r === "ocean") return false; return r !== homeRegion(state) && !(state.permits && state.permits[r] && state.permits[r].grantAt <= H(state.tick)); }
   function applyPermit(state, region) {
     state.permits = state.permits || {};
     if (state.permits[region]) return "Already applied for.";
@@ -690,7 +700,7 @@ window.UpShip = window.UpShip || {};
     try { for (const k of ["upship.save.v1", "upship.save.v2", "upship.save.v3", "upship.save.v4", "upship.save.v5", "upship.save.v6", "upship.save.v7", "upship.save.v8", "upship.save.v9", "upship.save.v10", SAVE_KEY]) localStorage.removeItem(k); } catch (e) {}
   }
 
-  U.sim = { regionOf, homeRegion, needsPermit, applyPermit, REGION_GOV, surveyFlight, gatewayOpen, stopSaving, finishOverhaul, telegram, addGeneral, addIncome, nearestCity, distanceKm, fare, freightRate, dailyPassengers, dailyFreight, start, advance, beginTurn, dateOf, dateAtHour, H,
+  U.sim = { hasRights, oceanLeg, regionOf, homeRegion, needsPermit, applyPermit, REGION_GOV, surveyFlight, gatewayOpen, stopSaving, finishOverhaul, telegram, addGeneral, addIncome, nearestCity, distanceKm, fare, freightRate, dailyPassengers, dailyFreight, start, advance, beginTurn, dateOf, dateAtHour, H,
     routeSummary, save, load, clearSave, editRoute, routeOf, routeName, routeLegs, createRoute, deleteRoute, canAssign, assign,
     order, policyGas, heliumFill, rename, suggestName, longestLeg, catalog, orderTerms, saleValue, canSell, sell, positionAt, ageYears, roman };
 })(window.UpShip);

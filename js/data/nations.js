@@ -62,12 +62,27 @@ UpShip.NATIONS = {
       first: ["Giuseppe", "Giovanni", "Luigi", "Carlo", "Umberto", "Vittorio", "Enrico", "Alessandro", "Maria", "Giulia"],
       last: ["Rossi", "Bianchi", "Ferrari", "Conti", "Marchetti", "Galli", "Fontana", "Rinaldi", "Moretti", "Colombo"]
     }
+  },
+  usa: {
+    id: "usa", name: "United States", mapName: "United States",
+    strength: "Helium and a generous Post Office",
+    description: "Safe helium ships from Goodyear and the Navy, a Post Office that pays well for air mail, and a continent of its own to fly. Larger, costlier ships, and Prohibition at home.",
+    catalog: ["goodyear", "goodyearcargo", "navyrigid"],
+    subsidy: { scale: 0.9, frequency: 0.8, buildShare: 0.1, leaning: "capitals" },
+    companyNames: {
+      patterns: ["{adj} Airship Lines", "{adj} Air Navigation Company", "{cityer} Airship Company", "{adj} Airship Transport", "{adj} Airways Corporation"],
+      adj: ["American", "Continental", "National", "Atlantic", "Pacific", "Eastern", "Transcontinental", "Great Lakes"]
+    },
+    directors: {
+      first: ["Charles", "Edward", "Harold", "Walter", "Paul", "Frank", "Amelia", "Ruth", "Margaret", "Eleanor"],
+      last: ["Litchfield", "Moffett", "Rosendahl", "Lansdowne", "Fulton", "Whitney", "Morgan", "Hartley", "Bennett", "Carroll"]
+    }
   }
 };
 // Cities that count as Mediterranean or imperial destinations for route grants.
 UpShip.MEDITERRANEAN = ["barcelona", "marseille", "toulon", "genoa", "rome", "naples", "athens", "constantinople", "tunis", "algiers", "malta", "alexandria", "cairo", "gibraltar"];
 UpShip.IMPERIAL = ["gibraltar", "malta", "alexandria", "cairo", "marseille", "rome", "naples", "athens", "lisbon"];
-UpShip.NATION_ORDER = ["germany", "britain", "france", "italy"];
+UpShip.NATION_ORDER = ["germany", "britain", "france", "italy", "usa"];
 
 // City-name forms used in company names.
 UpShip.CITY_ADJ = { friedrichshafen: "Friedrichshafener", berlin: "Berliner", hamburg: "Hamburger", frankfurt: "Frankfurter" };

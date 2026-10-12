@@ -83,8 +83,22 @@ window.UpShip = window.UpShip || {};
   }
 
   // The builders' classes are designs too: their figures come from the lineup the physics produced.
+  // American classes take the German counterpart's design, filled with helium.
+  const US_FROM = { goodyear: "seeschwalbe", goodyearcargo: "brieftaube", navyrigid: "marine" };
+  const US_SCALE = { goodyear: { load: 0.5, price: 0.75 }, goodyearcargo: { load: 0.6, price: 0.75 } };          // the non-rigids: small and cheap
+  function usLineup() {
+    const out = {};
+    for (const id of Object.keys(U.SHIP_CLASSES)) {
+      const src = US_FROM[id] || (id.endsWith("-usa") ? id.replace(/-usa$/, "-germany") : null), L = src && U.LINEUP && U.LINEUP[src];
+      if (!L) continue;
+      const k = US_SCALE[id] || { load: 1, price: 1 }, h = 0.85 * k.load, d = JSON.parse(JSON.stringify(L.design)); d.gas = "helium";
+      out[id] = { ...L, design: d, passengers: Math.floor(L.passengers * h), seats: Math.floor((L.seats || 0) * h), cargoTons: Math.round(L.cargoTons * h * 10) / 10,
+        price: Math.round(L.price * 1.12 * k.price / 1000) * 1000 };
+    }
+    return out;
+  }
   function applyLineup() {
-    for (const [id, L] of Object.entries(U.LINEUP || {})) {
+    for (const [id, L] of Object.entries({ ...(U.LINEUP || {}), ...usLineup() })) {
       const c = U.SHIP_CLASSES[id]; if (!c) continue;
       Object.assign(c, { passengers: L.passengers, seats: L.seats, firstShare: L.firstShare, comfort: L.comfort, cargoTons: L.cargoTons,
         speedKmh: L.speedKmh, rangeKm: L.rangeKm, crew: L.crew, price: L.price, dailyCost: L.dailyCost, fuelPerKm: L.fuelPerKm,

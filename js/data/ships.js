@@ -1,6 +1,39 @@
 // Pre-made ship classes. Fictional classes modeled on real ships of the period.
 window.UpShip = window.UpShip || {};
 UpShip.SHIP_CLASSES = {
+  goodyear: {
+    id: "goodyear", kind: "passenger",
+    name: "Goodyear non-rigid",
+    role: "Small passenger ship",
+    basis: "Modeled on Goodyear's passenger blimps",
+    passengers: 12, cargoTons: 1,
+    speedKmh: 95, rangeKm: 1100, crew: 8,
+    price: 48000, dailyCost: 90, fuelPerKm: 0.07,
+    buildDays: 60,
+    names: ["Pilgrim", "Puritan", "Vigilant", "Mayflower", "Volunteer", "Defender", "Reliance", "Columbia", "Enterprise", "Resolute"]
+  },
+  goodyearcargo: {
+    id: "goodyearcargo", kind: "cargo",
+    name: "Goodyear mail blimp",
+    role: "Mail and cargo ship",
+    basis: "A Goodyear non-rigid fitted for mail",
+    passengers: 0, cargoTons: 5,
+    speedKmh: 95, rangeKm: 1300, crew: 7,
+    price: 42000, dailyCost: 80, fuelPerKm: 0.06,
+    buildDays: 50,
+    names: ["Air Mail", "Pony Express", "Overland", "Pathfinder", "Courier", "Messenger"]
+  },
+  navyrigid: {
+    id: "navyrigid", kind: "surplus",
+    name: "Navy surplus rigid",
+    role: "Navy rigid, sold out of service",
+    basis: "Modeled on the Shenandoah (ZR-1)",
+    passengers: 40, cargoTons: 4,
+    speedKmh: 100, rangeKm: 4500, crew: 30,
+    price: 55000, dailyCost: 260, fuelPerKm: 0.16,
+    buildDays: 45,
+    names: ["Shenandoah", "Patoka", "Lexington", "Saratoga", "Ranger", "Constellation"]
+  },
   seeschwalbe: {
     id: "seeschwalbe", kind: "passenger",
     name: "Seeschwalbe class",
