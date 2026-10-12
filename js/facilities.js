@@ -83,6 +83,7 @@ window.UpShip = window.UpShip || {};
     return lvl >= TYPES[type].costs.length ? null : TYPES[type].costs[lvl];
   }
   function build(state, id, type) {
+    const c = U.cityById[id]; if (c && c.gateway && !(U.sim && U.sim.gatewayOpen(state, id))) return false;          // landing rights first
     const cost = nextCost(state, id, type);
     if (cost == null || state.money < cost) return false;
     state.money -= cost;

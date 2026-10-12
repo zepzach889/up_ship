@@ -12,12 +12,22 @@ window.UpShip = window.UpShip || {};
     return { a: rt.a, b: rt.b, express: rt.express, type: rt.sea ? "sea" : rt.boat ? "boat" : "rail", segs };
   });
   // Air services, loosely following history: [a, b, year, month, operator].
-  const AIR = [["london", "paris", 1919, 8, "Aircraft Transport and Travel"], ["london", "amsterdam", 1920, 5, "KLM"], ["paris", "brussels", 1920, 7, "a Belgian air company"],
+  const AIR = [
+    // North America: the Post Office's air mail first, then the airlines.
+    ["newyork", "washington", 1919, 2, "the Post Office air mail"], ["newyork", "chicago", 1920, 2, "the Post Office air mail"], ["chicago", "sanfrancisco", 1921, 1, "the Post Office air mail"],
+    ["chicago", "dallas", 1926, 2, "National Air Transport"], ["seattle", "sanfrancisco", 1926, 2, "Pacific Air Transport"], ["newyork", "boston", 1927, 3, "Colonial Air Transport"],
+    ["miami", "havana", 1927, 2, "Pan American Airways"], ["sanfrancisco", "losangeles", 1928, 4, "Maddux Air Lines"], ["newyork", "montreal", 1928, 2, "Canadian Colonial Airways"],
+    ["chicago", "detroit", 1929, 4, "an air company"], ["newyork", "losangeles", 1929, 1, "Transcontinental Air Transport"],["london", "paris", 1919, 8, "Aircraft Transport and Travel"], ["london", "amsterdam", 1920, 5, "KLM"], ["paris", "brussels", 1920, 7, "a Belgian air company"],
     ["amsterdam", "hamburg", 1921, 4, "KLM"], ["paris", "london", 1924, 4, "Imperial Airways"], ["berlin", "munich", 1926, 4, "Lufthansa"], ["berlin", "hamburg", 1926, 5, "Lufthansa"],
     ["berlin", "vienna", 1927, 6, "Lufthansa"], ["vienna", "budapest", 1928, 4, "a Hungarian air company"], ["paris", "marseille", 1929, 3, "Air Union"],
     ["milan", "rome", 1929, 9, "an Italian air company"], ["london", "cologne", 1930, 4, "Imperial Airways"], ["marseille", "algiers", 1932, 5, "Air France"],
     ["zurich", "milan", 1932, 6, "Swissair"], ["copenhagen", "stockholm", 1933, 5, "an air company"]];
   const EVENTS = [
+    { year: 1920, month: 1, text: "prohibition begins in america stop ship bars are closed on american routes stop" },
+    { year: 1933, month: 12, text: "prohibition repealed in america stop ship bars reopen on american routes stop" },
+    { year: 1920, month: 9, text: "the post office opens its transcontinental air mail new york to san francisco stop air competition across america stop" },
+    { year: 1927, month: 10, text: "pan american airways opens key west to havana stop airplanes reach the caribbean stop" },
+    { year: 1929, month: 7, text: "transcontinental air transport opens coast to coast by air and rail stop competition on american long routes stop" },
     { year: 1919, month: 11, text: "the nord express resumes berlin to warsaw after the war stop rail competition on eastern routes stop" },
     { year: 1929, month: 9, text: "golden arrow luxury boat train opens london to paris stop rail competition on the channel route stop" },
     { year: 1931, month: 6, text: "new larger airliners enter service stop airplanes compete harder on short routes stop" }

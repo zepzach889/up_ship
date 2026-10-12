@@ -47,8 +47,15 @@ window.UpShip = window.UpShip || {};
   // Comfort as passengers find it: the layout, worn by condition, then the captain and crew.
   const comfort = (ship, state) => {
     const st = state || U.state, extra = (st && st.crew && U.crew ? U.crew.mods(st, ship).comfort : 0) + ((ship.fitted || []).includes("operations8") ? 8 : 0);
-    return Math.max(0, Math.min(100, Math.round(comfortNew(ship) * (0.85 + 0.15 * ship.condition) + extra)));
+    return Math.max(0, Math.min(100, Math.round(comfortNew(ship) * (0.85 + 0.15 * ship.condition) + extra - dry(ship, st))));
   };
+  // Prohibition (January 1920 to December 1933): on routes touching the United States the bar is closed.
+  function dry(ship, st) {
+    if (!st || !U.sim) return 0;
+    const I = ship.interior || U.SHIP_CLASSES[ship.classId]; if (!I || !I.hasBar) return 0;
+    const d = U.sim.dateOf(st.tick), y = d.getUTCFullYear() + d.getUTCMonth() / 12; if (y < 1920 || y >= 1933.95) return 0;
+    const r = U.sim.routeOf(st, ship); return r && r.stops.some(id => U.cityById[id].country === "United States") ? 4 : 0;
+  }
 
   // Fares and how travelers respond -------------------------------------------------
   // Fare multipliers for a route's two classes, from its level or the player's own settings.

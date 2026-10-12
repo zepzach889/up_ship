@@ -92,7 +92,7 @@ window.UpShip = window.UpShip || {};
         const cost = Math.round(U.SHIP_CLASSES[ship.classId].price * 0.08 / 100) * 100;
         if (confirm(`Plan this new interior for ${ship.name}? It goes in at her next overhaul: about £${cost.toLocaleString("en-GB")} and two weeks more in the shed. Passengers: ${Math.floor(f.passengers * lift)}${f.daySeats ? ` (${Math.floor(f.daySeats * lift)} in seats)` : ""}, comfort ${f.comfort ?? "—"}.`))
           ship.refitInterior = { passengers: Math.floor(f.passengers * lift), seats: Math.floor((f.daySeats || 0) * lift), firstShare: f.passengers ? (f.firstBerths || 0) / f.passengers : 0, comfort: f.comfort ?? 50, plan: e.d.plan,
-            cargoMix: f.cargoMix ? Object.fromEntries(Object.entries(f.cargoMix).map(([k0, v]) => [k0, Math.round(v * lift * 10) / 10])) : null, crewQ: f.crewQ };
+            hasBar: !!(f.plan && f.plan.roomKinds && f.plan.roomKinds.has("bar")), cargoMix: f.cargoMix ? Object.fromEntries(Object.entries(f.cargoMix).map(([k0, v]) => [k0, Math.round(v * lift * 10) / 10])) : null, crewQ: f.crewQ };
       }
       st.designs = st.designs.filter(x => x !== e);
       st.openDesign = e.returnTo || (st.designs[0] && st.designs[0].id);

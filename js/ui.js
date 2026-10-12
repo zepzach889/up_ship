@@ -240,11 +240,15 @@ window.UpShip = window.UpShip || {};
     return `<h2>${esc(c.name)}</h2><p class="sub">${c.region === "na" ? `${esc(c.country)}, ${c.via}` : `Gateway to the wider world, ${c.via}`}. Your ships can land here once a survey flight has won landing rights.</p>
       ${open ? `<p class="status">Open. Landing rights won by ${esc(g.by)}'s survey flight; routes may end here.</p>`
         : g ? `<p class="status">${esc(g.by)} is flying the survey. Landing rights follow on ${shortDate(U.sim.dateOf((g.openAt) / 12))}.</p>`
+        : U.sim.needsPermit(state, id) ? (state.permits && state.permits[U.sim.regionOf(id)]
+          ? `<p class="status">Your application to ${U.sim.REGION_GOV[U.sim.regionOf(id)].name} is being considered; a permit is expected about ${shortDate(U.sim.dateOf(state.permits[U.sim.regionOf(id)].grantAt / 12))}.</p>`
+          : `<p>A foreign line needs a permit from ${U.sim.REGION_GOV[U.sim.regionOf(id)].name} before its first survey here. The application costs £3,000 and takes five to eight weeks; after that, surveys win landing rights city by city.</p>
+            <div class="btn-row"><button class="btn" data-permit="${U.sim.regionOf(id)}">Apply for a permit</button></div>`)
         : `<p>Before routes can end here, a survey flight must prove the way and win landing rights. The ship leaves her route for the round trip and two days on the ground; the flight costs her fuel and about £4,000 in fees.</p>
           <ul class="plain-list">${rows.map(r => `<li>${esc(r.x.name)}: ${Math.round(r.km).toLocaleString("en-GB")} km from ${esc(city(r.x.location).name)}, ${r.ok ? `about ${r.days} days away <button class="btn-quiet" data-survey="${id}:${r.x.id}">Send her</button> <button class="btn-quiet" data-survey-helm="${id}:${r.x.id}">Take the helm</button>` : `<span class="small">out of range (${r.range.toLocaleString("en-GB")} km)</span>`}</li>`).join("") || `<li class="note">No ship is free.</li>`}</ul>`}`;
   }
   function cityPanel(state, id) {
-    if (city(id).gateway) return gatewayPanel(state, id);
+    if (city(id).gateway && !U.sim.gatewayOpen(state, id)) return gatewayPanel(state, id);
     const c = city(id), tier = U.TIERS[c.tier], sp = U.SPECIALTIES[c.specialty];
     const routes = state.routes.filter(r => r.stops.includes(c.id));
     const here = state.ships.filter(s => s.deliveryTick <= state.tick && !s.leg && s.location === c.id);
@@ -1228,6 +1232,7 @@ window.UpShip = window.UpShip || {};
       notify(!r ? "That offer has gone." : r.none ? "No ship has the range for this run." : `${r.ship.name} sets out on the record attempt. The result comes by telegram.`);
       h.changed(); render(); return;
     }
+    if (b.dataset.permit) { const why = U.sim.applyPermit(s, b.dataset.permit); notify(why || "Application sent. A reply is expected in five to eight weeks."); h.changed(); render(); return; }
     if (b.dataset.survey) {
       const [gid, sid] = b.dataset.survey.split(":"), why = U.sim.surveyFlight(s, gid, sid);
       notify(why || `${s.ships.find(x => x.id === sid).name} sets out to survey the route to ${city(gid).name}.`);

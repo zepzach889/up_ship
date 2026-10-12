@@ -3,6 +3,14 @@
 window.UpShip = window.UpShip || {};
 (function (U) {
   const P = {
+    // North America
+    trenton: [40.22, -74.76], baltimore: [39.29, -76.61], newhaven: [41.31, -72.92], providence: [41.82, -71.41], albany: [42.65, -73.75], buffalo: [42.89, -78.88],
+    erie: [42.13, -80.09], toledo: [41.65, -83.54], harrisburg: [40.27, -76.88], fortwayne: [41.08, -85.14], omaha: [41.26, -95.94], cheyenne: [41.14, -104.82],
+    saltlake: [40.76, -111.89], reno: [39.53, -119.81], sacramento: [38.58, -121.49], stpaul: [44.95, -93.09], fargo: [46.88, -96.79], billings: [45.78, -108.5],
+    spokane: [47.66, -117.43], elpaso: [31.76, -106.49], tucson: [32.22, -110.97], yuma: [32.69, -114.62], houston: [29.76, -95.37], sanantonio: [29.42, -98.49],
+    laredo: [27.51, -99.51], monterrey: [25.69, -100.32], sanluispotosi: [22.15, -100.98], jacksonville: [30.33, -81.66], savannah: [32.08, -81.09],
+    charlotte: [35.23, -80.84], richmond: [37.54, -77.44], mobile: [30.69, -88.04], bham: [33.52, -86.8], kingston_on: [44.23, -76.49], london_on: [42.98, -81.25],
+    keywest: [24.56, -81.78], springfield_mo: [37.21, -93.29], tulsa: [36.15, -95.99], sanluisobispo: [35.28, -120.66], santabarbara: [34.42, -119.7], redding: [40.59, -122.39],
     dover: [51.13, 1.31], calais: [50.95, 1.86], harwich: [51.94, 1.28], hook: [51.98, 4.13], ostend: [51.23, 2.92], holyhead: [53.31, -4.63],
     dunlaoghaire: [53.29, -6.13], chester: [53.19, -2.89], kiel: [54.32, 10.14], korsor: [55.33, 11.14], helsingor: [56.03, 12.61], helsingborg: [56.05, 12.69],
     nassjo: [57.65, 14.69], karlstad: [59.37, 13.5], dijon: [47.32, 5.04], modane: [45.2, 6.67], turin: [45.07, 7.69], belfort: [47.64, 6.86], basel: [47.56, 7.59],
@@ -22,6 +30,20 @@ window.UpShip = window.UpShip || {};
     { type: "rail", pts: [a, ...railA] }, { type: "sea", pts: sea }, { type: "rail", pts: [...railB, b] }].filter(s => s.pts.length > 1) });
   const s = (a, b, via) => ({ a, b, sea: true, segs: [{ type: "sea", pts: [a, ...(via || []), b] }] });
   const ROUTES = [
+    // North America: the Pennsylvania and New York Central main lines, the transcontinentals, the Sunset Route, Canada, and Mexico.
+    r("newyork", "philadelphia", ["trenton"], 1), r("philadelphia", "washington", ["baltimore"], 1), r("newyork", "boston", ["newhaven", "providence"], 1),
+    r("newyork", "cleveland", ["albany", "buffalo", "erie"], 1), r("cleveland", "chicago", ["toledo"], 1), r("philadelphia", "pittsburgh", ["harrisburg"], 1),
+    r("pittsburgh", "chicago", [[40.8, -81.4], "fortwayne"], 1), r("pittsburgh", "cleveland", []), r("akron", "cleveland", []), r("lakehurst", "newyork", []),
+    r("chicago", "detroit", [], 1), r("detroit", "toronto", ["london_on"]), r("toronto", "montreal", ["kingston_on"], 1), r("montreal", "newyork", [[44.7, -73.45], "albany"], 1),
+    r("chicago", "stlouis", [], 1), r("chicago", "denver", ["omaha"], 1), r("denver", "sanfrancisco", ["cheyenne", "saltlake", "reno", "sacramento"], 1),
+    r("chicago", "seattle", ["stpaul", "fargo", "billings", "spokane"], 1), r("seattle", "portland", []), r("portland", "sanfrancisco", ["redding", "sacramento"]),
+    r("sanfrancisco", "losangeles", ["sanluisobispo", "santabarbara"], 1), r("losangeles", "neworleans", ["yuma", "tucson", "elpaso", "sanantonio", "houston"], 1),
+    r("stlouis", "dallas", ["springfield_mo", "tulsa"]), r("dallas", "oklahomacity", []), r("dallas", "neworleans", ["houston"]),
+    r("neworleans", "atlanta", ["mobile", "bham"]), r("atlanta", "washington", ["charlotte", "richmond"], 1), r("washington", "miami", ["richmond", "savannah", "jacksonville"]),
+    r("dallas", "mexicocity", ["sanantonio", "laredo", "monterrey", "sanluispotosi"]),
+    boat("miami", "havana", ["keywest"], ["keywest", [23.6, -82.0]], []),
+    s("newyork", "havana", [[38.0, -73.5], [32.0, -77.5], [26.5, -79.4]]), s("newyork", "boston", [[40.95, -73.2], [41.15, -72.2], [41.35, -71.1]]),
+    s("detroit", "cleveland", [[42.05, -83.1], [41.75, -82.4]]), s("seattle", "sanfrancisco", [[48.3, -124.7], [44.0, -124.6], [40.0, -124.5]]),
     r("london", "manchester", ["birmingham"], 1), r("manchester", "glasgow", ["carlisle"], 1), r("london", "edinburgh", ["york", "newcastle"], 1),
     r("edinburgh", "glasgow", [], 1), r("london", "cardington", []),
     r("paris", "brussels", [], 1), r("brussels", "amsterdam", ["rotterdam"], 1), r("brussels", "cologne", [], 1), r("cologne", "hamburg", ["bremen"], 1),

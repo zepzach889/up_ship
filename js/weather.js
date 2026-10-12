@@ -8,6 +8,36 @@ window.UpShip = window.UpShip || {};
   const monthOf = state => S().dateAtHour(S().H(state.tick)).getUTCMonth();   // 0 = January
 
   // Where and when weather is born. Rates are chances per half-day turn; speeds in map units an hour (about 2.6 km each).
+  // Weather beyond Europe is given in real terms (latitude and longitude, kilometres, bearings, km/h) and turned into
+  // the simulation's flat units where it forms, since the flat projection is stretched and turned far from Europe.
+  const PJ = (window.UPSHIP_MAP_EUROPE || {}).projection, RAD = Math.PI / 180;
+  function flatOf(lon, lat) {
+    const l = (lon - PJ.lon0) * RAD, p = lat * RAD, p0 = PJ.lat0 * RAD;
+    const k = Math.sqrt(2 / (1 + Math.sin(p0) * Math.sin(p) + Math.cos(p0) * Math.cos(p) * Math.cos(l)));
+    const X = k * Math.cos(p) * Math.sin(l), Y = k * (Math.cos(p0) * Math.sin(p) - Math.sin(p0) * Math.cos(p) * Math.cos(l));
+    return { x: (X - PJ.x0) * PJ.scale, y: (PJ.y1 - Y) * PJ.scale };
+  }
+  // A step of d km from a place on a bearing, in flat units.
+  function stepFlat(lon, lat, bearing, d) {
+    const a = flatOf(lon, lat), b = flatOf(lon + Math.sin(bearing * RAD) * d / (111 * Math.cos(lat * RAD)), lat + Math.cos(bearing * RAD) * d / 111);
+    return { x: b.x - a.x, y: b.y - a.y };
+  }
+  const unitsPerKm = (lon, lat) => { const d = stepFlat(lon, lat, 0, 50); return Math.hypot(d.x, d.y) / 50; };
+  // North America's weather.
+  const GEO = [
+    { kind: "storm", name: "Atlantic hurricane", lon: [-78, -68], lat: [21, 27], bearing: [-10, 30], kmh: [18, 28], km: [[380, 520], [300, 400]], life: [120, 200],
+      rate: m => [0, 0, 0, 0, 0, 0.01, 0.03, 0.1, 0.14, 0.09, 0.02, 0][m] },
+    { kind: "storm", name: "Plains thunderstorm", lon: [-103, -94], lat: [31, 41], bearing: [60, 110], kmh: [25, 40], km: [[120, 200], [100, 160]], life: [8, 20],
+      rate: m => [0, 0, 0.02, 0.08, 0.16, 0.18, 0.14, 0.1, 0.04, 0, 0, 0][m] },
+    { kind: "storm", name: "Great Lakes gale", lon: [-92, -82], lat: [41, 47], bearing: [60, 100], kmh: [30, 45], km: [[300, 420], [160, 240]], life: [40, 80],
+      rate: m => [0.08, 0.06, 0.03, 0.01, 0, 0, 0, 0, 0.02, 0.06, 0.09, 0.1][m] },
+    { kind: "storm", name: "Rocky Mountain weather", lon: [-113, -105], lat: [36, 46], bearing: [80, 100], kmh: [3, 8], km: [[260, 360], [200, 300]], life: [40, 90],
+      rate: m => [0.07, 0.07, 0.06, 0.05, 0.04, 0.03, 0.03, 0.03, 0.04, 0.05, 0.06, 0.07][m] },
+    { kind: "fog", name: "Pacific coast fog", lon: [-124, -122], lat: [36.5, 39], bearing: [80, 100], kmh: [1, 4], km: [[110, 170], [80, 120]], life: [20, 50],
+      rate: m => [0.01, 0.01, 0.02, 0.04, 0.07, 0.1, 0.12, 0.12, 0.08, 0.04, 0.02, 0.01][m] },
+    { kind: "fog", name: "Grand Banks fog", lon: [-54, -48], lat: [44, 48], bearing: [40, 90], kmh: [3, 8], km: [[260, 380], [180, 260]], life: [30, 70],
+      rate: m => [0.01, 0.02, 0.04, 0.07, 0.1, 0.11, 0.1, 0.07, 0.04, 0.02, 0.01, 0.01][m] }
+  ];
   const SOURCES = [
     { kind: "storm", name: "Atlantic storm", at: () => ({ x: city("dublin").x - 170, y: rand(city("glasgow").y - 40, city("bordeaux").y) }),
       rate: m => [0.11, 0.1, 0.08, 0.06, 0.04, 0.03, 0.03, 0.04, 0.07, 0.09, 0.11, 0.12][m], vx: [10, 16], vy: [-3, 3], rx: [110, 170], ry: [45, 70], life: [80, 130] },
@@ -26,7 +56,7 @@ window.UpShip = window.UpShip || {};
     { kind: "fair", name: "Fair-weather cloud", at: () => { const c = U.CITIES[Math.floor(Math.random() * U.CITIES.length)]; return { x: c.x + rand(-120, 120), y: c.y + rand(-90, 90) }; },
       rate: () => 0.3, vx: [4, 9], vy: [-2, 2], rx: [35, 65], ry: [25, 40], life: [12, 36] }
   ];
-  const MAX = { all: 14, storm: 5, fog: 3, wind: 1, fair: 6 };
+  const MAX = { all: 20, storm: 9, fog: 5, wind: 1, fair: 6 };          // room for America's weather beside Europe's
 
   function init(state) {
     state.weather = { systems: [], nextId: 1 };
@@ -41,6 +71,16 @@ window.UpShip = window.UpShip || {};
     for (const s of W.systems) { s.x += s.vx * step; s.y += s.vy * step; }
     W.systems = W.systems.filter(s => s.dies > now && s.x < 2800 && s.x > -600);
     const count = k => W.systems.filter(s => s.kind === k).length;
+    // North America's weather forms in real terms and is turned into flat units where it forms.
+    if (PJ) for (const src of GEO) {
+      if (W.systems.length >= MAX.all || count(src.kind) >= MAX[src.kind]) continue;
+      if (Math.random() > src.rate(m)) continue;
+      const lon = rand(...src.lon), lat = rand(...src.lat), at = flatOf(lon, lat), u = unitsPerKm(lon, lat);
+      const rx = rand(...src.km[0]) * u, ry = rand(...src.km[1]) * u, v = stepFlat(lon, lat, rand(...src.bearing), rand(...src.kmh));
+      const parts = src.kind === "storm" ? [{ dx: 0, dy: 0, rx, ry }, { dx: rand(-0.4, -0.1) * rx, dy: rand(-0.2, 0.2) * ry, rx: rx * 0.45, ry: ry * 1.05 },
+        { dx: rand(0.2, 0.45) * rx, dy: rand(-0.15, 0.25) * ry, rx: rx * 0.35, ry: ry * 0.9 }] : [{ dx: 0, dy: 0, rx, ry }];
+      W.systems.push({ id: W.nextId++, kind: src.kind, name: src.name, x: at.x, y: at.y, rx, ry, rot: rand(-30, 30), vx: v.x, vy: v.y, born: now, dies: now + rand(...src.life), seed: Math.floor(rand(1, 90)), parts });
+    }
     for (const src of SOURCES) {
       if (W.systems.length >= MAX.all || count(src.kind) >= MAX[src.kind]) continue;
       if (Math.random() > src.rate(m)) continue;

@@ -28,8 +28,10 @@ window.UpShip = window.UpShip || {};
   // Prices and demand -------------------------------------------------------------
   const fare = km => E().fareBase + E().farePerKm * km;
   const freightRate = km => E().freightBase + E().freightPerKm * km;
-  function paxWeight(c) { return U.TIERS[c.tier].demand * U.SPECIALTIES[c.specialty].passengerBoost; }
-  function freightWeight(c) { return U.TIERS[c.tier].demand / 6 * U.SPECIALTIES[c.specialty].freightBoost; }
+  // A city's tier, allowing for booms (Oklahoma City's oil from 1928).
+  const tierOf = c => c.boom && U.state && dateOf(U.state.tick).getUTCFullYear() >= c.boom.year ? c.boom.tier : c.tier;
+  function paxWeight(c) { return U.TIERS[tierOf(c)].demand * U.SPECIALTIES[c.specialty].passengerBoost; }
+  function freightWeight(c) { return U.TIERS[tierOf(c)].demand / 6 * U.SPECIALTIES[c.specialty].freightBoost; }
   // Seasons: travel peaks in high summer and falls off in winter, about 15% either way.
   const season = () => { if (!U.state) return 1; const m = dateOf(U.state.tick).getUTCMonth(); return 1 + 0.15 * Math.cos((m - 6.5) / 12 * 2 * Math.PI); };
   function dailyPassengers(a, b) { return Math.sqrt(paxWeight(U.cityById[a]) * paxWeight(U.cityById[b])) * E().passengerShare * season(); }
@@ -198,6 +200,8 @@ window.UpShip = window.UpShip || {};
   function canAssign(state, ship, route) {
     const c = U.research.stats(state, ship), longest = longestLeg(route.stops, route.circuit);
     if (longest > c.rangeKm) return `A leg of ${Math.round(longest)} km is beyond its ${c.rangeKm.toLocaleString("en-GB")} km range`;
+    if (ship.gas === "helium" && state.company.nation !== "usa" && route.stops.some(id => U.cityById[id].country === "United States"))
+      return "America sells no helium to foreign lines: American routes need a hydrogen ship";
     const closed = route.stops.find(id => U.cityById[id].gateway && !gatewayOpen(state, id));
     if (closed) return `No landing rights at ${U.cityById[closed].name} yet: send a survey flight first`;
     return null;
@@ -637,6 +641,8 @@ window.UpShip = window.UpShip || {};
       if (!s.research) U.research.init(s);
       for (const sh of s.ships) { sh.fitted = sh.fitted || []; sh.refitPlan = sh.refitPlan || []; }
       s.installment = s.installment || 0;
+      // A company that already surveyed an American city before permits existed holds America's permit.
+      if (s.gateways && !(s.permits && s.permits.na) && Object.keys(s.gateways).some(id => regionOf(id) === "na")) { s.permits = s.permits || {}; s.permits.na = { appliedAt: 0, grantAt: 0 }; }
       // Repair: an earlier version could overwrite the standing record with a bare number, lost on saving.
       if (!s.rep || typeof s.rep !== "object" || !Number.isFinite(+s.rep.standing)) {
         const was = typeof s.rep === "number" && Number.isFinite(s.rep) ? s.rep : 50, month = s.repMonth;
@@ -648,7 +654,24 @@ window.UpShip = window.UpShip || {};
   // Stops the game saving itself, so a game just loaded from a file is not overwritten as the page reloads.
   function stopSaving() { saving = false; }
   // A survey flight to a gateway: the ship leaves her route for the round trip and two days there; landing rights follow.
+  // Regions: Europe (cities without one) and those beyond. A company working outside its home region needs that
+  // government's permit before its first survey there; after that, landing rights city by city.
+  const regionOf = id => (U.cityById[id] && U.cityById[id].region) || "eu";
+  const homeRegion = state => regionOf(state.company.home);
+  const REGION_GOV = { na: { name: "Washington", country: "America" }, eu: { name: "the European governments", country: "Europe" } };
+  function needsPermit(state, id) { const r = regionOf(id); return r !== homeRegion(state) && !(state.permits && state.permits[r] && state.permits[r].grantAt <= H(state.tick)); }
+  function applyPermit(state, region) {
+    state.permits = state.permits || {};
+    if (state.permits[region]) return "Already applied for.";
+    const fee = 3000; if (state.money < fee) return "Not enough money for the application.";
+    state.money -= fee; addGeneral(state, 0);
+    const now = H(state.tick), grantAt = now + (35 + Math.floor(Math.random() * 20)) * 24;
+    state.permits[region] = { appliedAt: now, grantAt };
+    telegram(state, grantAt, `${REGION_GOV[region].name} grants your company a permit to operate stop surveys may now win landing rights city by city stop foreign lines pay the usual fees stop`, true, { type: "company" });
+    return null;
+  }
   function surveyFlight(state, gatewayId, shipId, flownHours, damage) {
+    if (needsPermit(state, gatewayId)) return `A permit from ${REGION_GOV[regionOf(gatewayId)].name} comes first: apply in this city's panel.`;
     const ship = state.ships.find(s => s.id === shipId), g = U.cityById[gatewayId], c = cls(ship), now = H(state.tick);
     const km = distanceKm(ship.location, gatewayId), rs = U.research.stats(state, ship);
     if (rs.rangeKm < km) return `${ship.name} cannot reach ${g.name}: ${Math.round(km)} km, against her range of ${rs.rangeKm} km.`;
@@ -667,7 +690,7 @@ window.UpShip = window.UpShip || {};
     try { for (const k of ["upship.save.v1", "upship.save.v2", "upship.save.v3", "upship.save.v4", "upship.save.v5", "upship.save.v6", "upship.save.v7", "upship.save.v8", "upship.save.v9", "upship.save.v10", SAVE_KEY]) localStorage.removeItem(k); } catch (e) {}
   }
 
-  U.sim = { surveyFlight, gatewayOpen, stopSaving, finishOverhaul, telegram, addGeneral, addIncome, nearestCity, distanceKm, fare, freightRate, dailyPassengers, dailyFreight, start, advance, beginTurn, dateOf, dateAtHour, H,
+  U.sim = { regionOf, homeRegion, needsPermit, applyPermit, REGION_GOV, surveyFlight, gatewayOpen, stopSaving, finishOverhaul, telegram, addGeneral, addIncome, nearestCity, distanceKm, fare, freightRate, dailyPassengers, dailyFreight, start, advance, beginTurn, dateOf, dateAtHour, H,
     routeSummary, save, load, clearSave, editRoute, routeOf, routeName, routeLegs, createRoute, deleteRoute, canAssign, assign,
     order, policyGas, heliumFill, rename, suggestName, longestLeg, catalog, orderTerms, saleValue, canSell, sell, positionAt, ageYears, roman };
 })(window.UpShip);
