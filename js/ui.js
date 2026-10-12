@@ -237,7 +237,7 @@ window.UpShip = window.UpShip || {};
     const ready = state.ships.filter(x => x.deliveryTick <= state.tick && !x.lost && !x.overhaulUntil);
     const rows = ready.map(x => { const km = U.sim.distanceKm(x.location, id), rs = U.research.stats(state, x), days = Math.round((km / rs.speedKmh * 2 + 48) / 24);
       return { x, km, days, ok: rs.rangeKm >= km, range: rs.rangeKm }; }).sort((a, b) => a.km - b.km);
-    return `<h2>${esc(c.name)}</h2><p class="sub">Gateway to the wider world, ${c.via}. Shown at the map's edge; distances, demand, and fares are measured from ${esc(c.name)} itself.</p>
+    return `<h2>${esc(c.name)}</h2><p class="sub">${c.region === "na" ? `${esc(c.country)}, ${c.via}` : `Gateway to the wider world, ${c.via}`}. Your ships can land here once a survey flight has won landing rights.</p>
       ${open ? `<p class="status">Open. Landing rights won by ${esc(g.by)}'s survey flight; routes may end here.</p>`
         : g ? `<p class="status">${esc(g.by)} is flying the survey. Landing rights follow on ${shortDate(U.sim.dateOf((g.openAt) / 12))}.</p>`
         : `<p>Before routes can end here, a survey flight must prove the way and win landing rights. The ship leaves her route for the round trip and two days on the ground; the flight costs her fuel and about £4,000 in fees.</p>

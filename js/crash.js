@@ -7,12 +7,16 @@ window.UpShip = window.UpShip || {};
 
   function play(crash, then) {
     const a = U.cityById[crash.from], b = U.cityById[crash.to];
-    if (!a || !b || !U.map.glideTo) { then(); return; }
-    const [x1, y1] = U.map.project(a.lon, a.lat), [x2, y2] = U.map.project(b.lon, b.lat);
-    const x = x1 + (x2 - x1) * crash.at, y = y1 + (y2 - y1) * crash.at, heading = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
-    const W = U.map.mapWidth() / 7;
-    if (crash.kind === "damage") { U.map.glideTo(x, y, W, 1200, then); return; }          // short of a loss: the map centres, no scene
-    U.map.glideTo(x, y, W, 1300, () => scene(crash.kind, x, y, W, heading, then));
+    if (!a || !b || !U.map.focus) { then(); return; }
+    const A = [a.realLon ?? a.lon, a.realLat ?? a.lat], B = [b.realLon ?? b.lon, b.realLat ?? b.lat], here = d3.geoInterpolate(A, B)(crash.at);
+    const k = Math.max(U.globe.view.k, 9);
+    if (crash.kind === "damage") { U.map.focus(here[0], here[1], k, 1200, then); return; }          // short of a loss: the globe turns to it, no scene
+    U.map.focus(here[0], here[1], k, 1300, () => {
+      // Once there: the spot on screen, the course's heading as it looks on the globe, and a size to suit the screen.
+      const [x, y] = U.map.project(here[0], here[1]), ahead = U.map.project(...d3.geoInterpolate(A, B)(Math.min(1, crash.at + 0.02)));
+      const { W: sw, H: sh } = U.globe.size(), W = Math.min(sw, sh) * 0.9, heading = Math.atan2(ahead[1] - y, ahead[0] - x) * 180 / Math.PI;
+      scene(crash.kind, x, y, W, heading, then);
+    });
   }
   function scene(kind, x, y, W, heading, then) {
     clear();

@@ -148,7 +148,7 @@ window.UpShip = window.UpShip || {};
     el("path", { d: M.borders, class: "borders" }, lines);
 
     // The flat map's own drawing (countries, coast, labels, weather, traffic) gives way to the globe beneath.
-    for (const k of ["graticule", "waterlines", "land", "countries", "countryLabels", "weather", "traffic"]) layers[k].style.display = "none";
+    for (const k of ["graticule", "waterlines", "land", "countries", "countryLabels", "traffic"]) layers[k].style.display = "none";
     lines.style.display = "none"; world.querySelector("rect.sea").style.display = "none";
     for (const city of U.CITIES) drawCity(city);
     setupZoomPan();
@@ -271,7 +271,13 @@ window.UpShip = window.UpShip || {};
     const p = U.sim.positionAt(ship, hour);
     if (p.flying) {
       const a = U.cityById[p.leg.from], b = U.cityById[p.leg.to], f = p.fraction;
-      // On the globe: along the great circle, facing along it. (Diversions around weather return with weather on the globe.)
+      // A diversion around weather: its curve, in the simulation's coordinates, placed on the globe.
+      if (p.leg.via) {
+        const q0 = U.weather.bez(a, p.leg.via, b, f), q1 = U.weather.bez(a, p.leg.via, b, Math.min(1, f + 0.01)), s0 = flatToScreen(q0.x, q0.y), s1 = flatToScreen(q1.x, q1.y);
+        if (s0) return { x: s0.x, y: s0.y, angle: s1 ? Math.atan2(s1.y - s0.y, s1.x - s0.x) * 180 / Math.PI : 0, flying: true, fraction: f, leg: p.leg, hour, vis: true };
+        return { x: -9999, y: -9999, angle: 0, flying: true, fraction: f, leg: p.leg, hour, vis: false };
+      }
+      // Otherwise along the great circle, facing along it.
       const gi = d3.geoInterpolate([dLon(a), dLat(a)], [dLon(b), dLat(b)]), here = gi(f), ahead = gi(Math.min(1, f + 0.01)), behind = gi(Math.max(0, f - 0.01));
       const s1 = project(...here), s2 = project(...ahead), s0 = project(...behind);
       return { x: s1[0], y: s1[1], angle: Math.atan2(s2[1] - s0[1], s2[0] - s0[0]) * 180 / Math.PI, flying: true, fraction: f, leg: p.leg, hour, vis: U.globe.facing(...here) };
@@ -368,6 +374,8 @@ window.UpShip = window.UpShip || {};
     if (U.state) { syncRoutes(U.state); drawShips(U.state, U.progress || 0); }
     if (lastDraft) drawDraft(lastDraft.stops, lastDraft.circuit);
     drawLines(); trafficDirty = true;
+    if (U.state) drawWeather(U.state, U.progress || 0, true);
+    if (U.helm && U.helm.active()) U.helm.redraw();
   }
   function clampView() {}
   // A glide on the globe to a place and zoom (by latitude and longitude).
@@ -506,7 +514,6 @@ window.UpShip = window.UpShip || {};
     wind: [{ ax: 0.04, ay: 0.05, s: 0.04, p: 7, o: [0.7, 1] }]
   };
   function drawWeather(state, progress, force) {
-    return;                                                   // on the globe from stage 3
     if (!state || !state.weather || !layers.weather) return;
     const nowMs = performance.now();
     if (!force && nowMs - wxLast < 40) return;             // smooth on a desktop: about 25 updates a second
@@ -530,7 +537,12 @@ window.UpShip = window.UpShip || {};
       }
       const hour = U.sim.H(state.tick) + dt, age = hour - s.born, left = s.dies - hour;
       const fade = Math.max(0, Math.min(1, age / 6, left / 6));
-      n.g.setAttribute("transform", `translate(${(s.x + s.vx * dt).toFixed(1)} ${(s.y + s.vy * dt).toFixed(1)}) rotate(${s.rot.toFixed(1)})`);
+      // On the globe: placed at its spot, scaled and turned to match the globe there; hidden on the far side.
+      const wx = s.x + s.vx * dt, wy = s.y + s.vy * dt, q = flatToScreen(wx, wy), q2 = flatToScreen(wx + 10, wy);
+      if (!q || !q2) { n.g.style.display = "none"; continue; }
+      n.g.style.display = "";
+      const unitW = Math.hypot(q2.x - q.x, q2.y - q.y) / 10, turn = Math.atan2(q2.y - q.y, q2.x - q.x) * 180 / Math.PI;
+      n.g.setAttribute("transform", `translate(${q.x.toFixed(1)} ${q.y.toFixed(1)}) rotate(${(s.rot + turn).toFixed(1)}) scale(${unitW.toFixed(4)})`);
       n.g.setAttribute("opacity", fade.toFixed(2));
       const churn = CHURN[s.kind] || CHURN.fair;
       n.layers.forEach((lg, i) => {
@@ -828,5 +840,5 @@ window.UpShip = window.UpShip || {};
   }
   function draftDemand(stops) { draftStops = stops && stops.length ? stops : null; syncExtras(U.state); }
 
-  U.map = { focus, flat, zoomLevel: () => U.globe.view.k, glideTo, mapWidth: () => M.width, buildPolys, drawTraffic, syncTransport, drawWeather, init, syncRoutes, drawShips, drawDraft, zoomBy, highlight, shipPosition, project, setSetup, setHome, setLayer, syncExtras, draftDemand };
+  U.map = { flatToScreen, flatInv, focus, flat, zoomLevel: () => U.globe.view.k, glideTo, mapWidth: () => M.width, buildPolys, drawTraffic, syncTransport, drawWeather, init, syncRoutes, drawShips, drawDraft, zoomBy, highlight, shipPosition, project, setSetup, setHome, setLayer, syncExtras, draftDemand };
 })(window.UpShip);

@@ -637,6 +637,11 @@ window.UpShip = window.UpShip || {};
       if (!s.research) U.research.init(s);
       for (const sh of s.ships) { sh.fitted = sh.fitted || []; sh.refitPlan = sh.refitPlan || []; }
       s.installment = s.installment || 0;
+      // Repair: an earlier version could overwrite the standing record with a bare number, lost on saving.
+      if (!s.rep || typeof s.rep !== "object" || !Number.isFinite(+s.rep.standing)) {
+        const was = typeof s.rep === "number" && Number.isFinite(s.rep) ? s.rep : 50, month = s.repMonth;
+        U.passengers.init(s); s.rep.standing = Math.max(0, Math.min(100, was)); if (month && typeof month === "object") s.repMonth = month;
+      }
       return s;
     } catch (e) { return null; }
   }

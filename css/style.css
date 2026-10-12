@@ -1017,3 +1017,5 @@ body.skipping #map svg, body.skipping .traffic-canvas { filter: saturate(0.35) b
 #map { background: radial-gradient(ellipse at 50% 45%, #1f3150 0%, #15233a 60%, #0f1a2c 100%); }
 .globe-base { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 #map svg.map { position: absolute; inset: 0; width: 100%; height: 100%; background: transparent; }
+
+body.skipping .globe-base { filter: saturate(0.35) brightness(0.72); transition: filter 0.5s; }

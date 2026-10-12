@@ -25,6 +25,7 @@ window.UpShip = window.UpShip || {};
   const WORLD = W0.world.map(t => ({ n: t.n, tint: t.tint, a: t.a, l: t.l, F: rightWay(t.f), C: rightWay(t.c) }));
   const ALL = [...WORLD, ...EUROPE];
   const LAKES = W0.lakes.map(rightWay);
+  const STATES = (W0.states || []).map(s0 => ({ n: s0.n, a: s0.a, l: s0.l, G: rightWay(s0.g) }));
 
   function init(container, redraw) {
     canvas = document.createElement("canvas"); canvas.className = "globe-base"; canvas.setAttribute("aria-hidden", "true");
@@ -73,6 +74,12 @@ window.UpShip = window.UpShip || {};
       const hi = highlight.playable.has(t.n) || highlight.chosen === t.n;
       ctx.beginPath(); path(g); ctx.fillStyle = (hi ? TINTS_HI : TINTS)[t.tint % 6]; ctx.fill();
     }
+    // States and provinces: faint dotted lines once zoomed in a little (drawn first, so coasts stay solid under the borders).
+    if (k > 2.4) {
+      ctx.save(); ctx.setLineDash([2, 3]); ctx.lineWidth = 0.7; ctx.strokeStyle = "rgba(138,125,99,0.6)";
+      for (const st of STATES) if (st.G) { ctx.beginPath(); path(st.G); ctx.stroke(); }
+      ctx.restore();
+    }
     // Borders.
     ctx.lineWidth = Math.min(1.1, 0.35 + k * 0.05); ctx.strokeStyle = "rgba(138,125,99,0.85)";
     for (const t of ALL) { const g = fine ? t.F || t.C : t.C || t.F; if (!g) continue; ctx.beginPath(); path(g); ctx.stroke(); }
@@ -88,6 +95,13 @@ window.UpShip = window.UpShip || {};
     shade.addColorStop(0, "rgba(255,255,255,0.06)"); shade.addColorStop(0.72, "rgba(0,0,0,0)"); shade.addColorStop(1, "rgba(10,20,40,0.26)");
     ctx.beginPath(); path({ type: "Sphere" }); ctx.fillStyle = shade; ctx.fill();
     ctx.lineWidth = 1.2; ctx.strokeStyle = "rgba(20,35,58,0.55)"; ctx.stroke();
+    // State and province names, close in: small italic capitals.
+    if (k > 5.5) for (const st of STATES) {
+      if (!st.l || !facing(st.l[0], st.l[1]) || Math.sqrt(st.a) * k < 9) continue;
+      const [x, y] = proj(st.l);
+      ctx.font = `italic ${Math.min(11, 7 + k * 0.25)}px "Josefin Sans", "Futura", sans-serif`; ctx.fillStyle = "rgba(107,90,67,0.5)";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(st.n.toUpperCase(), x, y);
+    }
     // Country names, sized to the country and the zoom.
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     for (const t of ALL) {

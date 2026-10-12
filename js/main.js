@@ -152,7 +152,15 @@ window.UpShip = window.UpShip || {};
   }
 
   function endTurn() {
-    U.sim.advance(U.state);
+    // If a turn fails, the game pauses and says so, rather than freezing with the clock stopped.
+    try { U.sim.advance(U.state); }
+    catch (err) {
+      console.error(err);
+      U.turnActive = false; U.progress = 0; elapsed = 0; setAuto(0);
+      U.ui.showTelegram({ id: "err" + Date.now(), hour: U.sim.H(U.state.tick), major: true, target: null,
+        text: `THE GAME HIT A PROBLEM AT THE END OF THIS TURN AND HAS PAUSED STOP SAVE A COPY FROM SETTINGS AND SEND IT WITH THIS MESSAGE STOP ${String(err && err.message || err).toUpperCase().slice(0, 140)} STOP` });
+      return;
+    }
     U.turnActive = false; U.progress = 0; elapsed = 0;
     U.map.syncRoutes(U.state);
     U.sim.save(U.state);

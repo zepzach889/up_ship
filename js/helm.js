@@ -8,7 +8,9 @@ window.UpShip = window.UpShip || {};
   let H = null;
 
   const svg = () => document.querySelector("#map svg");
-  const pt = id => { const c = U.cityById[id]; const [x, y] = U.map.project(c.lon, c.lat); return { x, y }; };
+  // Positions in the simulation's coordinates (as the storms are); drawn on the globe through the map.
+  const pt = id => { const c = U.cityById[id]; const [x, y] = U.map.flat(c.realLon ?? c.lon, c.realLat ?? c.lat); return { x, y }; };
+  const scr = p => U.map.flatToScreen(p.x, p.y);
   const dist = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
   // A storm's place at a future hour, and whether a point lies inside it.
   const stormAt = (s, hours) => ({ x: s.x + s.vx * hours / 12, y: s.y + s.vy * hours / 12 });
@@ -29,7 +31,11 @@ window.UpShip = window.UpShip || {};
     const g = document.createElementNS(NS, "g"); g.id = "helm-layer"; svg().appendChild(g); H.layer = g;
     const box = document.createElement("div"); box.id = "helm"; box.className = "helm"; box.setAttribute("role", "dialog"); box.setAttribute("aria-label", "Taking the helm");
     document.body.appendChild(box); H.box = box;
-    H.onClick = e => { if (!H || H.phase !== "plot") return; e.stopPropagation(); e.preventDefault(); const m = svg().getScreenCTM().inverse(), p = new DOMPoint(e.clientX, e.clientY).matrixTransform(m); H.way.push({ x: p.x, y: p.y }); draw(); };
+    H.onClick = e => {
+      if (!H || H.phase !== "plot") return; e.stopPropagation(); e.preventDefault();
+      const r = svg().getBoundingClientRect(), ll = U.globe.invert(e.clientX - r.left, e.clientY - r.top); if (!ll) return;
+      const [x, y] = U.map.flat(ll[0], ll[1]); H.way.push({ x, y }); draw();
+    };
     svg().addEventListener("click", H.onClick, true);
     box.addEventListener("click", onPanel);
     draw();
@@ -51,13 +57,19 @@ window.UpShip = window.UpShip || {};
     return out;
   }
   function draw() {
-    const c = course(), g = H.layer, k = 1 / (U.map.zoomLevel ? U.map.zoomLevel() : 1);
+    const c = course(), g = H.layer;
     let html = "";
-    // The forecast: where each storm will be over the next day and a half.
-    for (const s of hazards()) { const f = stormAt(s, 36); html += `<ellipse cx="${f.x}" cy="${f.y}" rx="${s.rx}" ry="${s.ry}" transform="rotate(${s.rot} ${f.x} ${f.y})" class="helm-forecast"/><line x1="${s.x}" y1="${s.y}" x2="${f.x}" y2="${f.y}" class="helm-drift"/>`; }
-    html += `<polyline points="${c.map(p => `${p.x},${p.y}`).join(" ")}" class="helm-course"/>`;
-    html += c.map((p, i) => `<circle cx="${p.x}" cy="${p.y}" r="${i === 0 || i === c.length - 1 ? 5 : 3.5}" class="helm-point${i === 0 || i === c.length - 1 ? " end" : ""}"/>`).join("");
-    if (H.marker) html += `<circle cx="${H.marker.x}" cy="${H.marker.y}" r="6" class="helm-ship"/>`;
+    // The forecast: where each storm will be over the next day and a half, placed on the globe.
+    for (const s of hazards()) {
+      const f = stormAt(s, 36), q = scr(f), q0 = scr(s), q2 = scr({ x: f.x + 10, y: f.y }); if (!q || !q2) continue;
+      const u = Math.hypot(q2.x - q.x, q2.y - q.y) / 10, turn = Math.atan2(q2.y - q.y, q2.x - q.x) * 180 / Math.PI;
+      html += `<ellipse cx="${q.x}" cy="${q.y}" rx="${s.rx * u}" ry="${s.ry * u}" transform="rotate(${s.rot + turn} ${q.x} ${q.y})" class="helm-forecast"/>` + (q0 ? `<line x1="${q0.x}" y1="${q0.y}" x2="${q.x}" y2="${q.y}" class="helm-drift"/>` : "");
+    }
+    // The course: each straight stretch sampled so it bends with the globe.
+    const pts = []; for (let i = 0; i < c.length; i++) { if (i) for (let k = 1; k < 8; k++) { const q = scr({ x: c[i - 1].x + (c[i].x - c[i - 1].x) * k / 8, y: c[i - 1].y + (c[i].y - c[i - 1].y) * k / 8 }); if (q) pts.push(q); } const q = scr(c[i]); if (q) pts.push(q); }
+    html += `<polyline points="${pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ")}" class="helm-course"/>`;
+    html += c.map((p, i) => { const q = scr(p); return q ? `<circle cx="${q.x}" cy="${q.y}" r="${i === 0 || i === c.length - 1 ? 5 : 3.5}" class="helm-point${i === 0 || i === c.length - 1 ? " end" : ""}"/>` : ""; }).join("");
+    if (H.marker) { const q = scr(H.marker); if (q) html += `<circle cx="${q.x}" cy="${q.y}" r="6" class="helm-ship"/>`; }
     g.innerHTML = html;
     panel();
   }
@@ -150,5 +162,5 @@ window.UpShip = window.UpShip || {};
     svg() && svg().removeEventListener("click", H.onClick, true);
     H.layer.remove(); H.box.remove(); H = null;
   }
-  U.helm = { start, active: () => !!H };
+  U.helm = { start, active: () => !!H, redraw: () => H && draw() };
 })(window.UpShip);

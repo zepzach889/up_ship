@@ -172,7 +172,7 @@ window.UpShip = window.UpShip || {};
     ship.readyHour = Math.max(ship.readyHour, now) + Math.ceil(hours * 2 + 24);
     if (damaged) ship.condition = Math.max(0.2, ship.condition - 0.3);
     if (won) { state.records[key] = { hours, by: ship.name }; S().addIncome(state, o.prize, "prizes"); }
-    state.rep = Math.min(100, (state.rep || 50) + (won ? 6 : 1));
+    adjustStanding(state, won ? 6 : 1);
     S().telegram(state, now + Math.ceil(hours), won ? `new record stop ${ship.name} flies ${name(o.a)} to ${name(o.b)} in ${hours} hours stop beating ${rec.hours} stop prize of ${gbp(o.prize)} won stop${damaged ? " ship strained and in need of repair stop" : ""}`
       : `record attempt fails stop ${ship.name} ${name(o.a)} to ${name(o.b)} in ${hours} hours against ${rec.hours} stop${damaged ? " ship strained and in need of repair stop" : " a creditable run stop"}`, true, { type: "ship", id: ship.id });
     return { ship, won, hours };
@@ -191,7 +191,7 @@ window.UpShip = window.UpShip || {};
     ship.readyHour = Math.max(ship.readyHour, now) + Math.ceil(hours * 2 + 24);
     if (damage > 0) ship.condition = Math.max(0.2, ship.condition - damage);
     if (won) { state.records[key] = { hours, by: ship.name }; S().addIncome(state, o.prize, "prizes"); }
-    state.rep = Math.min(100, (state.rep || 50) + (won ? 7 : 1));
+    adjustStanding(state, won ? 7 : 1);
     return { won, prize: o.prize, rec: rec.hours };
   }
   // Government offers with conditions, about twice a year: opening a far destination, diplomatic mail, a grant for two ships.
@@ -222,10 +222,15 @@ window.UpShip = window.UpShip || {};
     const now = nowHour(state);
     for (const g of [...(state.goals || [])]) {
       const served = state.routes.some(r => r.stops.includes(g.city) && state.ships.some(s => s.routeId === r.id && s.deliveryTick <= state.tick));
-      if (served) { S().addIncome(state, g.pay, "grants"); state.rep = Math.min(100, (state.rep || 50) + 4); state.goals = state.goals.filter(x => x !== g);
+      if (served) { S().addIncome(state, g.pay, "grants"); adjustStanding(state, 4); state.goals = state.goals.filter(x => x !== g);
         S().telegram(state, now, `government pays ${gbp(g.pay)} stop regular service to ${name(g.city)} opened as agreed stop`, false, { type: "finances" }); }
       else if (now > g.until) { state.goals = state.goals.filter(x => x !== g); S().telegram(state, now, `government offer for a service to ${name(g.city)} has lapsed stop`, false, { type: "contracts" }); }
     }
+  }
+  // Standing is a record (standing, character, notes); this changes the standing figure in it, between 0 and 100.
+  function adjustStanding(state, d) {
+    if (!state.rep || typeof state.rep !== "object") U.passengers.init(state);
+    state.rep.standing = Math.max(0, Math.min(100, (+state.rep.standing || 50) + d));
   }
   function describe(o) {
     if (o.kind === "goal") return `government offer stop open a regular service to ${name(o.city)} within two years stop ${gbp(o.pay)} on success stop`;
@@ -243,7 +248,7 @@ window.UpShip = window.UpShip || {};
     state.offers = state.offers.filter(x => x !== o);
     const now = nowHour(state);
     if (o.kind === "mail") {
-      if (o.diplomatic) state.rep = Math.max(0, (state.rep || 50) - 3);          // other governments take note
+      if (o.diplomatic) adjustStanding(state, -3);          // other governments take note
       const k = { id: "c" + state.nextId++, a: o.a, b: o.b, perWeek: o.perWeek, monthly: o.monthly, authority: o.authority,
         startHour: now, endHour: now + o.years * 365 * 24, week: { ab: 0, ba: 0 }, made: 0, required: 0, weeks: 0, penalties: 0, paid: 0, tutorial: o.tutorial };
       state.contracts.push(k);
@@ -257,7 +262,7 @@ window.UpShip = window.UpShip || {};
       const ship = ok.sort((a, b) => (a.stats && a.stats.revenue || 0) - (b.stats && b.stats.revenue || 0))[0];
       ship.readyHour = Math.max(ship.readyHour, now) + o.days * 24;
       S().addIncome(state, o.pay, "charters");
-      state.rep = Math.min(100, (state.rep || 50) + 2);
+      adjustStanding(state, 2);
       S().telegram(state, now + o.days * 24, `${ship.name} returns from her charter for ${o.who} stop back in service stop`, false, { type: "ship", id: ship.id });
       return { charter: true, ship };
     }
