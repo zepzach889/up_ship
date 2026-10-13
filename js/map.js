@@ -419,6 +419,11 @@ window.UpShip = window.UpShip || {};
     svg.classList.toggle("is-setup", !!mode);
     for (const m of ["country", "city", "identity"]) svg.classList.toggle("setup-" + m, mode === m);
     U.globe.setHighlight(mode === "country" ? PLAYABLE : [], mode && mode !== "country" ? data.country : null);
+    // Choosing a home city: the globe turns to the chosen country (America is on the far side from Europe).
+    if (mode && mode !== "country" && data.country) {
+      const homes = U.CITIES.filter(c => c.home && c.country === data.country);
+      if (homes.length) { const lon = homes.reduce((a, c) => a + (c.realLon ?? c.lon), 0) / homes.length, lat = homes.reduce((a, c) => a + (c.realLat ?? c.lat), 0) / homes.length; U.globe.glide(lon, lat, 3.2, 900); }
+    }
     for (const id in cityNodes) {
       cityNodes[id].g.classList.toggle("choosable", (mode === "city" && (data.cities || []).includes(id)) || (mode === "country" && U.cityById[id].home));
       cityNodes[id].g.classList.toggle("chosen-home", !!mode && id === data.chosen);

@@ -37,15 +37,20 @@ window.UpShip = window.UpShip || {};
   function firstOffer(state) {
     const home = U.cityById[state.company.home];
     const range = U.SHIP_CLASSES[state.ships[0].classId].rangeKm;
-    const choices = U.CITIES.filter(c => c.id !== home.id && tierRank[c.tier] >= Math.max(tierRank[home.tier], 1))
+    // A real city the company may land at (never a refuelling station), at least a large one, or as large as home.
+    const ok = c => c.id !== home.id && !c.station && S().hasRights(state, c.id);
+    const choices = U.CITIES.filter(c => ok(c) && tierRank[c.tier] >= Math.max(Math.min(tierRank[home.tier], tierRank.large), 1))
       .map(c => ({ c, d: S().distanceKm(home, c) }))
       .filter(x => x.d >= 150 && x.d <= Math.min(range * 0.8, 800))
       .sort((x, y) => (y.c.country === home.country) - (x.c.country === home.country) || x.d - y.d);
-    const target = (choices[0] || { c: U.CITIES.find(c => c.id !== home.id) }).c;
+    // Failing that, the nearest suitable city of any size.
+    const nearest = U.CITIES.filter(ok).map(c => ({ c, d: S().distanceKm(home, c) })).filter(x => x.d >= 150).sort((x, y) => x.d - y.d)[0];
+    const target = (choices[0] || nearest).c;
     const offer = mailOffer(state, home.id, target.id, { perWeek: 3, years: 2, generous: 1.6, tutorial: true });
     offer.expiresHour = nowHour(state) + 60 * 24;
     state.offers.push(offer);
-    S().telegram(state, nowHour(state), `ministry of posts offers mail contract ${home.name} to ${target.name} stop ${gbp(offer.monthly)} monthly for two years stop see contracts stop`, false, { type: "contracts" });
+    const posts = state.company.nation === "usa" ? "post office department" : "ministry of posts";
+    S().telegram(state, nowHour(state), `${posts} offers mail contract ${home.name} to ${target.name} stop ${gbp(offer.monthly)} monthly for two years stop see contracts stop`, false, { type: "contracts" });
   }
 
   function networkCities(state) { return new Set(state.routes.flatMap(r => r.stops).concat([state.company.home])); }
@@ -60,8 +65,9 @@ window.UpShip = window.UpShip || {};
       const aHome = nationOf(a.id) === nation;
       const aForeignReached = !aHome && foreign.some(c => c.country === a.country);
       if (!aHome && !aForeignReached) continue;
+      if (a.station || !S().hasRights(state, a.id)) continue;
       for (const b of U.CITIES) {
-        if (b.id === a.id) continue;
+        if (b.id === a.id || b.station || !S().hasRights(state, b.id)) continue;          // only cities the company may land at
         const km = S().distanceKm(a, b);
         if (km < 150 || km > 1100) continue;
         if (!aHome && !net.has(b.id)) continue;

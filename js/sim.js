@@ -136,7 +136,7 @@ window.UpShip = window.UpShip || {};
     U.research.init(state);
     U.facilities.init(state);
     U.passengers.init(state);
-    if (config.nation === "usa") state.gasPolicy = { all: "helium" };          // America's helium, from the start
+    if (config.nation === "usa") state.gasPolicy = { all: "helium", byClass: {} };          // America's helium, from the start
     U.weather.init(state);
     for (const id of catalog(state)) if (U.SHIP_CLASSES[id].kind === "surplus") state.surplusLeft[id] = E().surplusStock;
     const first = catalog(state)[0];
@@ -643,6 +643,8 @@ window.UpShip = window.UpShip || {};
       if (!s.research) U.research.init(s);
       for (const sh of s.ships) { sh.fitted = sh.fitted || []; sh.refitPlan = sh.refitPlan || []; }
       s.installment = s.installment || 0;
+      // Repair: an American company's gas policy was once set without its per-class part.
+      if (s.gasPolicy && typeof s.gasPolicy === "object" && !s.gasPolicy.byClass) s.gasPolicy.byClass = {};
       // A company that already surveyed an American city before permits existed holds America's permit.
       if (s.gateways && !(s.permits && s.permits.na) && Object.keys(s.gateways).some(id => regionOf(id) === "na")) { s.permits = s.permits || {}; s.permits.na = { appliedAt: 0, grantAt: 0 }; }
       // Repair: an earlier version could overwrite the standing record with a bare number, lost on saving.

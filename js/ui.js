@@ -892,7 +892,7 @@ window.UpShip = window.UpShip || {};
   }
 
   function gasPolicyBlock(state) {
-    const P = state.gasPolicy || { all: null, byClass: {} };
+    const P = { all: null, ...(state.gasPolicy || {}) }; P.byClass = P.byClass || {};          // tolerate a policy missing its per-class part
     const opts = ["none", "hydrogen", "helium"].concat(U.aether.discovered(state) ? ["aetherium"] : []);
     const btns = (scope, cur) => opts.map(g => `<button class="${(cur || "none") === g ? "btn" : "btn-quiet"}" data-policy="${scope}:${g}">${{ none: "Ship by ship", hydrogen: "Hydrogen", helium: "Helium", aetherium: "Aetherium" }[g]}</button>`).join("");
     const classes = [...new Set(state.ships.map(s => s.classId))];
