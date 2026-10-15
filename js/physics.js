@@ -128,9 +128,15 @@ window.UpShip = window.UpShip || {};
         f.cargoCap = Math.max(0, f.cargoCap - (h.mailroom + h.reefer + h.strongroom + h.garage) * perSq) + mix.mail + mix.reefer + mix.strong + mix.garage;
       }
     }
-    f.crewQ = plan ? plan.crewQ : null;
+    f.crewQ = null;
     f.crew = Math.round(4 + 2 * engines + f.berths / 5 + holds + L / 50);
     f.crewBerths = crewBays * Math.round(14 * k) + 8;
+    // Crew quarters, where they are laid out: bunks for the crew, cabins for the officers (about one in eight), a mess and a washroom.
+    if (plan && plan.crewPlan) {
+      const officersNeed = Math.max(1, Math.ceil(f.crew / 8)), crewNeed = Math.max(1, f.crew - officersNeed);
+      f.crewSleeps = { crew: plan.crewBerths, crewNeed, officers: plan.officerBerths, officersNeed };
+      f.crewQ = Math.min(1, plan.crewBerths / crewNeed) * 0.4 + Math.min(1, plan.officerBerths / officersNeed) * 0.2 + (plan.mess ? 0.25 : 0) + (plan.crewWash ? 0.15 : 0);
+    }
     // Ships carry only the ballast they need to land, about 6% of their lift, however much tank space they have.
     f.fuel = fuelCap; f.ballastCap = ballastCap; f.ballast = Math.min(ballastCap, f.gross * 0.06);
     f.payloadRoom = f.useful - fuelCap - f.ballast - f.crew * 0.1;

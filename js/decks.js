@@ -293,7 +293,8 @@ const FURNISH = {
   mailroom(fr, n, door) { const { W, D } = fr, L = layout(W, D, door);
     const holes = (x, y, w) => `<g filter="url(#dp-lift)"><rect x="${x}" y="${y}" width="${w}" height="3" fill="#8a6a4a"/>${Array.from({ length: Math.floor(w / 1.4) }, (_, i) => `<rect x="${x + 0.3 + i * 1.4}" y="${y + 0.4}" width="1" height="2.2" fill="${i % 3 ? "#efe6cf" : "#d9cdb0"}"/>`).join("")}</g>`;
     L.put(W - 2, 3, [[1, 0.5]], (x, y) => holes(x, y, W - 2));
-    if (D > 18) for (const sx of [0.5, W - 3.5]) L.put(3, D - 10, [[sx, 4.6]], (x, y) => `<g transform="rotate(90 ${x + 1.5} ${y + 1.5}) translate(0 -3)">${holes(x, y, D - 10)}</g>`);
+    const vholes = (x, y, h) => `<g filter="url(#dp-lift)"><rect x="${x}" y="${y}" width="3" height="${h}" fill="#8a6a4a"/>${Array.from({ length: Math.floor(h / 1.4) }, (_, i) => `<rect x="${x + 0.4}" y="${y + 0.3 + i * 1.4}" width="2.2" height="1" fill="${i % 3 ? "#efe6cf" : "#d9cdb0"}"/>`).join("")}</g>`;
+    if (D > 18) for (const sx of [0.5, W - 3.5]) L.put(3, D - 10, [[sx, 4.6]], (x, y) => vholes(x, y, D - 10));
     for (const [x, y] of spread(W - 8, D, 12, 5, 4, 2, 2, 5)) L.put(12, 5, [[x + 4, y]], (x, y) => `<rect x="${x}" y="${y}" width="12" height="4" fill="#c9b48a" stroke="#6b4529" stroke-width="0.5" filter="url(#dp-lift)"/>` + Array.from({ length: 4 }, (_, i) => `<rect x="${x + 1 + i * 2.8}" y="${y + 1}" width="2" height="1.4" fill="#f5efe0"/>`).join(""));
     for (const [x, y] of cornerSpots(W, D, 5, 5).slice(2)) L.put(5, 5, [[x, y]], (x, y) => `<circle cx="${x + 2.5}" cy="${y + 2.5}" r="2.2" fill="#9a7a4a" stroke="#6b4529" stroke-width="0.5" filter="url(#dp-lift)"/><path d="M${x + 1.4},${y + 1.4} l2.2,0" stroke="#6b4529" stroke-width="0.6"/>`);
     return L.svg(); },
@@ -446,7 +447,7 @@ const DEFS_BODY = `
     const t = (r, c, c0) => inside(ctx, r, c) && sameBlock(ctx, c0, c) && ctx.grid[r][c] ? ctx.grid[r][c] : null;
     for (const { r, c } of room.cells) for (const [dd, dr, dc] of [["n", -1, 0], ["s", 1, 0], ["w", 0, -1], ["e", 0, 1]]) {
       const n = t(r + dr, c + dc, c);
-      if (n && (n.type === "corridor" || n.type === "promenade") && n.id !== room.id && !OPEN.has(room.type)) cand[dd].push({ r, c });
+      if (n && (n.type === "corridor" || n.type === "promenade" || n.type === "passage") && n.id !== room.id && !OPEN.has(room.type)) cand[dd].push({ r, c });          // service passages take doors too
       if (n && room.type === "galley" && n.type === "dining") (cand[dd].service = cand[dd].service || []).push({ r, c });
     }
     // A galley beside a dining room serves it through its own door.
@@ -776,11 +777,13 @@ const DEFS_BODY = `
       const ctx = context(d, deck);
       for (const room of rooms(ctx)) {
         if (deck === "hold" && out.holdSq[room.type === "hold" ? "general" : room.type] != null) out.holdSq[room.type === "hold" ? "general" : room.type] += room.cells.length;
-        if (deck === "crew") { out.crewPlan = true; if (room.type === "bunks") out.bunkSq = (out.bunkSq || 0) + room.cells.length; if (room.type === "mess") out.mess = true; if (room.type === "officers") out.officers = true; if (room.type === "wash") out.crewWash = true; }
+        if (deck === "crew") { out.crewPlan = true; if (room.type === "bunks") out.bunkSq = (out.bunkSq || 0) + room.cells.length; if (room.type === "mess") out.mess = true; if (room.type === "officers") { out.officers = true; out.officerSq = (out.officerSq || 0) + room.cells.length; } if (room.type === "wash") out.crewWash = true; }
       }
     }
     // Crew quarters: bunks enough for the crew (a square sleeps about four), a mess, officers' cabins, and a washroom.
-    out.crewQ = out.crewPlan ? Math.min(1, (out.bunkSq || 0) * 4 / Math.max(1, (d.crewNeed || 20))) * 0.4 + (out.mess ? 0.25 : 0) + (out.officers ? 0.2 : 0) + (out.crewWash ? 0.15 : 0) : null;
+    // What the crew quarters hold: about two bunks a square, and an officer to every two squares of officers' cabins.
+    // The rating against the crew the ship carries is worked out with the ship's figures (physics).
+    out.crewBerths = (out.bunkSq || 0) * 2; out.officerBerths = Math.floor((out.officerSq || 0) / 2);          // an officer's cabin is about two squares
     for (const deck of ["lower", "upper", "gondola"]) {
       const ctx = context(d, deck);
       for (const b of ctx.bays) if (!ctx.cols.some((c, i) => c.bay === b && ctx.grid.some(row => row[i]))) out.empty.push(`${deck === "upper" ? "upper" : "lower"} deck of bay ${b}`);

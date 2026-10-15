@@ -594,7 +594,8 @@ window.UpShip = window.UpShip || {};
     if (!list.length) return `${head}<p class="note">Designs from the Drawing Office appear here. <button class="btn-quiet" data-office-open>Open the Drawing Office</button></p>`;
     return head + list.map(e => {
       const cls = e.classId ? U.SHIP_CLASSES[e.classId] : null, f = U.physics.figures(state, e.d), need = U.designer.needsResearch(state, e.d);
-      const price = cls ? U.sim.orderTerms(state, cls.id).price : f.price, days = cls ? U.sim.orderTerms(state, cls.id).days : f.buildDays;
+      const designGas = (state.gasPolicy && state.gasPolicy.all) || e.d.gas || "hydrogen";
+      const price = cls ? U.sim.priceToOrder(state, cls.id, designGas).price : f.price + (designGas === "helium" ? Math.round(f.price * U.sim.HELIUM_FILL / 1000) * 1000 : 0), days = cls ? U.sim.orderTerms(state, cls.id).days : f.buildDays;
       const shedOk = cls ? !!U.facilities.deliveryCity(state, cls.id) : !!f.shed && hasShed(state, f.shed.n);
       const short = Math.max(0, Math.ceil(price - state.money)), room = U.contracts.loanLimit(state) - state.loan;
       const noStair = f.passengers > 0 && f.planned && !U.decks.stats(e.d).boarding;          // passengers board by a stair from the belly
@@ -625,12 +626,13 @@ window.UpShip = window.UpShip || {};
     if (!name) return;
     if (first) { e.name = name; }
     // Short of funds but within credit: borrow the difference first.
-    const price = e.classId ? U.sim.orderTerms(s, e.classId).price : U.physics.figures(s, e.d).price, short = Math.ceil(price - s.money);
+    const designGas = (s.gasPolicy && s.gasPolicy.all) || e.d.gas || "hydrogen", fp = U.physics.figures(s, e.d).price;
+    const price = e.classId ? U.sim.priceToOrder(s, e.classId, designGas).price : fp + (designGas === "helium" ? Math.round(fp * U.sim.HELIUM_FILL / 1000) * 1000 : 0), short = Math.ceil(price - s.money);
     if (short > 0) { if (!confirm(`Borrow ${money(short)} to pay for her? It adds ${money(short * U.ECONOMY.loanRate / 12)} a month in interest.`)) return; U.contracts.borrow(s, short); }
     const c = U.designClass.ensure(s, e);
     if (first) { c.name = name; c.names = [name]; }
     const ship = U.sim.order(s, c.id, name, null, c.gas);
-    if (!ship) { notify("The order could not be placed."); return; }
+    if (!ship) { notify(s.orderError || "The order could not be placed."); return; }
     h.changed(); render();
     notify(`${ship.name} ordered${first ? `: the first of the ${name} class` : ""}.`);
   }
@@ -648,6 +650,7 @@ window.UpShip = window.UpShip || {};
         const weeks = t.days < 45 ? `${Math.round(t.days / 7)} weeks` : `${Math.round(t.days / 30 * 2) / 2} months`;
         const surplus = c.kind === "surplus", left = state.surplusLeft[id] || 0;
         const deliverAt = U.facilities.deliveryCity(state, id);
+        const T = U.sim.priceToOrder(state, id, yardGas[id] || "hydrogen"); t.price = T.price;          // the true cost, helium fill included
         const short = Math.max(0, Math.ceil(t.price - state.money)), room = U.contracts.loanLimit(state) - state.loan;
         const otherwiseOk = !(surplus && !left) && !!deliverAt, canBorrow = short > 0 && short <= room && otherwiseOk;
         const blocked = state.money < t.price || (surplus && !left) || !deliverAt;
@@ -667,7 +670,7 @@ window.UpShip = window.UpShip || {};
             ${row("Service life", (surplus ? U.ECONOMY.lifeYears.surplus : U.ECONOMY.lifeYears.built) + " years")}
             ${surplus ? row("Hulls left", left ? `${left} of ${U.ECONOMY.surplusStock}` : "None") : ""}
           </dl>
-          <div class="card-foot"><span class="price">${money(t.price)}${grant ? ` <small class="was">${money(t.price + grant)}</small>` : ""}</span>
+          <div class="card-foot"><span class="price">${money(t.price)}${grant ? ` <small class="was">${money(t.price + grant)}</small>` : ""}${T.fill ? ` <small>with her helium fill</small>` : ""}</span>
             ${canBorrow ? `<button class="btn" data-borrow-order="${id}:${short}" title="Adds ${money(short * U.ECONOMY.loanRate / 12)} a month in interest">Borrow ${money(short)} and order</button>`
               : `<button class="btn" data-order="${id}" ${blocked ? "disabled" : ""}>Order</button>`}
             ${U.SHIP_CLASSES[id].design ? `<button class="btn-quiet" data-fitout="${id}" title="Order her with an interior of your own">Custom fit-out</button>` : ""}</div>
@@ -1196,6 +1199,7 @@ window.UpShip = window.UpShip || {};
     if (b.dataset.order) {
       const ship = U.sim.order(s, b.dataset.order, undefined, yardConfig[b.dataset.order] || "two", yardGas[b.dataset.order] || "hydrogen");
       if (ship) { notify(`Ordered ${ship.name}, ${U.SHIP_CLASSES[ship.classId].name}. Delivery ${shortDate(U.sim.dateOf(ship.deliveryTick))}.`); h.changed(); render(); }
+      else notify(s.orderError || "The order could not be placed.");
       return;
     }
     if (b.dataset.appoint) { const [cid, sid] = b.dataset.appoint.split(":"); U.crew.assign(s, cid, sid); h.changed(); render(); return; }

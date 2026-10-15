@@ -100,7 +100,10 @@ window.UpShip = window.UpShip || {};
   function applyLineup() {
     for (const [id, L] of Object.entries({ ...(U.LINEUP || {}), ...usLineup() })) {
       const c = U.SHIP_CLASSES[id]; if (!c) continue;
-      Object.assign(c, { passengers: L.passengers, seats: L.seats, firstShare: L.firstShare, comfort: L.comfort, cargoTons: L.cargoTons,
+      // A comfort floor by role: the builders' interiors predate the comfort rules built round the new rooms,
+      // and would otherwise score almost nothing. (To be replaced when their interiors are redrawn.)
+      const role = /greatliner/.test(id) ? 70 : /liner/.test(id) ? 60 : /medium|express/.test(id) ? 45 : 40;
+      Object.assign(c, { passengers: L.passengers, seats: L.seats, firstShare: L.firstShare, comfort: L.passengers ? Math.max(L.comfort || 0, role) : L.comfort, cargoTons: L.cargoTons,
         speedKmh: L.speedKmh, rangeKm: L.rangeKm, crew: L.crew, price: L.price, dailyCost: L.dailyCost, fuelPerKm: L.fuelPerKm,
         buildDays: L.buildDays, shedSize: L.shedSize, baked: L.baked, design: L.design, fromDesign: true });
       if (c.kind !== "surplus") c.kind = L.passengers ? "passenger" : "cargo";

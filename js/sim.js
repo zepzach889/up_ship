@@ -225,17 +225,24 @@ window.UpShip = window.UpShip || {};
     : gas === "aetherium" ? U.aether.fill(state, classId) : 0;
   // The gas a new ship must use under the company's policy, if any.
   function policyGas(state, classId) { const p = state.gasPolicy || {}; return p.byClass && p.byClass[classId] || p.all || null; }
+  // What an order really costs: the price, less any grant, plus the first fill of helium for a helium ship.
+  function priceToOrder(state, classId, gas) {
+    gas = policyGas(state, classId) || gas || "hydrogen";
+    const t = orderTerms(state, classId), grant = U.contracts.buildGrantFor(state, classId, t.price), fill = heliumFill(state, classId, gas);
+    return { price: t.price - grant + fill, base: t.price, grant, fill, gas };
+  }
   function order(state, classId, name, config, gas) {
     gas = policyGas(state, classId) || gas || "hydrogen";
-    const c = U.SHIP_CLASSES[classId], t = orderTerms(state, classId);
-    const grant = U.contracts.buildGrantFor(state, classId, t.price);
-    t.price -= grant;
-    t.price += heliumFill(state, classId, gas);             // the first fill of helium is costly
-    if (state.money < t.price) return null;
-    if (grant) U.contracts.useBuildGrant(state, grant);
-    if (c.kind === "surplus" && !(state.surplusLeft[classId] > 0)) return null;
+    const c = U.SHIP_CLASSES[classId], t = orderTerms(state, classId), P = priceToOrder(state, classId, gas);
+    const grant = P.grant;
+    t.price = P.price;
+    // Each refusal says why, for the Shipyard to show.
+    state.orderError = null;
+    if (state.money < t.price) { state.orderError = `Not enough money: she costs £${Math.round(t.price).toLocaleString("en-GB")}${P.fill ? `, including £${P.fill.toLocaleString("en-GB")} for her first fill of helium` : ""}, and you have £${Math.round(state.money).toLocaleString("en-GB")}.`; return null; }
+    if (c.kind === "surplus" && !(state.surplusLeft[classId] > 0)) { state.orderError = "No surplus hulls of this kind are left to buy."; return null; }
     const deliverAt = U.facilities.deliveryCity(state, classId);
-    if (!deliverAt) return null;
+    if (!deliverAt) { state.orderError = "No shed you can use is large enough to build or receive her: build or enlarge a shed first."; return null; }
+    if (grant) U.contracts.useBuildGrant(state, grant);
     if (c.kind === "surplus") state.surplusLeft[classId] -= 1;
     state.money -= t.price;
     state.year.purchases += t.price;
@@ -316,7 +323,9 @@ window.UpShip = window.UpShip || {};
     let seats1 = Math.floor(b.first * cut), daySeats = Math.floor((b.seats || 0) * cut), seats2 = Math.floor(b.second * cut) - daySeats;
     let hold = Math.min(c.cargoTons - reserved, room.tons), revenue = 0, tons = 0, p1 = 0, p2 = 0;
     const mix0 = (ship.interior && ship.interior.cargoMix) || cls(ship).cargoMix, cap = {};
-    if (mix0) for (const [k0, v] of Object.entries(mix0)) { cap[k0] = v * (room.tons / Math.max(0.1, c.cargoTons)); hold -= cap[k0]; }
+    // Special compartments: their own capacity, cut back only if the terminal cannot take a full hold today.
+    const cut0 = Math.min(1, room.tons / Math.max(0.1, c.cargoTons));
+    if (mix0) for (const [k0, v] of Object.entries(mix0)) { cap[k0] = v * cut0; hold -= cap[k0]; }
     hold = Math.max(0, hold);
     for (const to of downstream(route, ship)) {
       const w = state.waiting[pairKey(from, to)];
@@ -704,5 +713,5 @@ window.UpShip = window.UpShip || {};
 
   U.sim = { hasRights, oceanLeg, regionOf, homeRegion, needsPermit, applyPermit, REGION_GOV, surveyFlight, gatewayOpen, stopSaving, finishOverhaul, telegram, addGeneral, addIncome, nearestCity, distanceKm, fare, freightRate, dailyPassengers, dailyFreight, start, advance, beginTurn, dateOf, dateAtHour, H,
     routeSummary, save, load, clearSave, editRoute, routeOf, routeName, routeLegs, createRoute, deleteRoute, canAssign, assign,
-    order, policyGas, heliumFill, rename, suggestName, longestLeg, catalog, orderTerms, saleValue, canSell, sell, positionAt, ageYears, roman };
+    order, priceToOrder, HELIUM_FILL, policyGas, heliumFill, rename, suggestName, longestLeg, catalog, orderTerms, saleValue, canSell, sell, positionAt, ageYears, roman };
 })(window.UpShip);
