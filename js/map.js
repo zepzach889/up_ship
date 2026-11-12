@@ -487,6 +487,8 @@ window.UpShip = window.UpShip || {};
       `<g filter="url(#wx-storm3)"><ellipse cx="${-s.rx * 0.03}" cy="${-s.ry * 0.1}" rx="${s.rx * 0.6}" ry="${s.ry * 0.68}" fill="#fff"/><ellipse cx="${s.rx * 0.34}" cy="${s.ry * 0.2}" rx="${s.rx * 0.29}" ry="${s.ry * 0.58}" fill="#fff"/></g>`];
     if (s.kind === "fair") return [E(s.rx, s.ry, "wx-fair"), E(s.rx * 0.8, s.ry * 0.8, "wx-fair2")];
     if (s.kind === "fog") return [E(s.rx, s.ry, "wx-fog"), E(s.rx * 0.75, s.ry * 0.8, "wx-fog", ' transform="translate(12 3)"')];
+    // Rain and headwinds: a soft grey band with rain beneath.
+    if (s.mild) return [`<ellipse cx="14" cy="16" rx="${s.rx * 0.95}" ry="${s.ry * 0.75}" fill="#fff" filter="url(#wx-rain)" opacity="0.32"/>`, E(s.rx * 0.9, s.ry * 0.85, "wx-fair2")];
     return [E(s.rx, s.ry, "wx-wind")];
   }
   function wxPicture(s, body) {

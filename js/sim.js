@@ -136,6 +136,7 @@ window.UpShip = window.UpShip || {};
     U.research.init(state);
     U.facilities.init(state);
     U.passengers.init(state);
+    state.empireCarried = true;
     if (config.nation === "usa") state.gasPolicy = { all: "helium", byClass: {} };          // America's helium, from the start
     U.weather.init(state);
     for (const id of catalog(state)) if (U.SHIP_CLASSES[id].kind === "surplus") state.surplusLeft[id] = E().surplusStock;
@@ -314,6 +315,24 @@ window.UpShip = window.UpShip || {};
 
   const DAY_HOURS = 12;
   const SPECIAL = { mail: { share: 0.25, premium: 2.2 }, reefer: { share: 0.3, premium: 1.7 }, strong: { share: 0.04, premium: 5 }, garage: { share: 0.05, premium: 2.5 } };
+  // Heat and height cut lift (at half strength). A city's temperature swings between its winter and summer values,
+  // the seasons reversed south of the equator; above 15 degrees every degree thins the air, and so does every metre of height.
+  // The load a ship can carry on a leg is set by the worse of its two ends; a design with lift to spare loses less.
+  const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  function liftAt(state, id, month) {
+    const c = U.cityById[id]; if (!c) return { f: 1, heat: 0, height: 0 };
+    const m = month == null ? dateOf(state.tick).getUTCMonth() : month, peak = (c.realLat ?? c.lat) < 0 ? 0 : 6;
+    const T = c.hot == null ? 15 : c.cool + (c.hot - c.cool) * (0.5 + 0.5 * Math.cos(2 * Math.PI * (m - peak) / 12));
+    const heat = T > 15 ? 1.5 * (1 - 288 / (273 + T)) : 0, height = (c.elev || 0) > 300 ? 1.1 * (1 - Math.exp(-c.elev / 8400)) : 0;
+    return { f: Math.max(0.5, 1 - heat - height), heat, height, temp: Math.round(T), why: heat > 0.02 && height > 0.02 ? "heat and height" : height > heat ? "height" : "heat" };
+  }
+  // The worst month of the year at a city: for planning.
+  function liftWorst(state, id) { let w = null; for (let m = 0; m < 12; m++) { const l = liftAt(state, id, m); if (!w || l.f < w.f) w = { ...l, month: MONTH_NAMES[m] }; } return w; }
+  function legLift(state, ship, a, b) {
+    const A = liftAt(state, a), B = liftAt(state, b), w = A.f <= B.f ? { ...A, at: a } : { ...B, at: b };
+    const spare = cls(ship).liftSpare || 0;
+    return { f: Math.min(1, w.f + spare * 3), why: w.why, at: w.at };
+  }
   function board(state, ship, route, reserved = 0) {
     const c = U.research.stats(state, ship);
     const from = route.stops[ship.stop];
@@ -327,6 +346,10 @@ window.UpShip = window.UpShip || {};
     const cut0 = Math.min(1, room.tons / Math.max(0.1, c.cargoTons));
     if (mix0) for (const [k0, v] of Object.entries(mix0)) { cap[k0] = v * cut0; hold -= cap[k0]; }
     hold = Math.max(0, hold);
+    // Heat and height: she lifts less out of, or into, a hot or high city, so she boards fewer and loads less.
+    const nextStop = downstream(route, ship)[0], LF = nextStop ? legLift(state, ship, from, nextStop) : { f: 1 };
+    ship.lastLift = LF.f < 0.97 ? LF : null;          // under 3% is not worth cutting or mentioning
+    if (ship.lastLift) { seats1 = Math.floor(seats1 * LF.f); seats2 = Math.floor(seats2 * LF.f); daySeats = Math.floor(daySeats * LF.f); hold *= LF.f; for (const k0 in cap) cap[k0] *= LF.f; }
     for (const to of downstream(route, ship)) {
       const w = state.waiting[pairKey(from, to)];
       if (!w) continue;
@@ -525,6 +548,7 @@ window.UpShip = window.UpShip || {};
     const leg0 = ship.legs[ship.legs.length - 1];
     if (wx.via) leg0.via = wx.via;
     if (wx.notes.length) leg0.note = wx.notes[0];
+    else if (ship.lastLift && !next.ferry) leg0.note = `load cut to ${Math.round(ship.lastLift.f * 100)}% by the ${ship.lastLift.why} at ${U.cityById[ship.lastLift.at].name}`;
     // Serious accidents: rare, likelier in storms, in worn ships, and on hydrogen.
     {
       const kind = U.weather.serious(state, ship, leg0, wx.risk);
@@ -656,6 +680,15 @@ window.UpShip = window.UpShip || {};
       if (s.gasPolicy && typeof s.gasPolicy === "object" && !s.gasPolicy.byClass) s.gasPolicy.byClass = {};
       // A company that already surveyed an American city before permits existed holds America's permit.
       if (s.gateways && !(s.permits && s.permits.na) && Object.keys(s.gateways).some(id => regionOf(id) === "na")) { s.permits = s.permits || {}; s.permits.na = { appliedAt: 0, grantAt: 0 }; }
+      // The empire rule arrived later: a company keeps landing rights wherever it already flies or has built.
+      if (!s.empireCarried) {
+        s.empireCarried = true; s.gateways = s.gateways || {};
+        const keep = new Set(); for (const r of s.routes || []) for (const id of r.stops) keep.add(id);
+        for (const id in (s.facilities || {})) { const f = s.facilities[id]; if (f && (f.mast || f.terminal || f.shed)) keep.add(id); }
+        for (const id of keep) if (authority(id) && !s.gateways[id]) s.gateways[id] = { openAt: 0, carried: true };
+      }
+      // Likewise a company that surveyed Cape Town or Bombay as gateways holds the region's permit.
+      if (s.gateways && !(s.permits && s.permits.mea) && Object.keys(s.gateways).some(id => regionOf(id) === "mea")) { s.permits = s.permits || {}; s.permits.mea = { appliedAt: 0, grantAt: 0 }; }
       // Repair: an earlier version could overwrite the standing record with a bare number, lost on saving.
       if (!s.rep || typeof s.rep !== "object" || !Number.isFinite(+s.rep.standing)) {
         const was = typeof s.rep === "number" && Number.isFinite(s.rep) ? s.rep : 50, month = s.repMonth;
@@ -671,16 +704,32 @@ window.UpShip = window.UpShip || {};
   // government's permit before its first survey there; after that, landing rights city by city.
   const regionOf = id => (U.cityById[id] && U.cityById[id].region) || "eu";
   const homeRegion = state => regionOf(state.company.home);
-  const REGION_GOV = { na: { name: "Washington", country: "America" }, eu: { name: "the European governments", country: "Europe" } };
-  // An ocean leg: to or from a station, or between regions.
-  function oceanLeg(a, b) { const A = U.cityById[a], B = U.cityById[b]; return !!(A && B && (A.station || B.station || regionOf(a) !== regionOf(b))); }
+  const REGION_GOV = { na: { name: "Washington", country: "America" }, eu: { name: "the European governments", country: "Europe" },
+    mea: { name: "the governments of the region", country: "the Middle East and Africa" } };          // until the empire rule replaces it
+  // An ocean leg: to or from a station, or between the Old World and the Americas.
+  const landmass = id => regionOf(id) === "na" ? "americas" : "oldworld";
+  function oceanLeg(a, b) { const A = U.cityById[a], B = U.cityById[b]; return !!(A && B && (A.station || B.station || landmass(a) !== landmass(b))); }
+  // The empire rule: a colony, mandate, or dominion is governed by its imperial power; independent countries of the region by themselves.
+  // A company of the governing nation flies there as at home; anyone else needs that power's permit, then landing rights by survey.
+  const POWERS = { britain: { name: "the Colonial Office in London", rule: "British rule" }, france: { name: "the Ministry of Colonies in Paris", rule: "French rule" },
+    italy: { name: "the Ministry of Colonies in Rome", rule: "Italian rule" }, belgium: { name: "the Ministry of Colonies in Brussels", rule: "Belgian rule" },
+    egypt: { name: "the Egyptian government", rule: "the Egyptian government" }, ethiopia: { name: "the Emperor's government in Addis Ababa", rule: "the Ethiopian empire" } };
+  const authority = id => (U.cityById[id] && U.cityById[id].empire) || null;
+  // Britain kept imperial communications and the Canal under Egypt's independence of 1922: a British company keeps its rights there.
+  const ownEmpire = (state, id) => { const a = authority(id), n = state.company.nation; return !!a && (a === n || (a === "egypt" && n === "britain")); };
+  const permitKey = id => authority(id) ? "emp:" + authority(id) : regionOf(id);
+  const permitName = key => key.startsWith("emp:") ? POWERS[key.slice(4)].name : REGION_GOV[key].name;
+  const permitHeld = (state, key) => !!(state.permits && state.permits[key] && state.permits[key].grantAt <= H(state.tick));
   function hasRights(state, id) {
     const c = U.cityById[id]; if (!c) return false;
+    if (authority(id)) return ownEmpire(state, id) || gatewayOpen(state, id);
     const r = regionOf(id);
     if (r === homeRegion(state) && !c.station && !(c.gateway && r === "eu")) return true;
     return gatewayOpen(state, id);
   }
-  function needsPermit(state, id) { const r = regionOf(id); if (r === "ocean") return false; return r !== homeRegion(state) && !(state.permits && state.permits[r] && state.permits[r].grantAt <= H(state.tick)); }
+  function needsPermit(state, id) {
+    if (authority(id)) return !ownEmpire(state, id) && !permitHeld(state, permitKey(id)) && !permitHeld(state, "mea");          // (older games may hold the region's permit)
+    const r = regionOf(id); if (r === "ocean") return false; return r !== homeRegion(state) && !(state.permits && state.permits[r] && state.permits[r].grantAt <= H(state.tick)); }
   function applyPermit(state, region) {
     state.permits = state.permits || {};
     if (state.permits[region]) return "Already applied for.";
@@ -688,11 +737,11 @@ window.UpShip = window.UpShip || {};
     state.money -= fee; addGeneral(state, 0);
     const now = H(state.tick), grantAt = now + (35 + Math.floor(Math.random() * 20)) * 24;
     state.permits[region] = { appliedAt: now, grantAt };
-    telegram(state, grantAt, `${REGION_GOV[region].name} grants your company a permit to operate stop surveys may now win landing rights city by city stop foreign lines pay the usual fees stop`, true, { type: "company" });
+    telegram(state, grantAt, `${permitName(region)} grants your company a permit to operate stop surveys may now win landing rights city by city stop foreign lines pay the usual fees stop`, true, { type: "company" });
     return null;
   }
   function surveyFlight(state, gatewayId, shipId, flownHours, damage) {
-    if (needsPermit(state, gatewayId)) return `A permit from ${REGION_GOV[regionOf(gatewayId)].name} comes first: apply in this city's panel.`;
+    if (needsPermit(state, gatewayId)) return `A permit from ${permitName(permitKey(gatewayId))} comes first: apply in this city's panel.`;
     const ship = state.ships.find(s => s.id === shipId), g = U.cityById[gatewayId], c = cls(ship), now = H(state.tick);
     const km = distanceKm(ship.location, gatewayId), rs = U.research.stats(state, ship);
     if (rs.rangeKm < km) return `${ship.name} cannot reach ${g.name}: ${Math.round(km)} km, against her range of ${rs.rangeKm} km.`;
@@ -711,7 +760,7 @@ window.UpShip = window.UpShip || {};
     try { for (const k of ["upship.save.v1", "upship.save.v2", "upship.save.v3", "upship.save.v4", "upship.save.v5", "upship.save.v6", "upship.save.v7", "upship.save.v8", "upship.save.v9", "upship.save.v10", SAVE_KEY]) localStorage.removeItem(k); } catch (e) {}
   }
 
-  U.sim = { hasRights, oceanLeg, regionOf, homeRegion, needsPermit, applyPermit, REGION_GOV, surveyFlight, gatewayOpen, stopSaving, finishOverhaul, telegram, addGeneral, addIncome, nearestCity, distanceKm, fare, freightRate, dailyPassengers, dailyFreight, start, advance, beginTurn, dateOf, dateAtHour, H,
+  U.sim = { liftAt, liftWorst, legLift, POWERS, authority, ownEmpire, permitKey, permitName, hasRights, oceanLeg, regionOf, homeRegion, needsPermit, applyPermit, REGION_GOV, surveyFlight, gatewayOpen, stopSaving, finishOverhaul, telegram, addGeneral, addIncome, nearestCity, distanceKm, fare, freightRate, dailyPassengers, dailyFreight, start, advance, beginTurn, dateOf, dateAtHour, H,
     routeSummary, save, load, clearSave, editRoute, routeOf, routeName, routeLegs, createRoute, deleteRoute, canAssign, assign,
     order, priceToOrder, HELIUM_FILL, policyGas, heliumFill, rename, suggestName, longestLeg, catalog, orderTerms, saleValue, canSell, sell, positionAt, ageYears, roman };
 })(window.UpShip);

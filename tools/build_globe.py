@@ -32,14 +32,18 @@ def geo(g, tol):
     ps = [s] if isinstance(s, Polygon) else [p for p in getattr(s, 'geoms', []) if isinstance(p, Polygon)]
     ps = [orient(p, sign=-1.0) for p in ps if p.area > (tol or 0.0001) ** 2]
     return rnd(mapping(MultiPolygon(ps))) if ps else None
-# The game's Europe, exactly as drawn now.
+# The game's Europe, exactly as drawn now; a few modern names on its edges given their 1920s equivalents.
+EU_1920 = {"United Arab Emirates": "Trucial States", "West Bank": "Palestine", "Gaza Strip": "Palestine", "Mali": "French West Africa", "Niger": "French West Africa",
+  "Mauritania": "French West Africa", "Chad": "French Equatorial Africa", "Sudan": "Anglo-Egyptian Sudan", "Arabia": "Hejaz and Nejd", "Oman": "Muscat and Oman",
+  "Dhekelia Sovereign Base Area": "Cyprus", "Akrotiri Sovereign Base Area": "Cyprus"}
 europe = []
 for c in M['countries']:
     g = to_poly(rings(c['path']))
     if g.is_empty: continue
-    europe.append({"n": c['name'], "tint": c['tint'], "g": g})
+    europe.append({"n": EU_1920.get(c['name'], c['name']), "tint": c['tint'], "g": g})
 eu_land = unary_union([e['g'] for e in europe]).buffer(0.01)
-EU_TINT = {e['n']: e['tint'] for e in europe}
+EU_TINT = {}
+for e in europe: EU_TINT.setdefault(e['n'], e['tint'])
 # The rest of the world: Natural Earth, regrouped into 1920s territories, with Europe's area removed.
 ne = json.load(open(NE)); code = lambda f: f['properties'].get('ADM0_A3') or f['properties'].get('ISO_A3')
 geoms = {}
@@ -65,8 +69,12 @@ if ADMIN1:
         states.append({"n": name, "a": round(g.area, 1), "l": [round(lp.x, 2), round(lp.y, 2)], "g": None, "_g": g})
 E = [("Newfoundland", "NFL", "dominion"), ("Soviet Union", "RUS UKR BLR KAZ UZB TKM KGZ TJK GEO ARM AZE", "ussr"), ("British India", "IND PAK BGD MMR", "british"), ("French Indochina", "VNM LAO KHM", "french"),
  ("Dutch East Indies", "IDN", "dutch"), ("French West Africa", "SEN MLI MRT GIN CIV BFA NER BEN", "french"), ("French Equatorial Africa", "GAB COG CAF TCD", "french"),
- ("Belgian Congo", "COD", "belgian"), ("Anglo-Egyptian Sudan", "SDN SSD", "british"), ("Italian East Africa", "ERI SOM", "italian"), ("Japanese Empire", "JPN KOR PRK TWN", "japanese"),
- ("Rhodesia and Nyasaland", "ZMB ZWE MWI", "british"), ("British East Africa", "KEN UGA TZA", "british"), ("Union of South Africa", "ZAF NAM", "british"), ("British Malaya", "MYS SGP BRN", "british"),
+ ("Belgian Congo", "COD", "belgian"), ("Anglo-Egyptian Sudan", "SDN SSD SDS", "british"), ("Eritrea", "ERI", "italian"), ("Italian Somaliland", "SOM", "italian"), ("British Somaliland", "SOL", "british"), ("French Somaliland", "DJI", "french"), ("Japanese Empire", "JPN KOR PRK TWN", "japanese"),
+ ("Rhodesia", "ZMB ZWE", "british"), ("Nyasaland", "MWI", "british"), ("Ruanda-Urundi", "RWA BDI", "belgian"),
+ ("Hejaz and Nejd", "SAU", "other"), ("Persia", "IRN", "other"), ("Muscat and Oman", "OMN", "other"), ("Trucial States", "ARE", "british"), ("Bechuanaland", "BWA", "british"),
+ ("Basutoland", "LSO", "british"), ("Swaziland", "SWZ", "british"), ("Spanish Guinea", "GNQ", "spanish"), ("Portuguese Guinea", "GNB", "portuguese"), ("Cameroons", "CMR", "french"),
+ ("Togoland", "TGO", "french"), ("Madagascar", "MDG", "french"), ("Gambia", "GMB", "british"), ("Sierra Leone", "SLE", "british"), ("Libya", "LBY", "italian"), ("Morocco", "MAR", "french"),
+ ("Algeria", "DZA", "french"), ("Tunisia", "TUN", "french"), ("Egypt", "EGY", "other"), ("Ethiopia", "ETH", "other"), ("Liberia", "LBR", "other"), ("Yemen", "YEM", "other"), ("British East Africa", "KEN UGA TZA", "british"), ("Union of South Africa", "ZAF NAM", "british"), ("British Malaya", "MYS SGP BRN", "british"),
  ("Australia", "AUS", "british"), ("Canada", "CAN", "british"), ("New Zealand", "NZL", "british"), ("Nigeria", "NGA", "british"), ("Gold Coast", "GHA", "british"), ("Angola", "AGO", "portuguese"),
  ("Mozambique", "MOZ", "portuguese"), ("Philippines", "PHL", "usa"), ("United States", "USA", "usa"), ("China", "CHN", "other"), ("Mongolia", "MNG", "other"), ("Brazil", "BRA", "other")]
 used = set(); ents = []
@@ -77,11 +85,22 @@ for c, g in geoms.items():
     if c not in used: ents.append((next((f['properties']['NAME'] for f in ne['features'] if code(f) == c), c), g, "other"))
 POWER_TINT = {"dominion": 2, "british": 0, "french": 3, "italian": 1, "dutch": 2, "belgian": 5, "portuguese": 4, "spanish": 2, "japanese": 0, "usa": 1, "ussr": EU_TINT.get("Soviet Union", 0)}
 world = []
+# A territory cut by the old Europe frame is joined back into one shape (the Europe map's borders kept inside the
+# frame), so it has no seam and one name. The playable countries keep their own shapes for the setup screen.
+PLAYABLE = {"Germany", "United Kingdom", "France", "Italy"}
+merged = set()
 for i, (name, g, power) in enumerate(ents):
     g = g.difference(eu_land)
+    # only where the country truly crosses the frame: a sizeable piece outside it
+    parts = [e for e in europe if e['n'] == name and e['n'] not in PLAYABLE] if g.area >= 0.5 else []
+    if parts:
+        g = unary_union([g.buffer(0.03)] + [e['g'].buffer(0.03) for e in parts]).buffer(-0.03)
+        for e in parts: merged.add(id(e))
     if g.is_empty or g.area < 0.02: continue
     tint = EU_TINT.get(name, POWER_TINT.get(power, i % 6))
-    world.append({"n": name, "tint": tint, "a": round(g.area, 1), "l": rnd(list(g.representative_point().coords[0])), "c": geo(g, 0.4), "f": geo(g, 0.04)})
+    world.append({"n": name, "tint": tint, "a": round(g.area, 1), "l": rnd(list(g.representative_point().coords[0])), "c": geo(g, 0.4 if not parts else 0.15), "f": geo(g, 0.04 if not parts else 0.01)})
+print("joined across the old frame:", ", ".join(sorted({e['n'] for e in europe if id(e) in merged})))
+europe = [e for e in europe if id(e) not in merged]
 lakes = []
 for f in json.load(open(LAKES))['features']:
     p = f['properties']; g = shape(f['geometry'])

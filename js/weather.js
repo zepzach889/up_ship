@@ -25,6 +25,36 @@ window.UpShip = window.UpShip || {};
   const unitsPerKm = (lon, lat) => { const d = stepFlat(lon, lat, 0, 50); return Math.hypot(d.x, d.y) / 50; };
   // North America's weather.
   const GEO = [
+    // The Middle East and Africa.
+    { kind: "storm", name: "Haboob", lon: [28, 36], lat: [13, 24], bearing: [300, 360], kmh: [30, 50], km: [[200, 320], [150, 220]], life: [6, 14],
+      rate: m => [0, 0, 0.01, 0.04, 0.1, 0.14, 0.16, 0.14, 0.08, 0.02, 0, 0][m] },
+    { kind: "wind", name: "Khamsin", lon: [27, 37], lat: [27, 33], bearing: [20, 70], kmh: [25, 45], km: [[350, 500], [220, 320]], life: [18, 40],
+      rate: m => [0, 0.02, 0.08, 0.12, 0.1, 0.03, 0, 0, 0, 0, 0, 0][m] },
+    { kind: "storm", name: "Shamal dust storm", lon: [43, 52], lat: [26, 34], bearing: [120, 160], kmh: [30, 50], km: [[250, 380], [160, 240]], life: [12, 30],
+      rate: m => [0.01, 0.01, 0.02, 0.03, 0.06, 0.12, 0.14, 0.1, 0.04, 0.01, 0.01, 0.01][m] },
+    { kind: "wind", name: "Harmattan haze", lon: [-18, 8], lat: [8, 18], bearing: [200, 250], kmh: [15, 30], km: [[500, 750], [300, 450]], life: [36, 80],
+      rate: m => [0.14, 0.13, 0.08, 0.02, 0, 0, 0, 0, 0, 0.01, 0.06, 0.12][m] },
+    { kind: "storm", name: "Tropical thunderstorm", lon: [-12, 42], lat: [-9, 9], bearing: [240, 300], kmh: [15, 30], km: [[150, 250], [120, 200]], life: [6, 14],
+      rate: m => [0.2, 0.2, 0.26, 0.3, 0.28, 0.2, 0.16, 0.18, 0.24, 0.3, 0.28, 0.22][m] },
+    { kind: "wind", mild: true, name: "Tropical rains", lon: [-14, 42], lat: [-10, 10], bearing: [240, 300], kmh: [10, 25], km: [[450, 700], [300, 450]], life: [24, 60],
+      rate: m => [0.2, 0.2, 0.24, 0.28, 0.26, 0.2, 0.16, 0.18, 0.22, 0.28, 0.26, 0.22][m] },
+    { kind: "storm", name: "Cape gale", lon: [13, 24], lat: [-38, -32], bearing: [70, 110], kmh: [35, 55], km: [[350, 500], [220, 320]], life: [30, 60],
+      rate: m => [0.01, 0.01, 0.02, 0.05, 0.1, 0.13, 0.14, 0.13, 0.08, 0.04, 0.02, 0.01][m] },
+    { kind: "storm", name: "South-west monsoon", lon: [60, 73], lat: [12, 24], bearing: [30, 70], kmh: [20, 35], km: [[420, 620], [280, 400]], life: [40, 80],
+      rate: m => [0, 0, 0, 0, 0.03, 0.18, 0.22, 0.2, 0.12, 0.02, 0, 0][m] },
+    { kind: "wind", mild: true, name: "Rain and headwinds", lon: [-8, 32], lat: [40, 60], bearing: [50, 110], kmh: [25, 40], km: [[450, 700], [300, 450]], life: [24, 60],
+      rate: m => [0.3, 0.28, 0.24, 0.2, 0.16, 0.14, 0.13, 0.14, 0.18, 0.24, 0.3, 0.32][m] },
+    { kind: "wind", mild: true, name: "Rain and headwinds", lon: [-100, -70], lat: [29, 48], bearing: [50, 110], kmh: [25, 40], km: [[500, 750], [320, 480]], life: [24, 60],
+      rate: m => [0.3, 0.28, 0.24, 0.2, 0.16, 0.14, 0.13, 0.14, 0.18, 0.24, 0.3, 0.32][m] },
+    // The populated east and Midwest get weather of their own, so America's routes see as much as Europe's.
+    { kind: "wind", mild: true, name: "Rain and headwinds", lon: [-92, -71], lat: [33, 45], bearing: [40, 100], kmh: [25, 40], km: [[450, 700], [300, 450]], life: [24, 60],
+      rate: m => [0.34, 0.32, 0.3, 0.26, 0.22, 0.18, 0.16, 0.18, 0.22, 0.28, 0.32, 0.36][m] },
+    { kind: "storm", name: "Nor'easter", lon: [-78, -68], lat: [35, 44], bearing: [20, 60], kmh: [25, 40], km: [[360, 500], [250, 350]], life: [30, 60],
+      rate: m => [0.12, 0.12, 0.1, 0.06, 0.02, 0, 0, 0, 0.02, 0.06, 0.1, 0.12][m] },
+    { kind: "storm", name: "Midwest thunderstorm", lon: [-95, -80], lat: [35, 44], bearing: [60, 110], kmh: [25, 40], km: [[150, 250], [120, 200]], life: [8, 18],
+      rate: m => [0, 0, 0.04, 0.12, 0.24, 0.33, 0.36, 0.3, 0.15, 0.04, 0, 0][m] },
+    { kind: "storm", name: "Gulf thunderstorm", lon: [-97, -81], lat: [27, 33], bearing: [40, 110], kmh: [15, 30], km: [[150, 220], [120, 180]], life: [8, 16],
+      rate: m => [0, 0, 0.02, 0.05, 0.1, 0.16, 0.18, 0.18, 0.12, 0.04, 0, 0][m] },
     { kind: "storm", name: "Atlantic hurricane", lon: [-78, -68], lat: [21, 27], bearing: [-10, 30], kmh: [18, 28], km: [[380, 520], [300, 400]], life: [120, 200],
       rate: m => [0, 0, 0, 0, 0, 0.01, 0.03, 0.1, 0.14, 0.09, 0.02, 0][m] },
     { kind: "storm", name: "Plains thunderstorm", lon: [-103, -94], lat: [31, 41], bearing: [60, 110], kmh: [25, 40], km: [[120, 200], [100, 160]], life: [8, 20],
@@ -58,7 +88,7 @@ window.UpShip = window.UpShip || {};
     { kind: "fair", name: "Fair-weather cloud", at: () => { const c = U.CITIES[Math.floor(Math.random() * U.CITIES.length)]; return { x: c.x + rand(-120, 120), y: c.y + rand(-90, 90) }; },
       rate: () => 0.3, vx: [4, 9], vy: [-2, 2], rx: [35, 65], ry: [25, 40], life: [12, 36] }
   ];
-  const MAX = { all: 20, storm: 9, fog: 5, wind: 1, fair: 6 };          // room for America's weather beside Europe's
+  const MAX = { all: 46, storm: 20, fog: 6, wind: 14, fair: 6 };          // room for each region's weather beside the others'
 
   function init(state) {
     state.weather = { systems: [], nextId: 1 };
@@ -76,17 +106,17 @@ window.UpShip = window.UpShip || {};
     // North America's weather forms in real terms and is turned into flat units where it forms.
     if (PJ) for (const src of GEO) {
       if (W.systems.length >= MAX.all || count(src.kind) >= MAX[src.kind]) continue;
-      if (Math.random() > src.rate(m)) continue;
-      const lon = rand(...src.lon), lat = rand(...src.lat), at = flatOf(lon, lat), u = unitsPerKm(lon, lat);
+      if (Math.random() > src.rate(m) * (src.kind === "storm" ? 1.3 : 1)) continue;
+      const lon = rand(...src.lon), lat = rand(...src.lat), at = flatOf(lon, lat), u = unitsPerKm(lon, lat) * (src.kind === "storm" ? 1.1 : 1);
       const rx = rand(...src.km[0]) * u, ry = rand(...src.km[1]) * u, v = stepFlat(lon, lat, rand(...src.bearing), rand(...src.kmh));
       const parts = src.kind === "storm" ? [{ dx: 0, dy: 0, rx, ry }, { dx: rand(-0.4, -0.1) * rx, dy: rand(-0.2, 0.2) * ry, rx: rx * 0.45, ry: ry * 1.05 },
         { dx: rand(0.2, 0.45) * rx, dy: rand(-0.15, 0.25) * ry, rx: rx * 0.35, ry: ry * 0.9 }] : [{ dx: 0, dy: 0, rx, ry }];
-      W.systems.push({ id: W.nextId++, kind: src.kind, name: src.name, x: at.x, y: at.y, rx, ry, rot: rand(-30, 30), vx: v.x, vy: v.y, born: now, dies: now + rand(...src.life), seed: Math.floor(rand(1, 90)), parts });
+      W.systems.push({ id: W.nextId++, kind: src.kind, name: src.name, mild: !!src.mild, x: at.x, y: at.y, rx, ry, rot: rand(-30, 30), vx: v.x, vy: v.y, born: now, dies: now + rand(...src.life), seed: Math.floor(rand(1, 90)), parts });
     }
     for (const src of SOURCES) {
       if (W.systems.length >= MAX.all || count(src.kind) >= MAX[src.kind]) continue;
-      if (Math.random() > src.rate(m)) continue;
-      const p = src.at(), rx = rand(...src.rx), ry = rand(...src.ry);
+      if (Math.random() > src.rate(m) * (src.kind === "storm" ? 1.3 : 1)) continue;          // storms 30% more common than first set
+      const big = src.kind === "storm" ? 1.1 : 1, p = src.at(), rx = rand(...src.rx) * big, ry = rand(...src.ry) * big;
       const parts = src.kind === "storm" ? [{ dx: 0, dy: 0, rx, ry }, { dx: rand(-0.4, -0.1) * rx, dy: rand(-0.2, 0.2) * ry, rx: rx * 0.45, ry: ry * 1.05 },
         { dx: rand(0.2, 0.45) * rx, dy: rand(-0.15, 0.25) * ry, rx: rx * 0.35, ry: ry * 0.9 }] : [{ dx: 0, dy: 0, rx, ry }];
       W.systems.push({ id: W.nextId++, kind: src.kind, name: src.name, x: p.x, y: p.y, rx, ry, rot: src.fixedRot ?? rand(-30, 30),
@@ -113,7 +143,7 @@ window.UpShip = window.UpShip || {};
         if (s.kind === "fog") { if (i === 0 || i === 14) fogEnds.add(s); } else hits.add(s);
       }
     }
-    return { storms: [...hits].filter(s => s.kind === "storm"), winds: [...hits].filter(s => s.kind === "wind"), fog: [...fogEnds] };
+    return { storms: [...hits].filter(s => s.kind === "storm"), winds: [...hits].filter(s => s.kind === "wind" && !s.mild), rain: [...hits].filter(s => s.kind === "wind" && s.mild), fog: [...fogEnds] };
   }
   const pathLen = (a, via, b) => { let L = 0, prev = a; for (let i = 1; i <= 16; i++) { const p = bez(a, via, b, i / 16); L += Math.hypot(p.x - prev.x, p.y - prev.y); prev = p; } return L; };
 
@@ -152,6 +182,7 @@ window.UpShip = window.UpShip || {};
       const actual = out.via ? crossings(W.systems, a, b, out.via, depart, out.km / speed, now) : all;
       if (actual.storms.length) { out.slow *= 1.15; out.risk *= 4 * (cm.weatherRisk || 1) * (U.research.has(state, "operations6") ? 0.67 : 1); out.notes.push("caught by a storm"); }
       if (actual.winds.length) { out.slow *= 1.1; out.risk *= 1.5; }
+      if (actual.rain.length) { out.slow *= 1.06; out.risk *= 1.1; out.notes.push("slowed by rain and headwinds"); }
       if (actual.fog.length) { out.risk *= 2; }
       return out;
     }
@@ -159,6 +190,7 @@ window.UpShip = window.UpShip || {};
     out.bold = true;
     if (all.storms.length) { out.mode = "through"; out.slow *= 1.15; out.risk *= 4 * (cm.weatherRisk || 1) * (U.research.has(state, "operations6") ? 0.67 : 1); out.notes.push("flying through a storm"); }
     if (all.winds.length) { out.slow *= 1.1; out.risk *= 1.5; }
+    if (all.rain.length) { out.slow *= 1.06; out.risk *= 1.1; out.notes.push("slowed by rain and headwinds"); }
     if (all.fog.length) { out.slow *= 1.05; out.risk *= 2; }
     return out;
   }

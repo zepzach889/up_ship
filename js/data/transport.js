@@ -3,6 +3,10 @@
 window.UpShip = window.UpShip || {};
 (function (U) {
   const P = {
+    // The Middle East and Africa
+    aswan: [24.09, 32.9], wadihalfa: [21.8, 31.35], atbara: [17.7, 33.98], elarish: [31.13, 33.8], gaza: [31.5, 34.47], lydda: [31.95, 34.89], deraa: [32.62, 36.1], haifa: [32.82, 35.0],
+    constantine: [36.37, 6.61], fez: [34.03, -5.0], oujda: [34.68, -1.91], oran: [35.7, -0.63], kimberley: [-28.74, 24.76], deaar: [-30.65, 24.01], voi: [-3.4, 38.56],
+    djibouti: [11.59, 43.15], diredawa: [9.6, 41.85], suez: [29.95, 32.56],
     // North America
     trenton: [40.22, -74.76], baltimore: [39.29, -76.61], newhaven: [41.31, -72.92], providence: [41.82, -71.41], albany: [42.65, -73.75], buffalo: [42.89, -78.88],
     erie: [42.13, -80.09], toledo: [41.65, -83.54], harrisburg: [40.27, -76.88], fortwayne: [41.08, -85.14], omaha: [41.26, -95.94], cheyenne: [41.14, -104.82],
@@ -30,6 +34,17 @@ window.UpShip = window.UpShip || {};
     { type: "rail", pts: [a, ...railA] }, { type: "sea", pts: sea }, { type: "rail", pts: [...railB, b] }].filter(s => s.pts.length > 1) });
   const s = (a, b, via) => ({ a, b, sea: true, segs: [{ type: "sea", pts: [a, ...(via || []), b] }] });
   const ROUTES = [
+    // The Middle East and Africa: the few railways of the 1920s, and the steamer lanes that carried most travellers.
+    r("alexandria", "cairo", [], 1), r("cairo", "ismailia", []), r("ismailia", "jerusalem", ["elarish", "gaza", "lydda"]), r("beirut", "damascus", []), r("damascus", "jerusalem", ["deraa", "haifa", "lydda"]),
+    r("baghdad", "basra", []), r("cairo", "khartoum", ["aswan", "wadihalfa", "atbara"]), r("mombasa", "nairobi", ["voi"]), r("capetown", "johannesburg", ["deaar", "kimberley"], 1),
+    r("algiers", "tunis", ["constantine"]), r("casablanca", "algiers", ["fez", "oujda", "oran"]),
+    boat("aden", "addisababa", [], [[12.2, 44.2], "djibouti"], ["diredawa"]),
+    s("alexandria", "beirut", [[32.4, 31.6], [33.5, 34.6]]), s("ismailia", "aden", ["suez", [27.5, 34.0], [22.0, 37.6], [16.0, 41.2], [12.55, 43.45]]),
+    s("aden", "karachi", [[14.5, 51.0], [20.5, 61.0]]), s("aden", "bombay", [[13.5, 52.0], [16.5, 66.0]]), s("aden", "mombasa", [[11.9, 51.6], [5.0, 49.2], [-2.0, 42.6]]),
+    s("basra", "karachi", [[29.3, 49.0], [26.6, 54.6], [25.2, 57.6], [24.5, 62.0]]), s("karachi", "bombay", [[22.0, 67.6], [20.0, 71.0]]),
+    s("mombasa", "capetown", [[-10.0, 41.0], [-20.0, 37.6], [-27.0, 34.2], [-34.6, 26.0], [-35.3, 20.0]]), s("lagos", "capetown", [[3.0, 3.0], [-6.0, 10.5], [-17.0, 10.6], [-30.0, 15.6]]),
+    s("dakar", "lagos", [[9.0, -15.6], [4.0, -9.0], [4.3, -2.0], [5.8, 2.6]]), s("casablanca", "dakar", [[28.0, -13.6], [21.0, -18.0]]), s("gibraltar", "casablanca", [[35.6, -6.5]]),
+    s("malta", "tripoli", []), s("tripoli", "benghazi", [[33.2, 16.0], [32.9, 19.0]]), s("benghazi", "alexandria", [[33.0, 23.0], [32.0, 28.0]]),
     // North America: the Pennsylvania and New York Central main lines, the transcontinentals, the Sunset Route, Canada, and Mexico.
     r("newyork", "philadelphia", ["trenton"], 1), r("philadelphia", "washington", ["baltimore"], 1), r("newyork", "boston", ["newhaven", "providence"], 1),
     r("newyork", "cleveland", ["albany", "buffalo", "erie"], 1), r("cleveland", "chicago", ["toledo"], 1), r("philadelphia", "pittsburgh", ["harrisburg"], 1),

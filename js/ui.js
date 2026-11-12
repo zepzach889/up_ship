@@ -237,16 +237,24 @@ window.UpShip = window.UpShip || {};
     const ready = state.ships.filter(x => x.deliveryTick <= state.tick && !x.lost && !x.overhaulUntil);
     const rows = ready.map(x => { const km = U.sim.distanceKm(x.location, id), rs = U.research.stats(state, x), days = Math.round((km / rs.speedKmh * 2 + 48) / 24);
       return { x, km, days, ok: rs.rangeKm >= km, range: rs.rangeKm }; }).sort((a, b) => a.km - b.km);
-    return `<h2>${esc(c.name)}</h2><p class="sub">${!c.via && !c.station ? `${esc(c.country)}: a foreign country for your company` : c.station ? `${esc(c.country)}: a refuelling station. Few passengers of its own, but its mast and fuel let ships cross the ocean in shorter legs` : c.region === "na" ? `${esc(c.country)}, ${c.via}` : `Gateway to the wider world, ${c.via}`}. Your ships can land here once a survey flight has won landing rights.</p>
+    return `<h2>${esc(c.name)}</h2><p class="sub">${c.empire ? `${esc(c.country)}, under ${U.sim.POWERS[c.empire].rule}` : !c.via && !c.station ? `${esc(c.country)}: a foreign country for your company` : c.station ? `${esc(c.country)}: a refuelling station. Few passengers of its own, but its mast and fuel let ships cross the ocean in shorter legs` : c.region === "na" ? `${esc(c.country)}, ${c.via}` : `Gateway to the wider world, ${c.via}`}. Your ships can land here once a survey flight has won landing rights.</p>${liftText(state, id) ? `<p class="note">${liftText(state, id)}</p>` : ""}
       ${open ? `<p class="status">Open. Landing rights won by ${esc(g.by)}'s survey flight; routes may end here.</p>`
         : g ? `<p class="status">${esc(g.by)} is flying the survey. Landing rights follow on ${shortDate(U.sim.dateOf((g.openAt) / 12))}.</p>`
-        : U.sim.needsPermit(state, id) ? (state.permits && state.permits[U.sim.regionOf(id)]
-          ? `<p class="status">Your application to ${U.sim.REGION_GOV[U.sim.regionOf(id)].name} is being considered; a permit is expected about ${shortDate(U.sim.dateOf(state.permits[U.sim.regionOf(id)].grantAt / 12))}.</p>`
-          : `<p>A foreign line needs a permit from ${U.sim.REGION_GOV[U.sim.regionOf(id)].name} before its first survey here. The application costs £3,000 and takes five to eight weeks; after that, surveys win landing rights city by city.</p>
-            <div class="btn-row"><button class="btn" data-permit="${U.sim.regionOf(id)}">Apply for a permit</button></div>`)
+        : U.sim.needsPermit(state, id) ? (state.permits && state.permits[U.sim.permitKey(id)]
+          ? `<p class="status">Your application to ${U.sim.permitName(U.sim.permitKey(id))} is being considered; a permit is expected about ${shortDate(U.sim.dateOf(state.permits[U.sim.permitKey(id)].grantAt / 12))}.</p>`
+          : `<p>A foreign line needs a permit from ${U.sim.permitName(U.sim.permitKey(id))} before its first survey here. The application costs £3,000 and takes five to eight weeks; after that, surveys win landing rights city by city.</p>
+            <div class="btn-row"><button class="btn" data-permit="${U.sim.permitKey(id)}">Apply for a permit</button></div>`)
         : `<p>Before routes can end here, a survey flight must prove the way and win landing rights. The ship leaves her route for the round trip and two days on the ground; the flight costs her fuel and about £4,000 in fees.</p>
           <ul class="plain-list">${rows.map(r => `<li>${esc(r.x.name)}: ${Math.round(r.km).toLocaleString("en-GB")} km from ${esc(city(r.x.location).name)}, ${r.ok ? `about ${r.days} days away <button class="btn-quiet" data-survey="${id}:${r.x.id}">Send her</button> <button class="btn-quiet" data-survey-helm="${id}:${r.x.id}">Take the helm</button>` : `<span class="small">out of range (${r.range.toLocaleString("en-GB")} km)</span>`}</li>`).join("") || `<li class="note">No ship is free.</li>`}</ul>`}`;
   }
+  // Heat and height: what a ship can lift here at the worst time of year, and now.
+  function liftText(state, id) {
+    const w = U.sim.liftWorst(state, id); if (!w || w.f > 0.97) return "";
+    const now = U.sim.liftAt(state, id), c = city(id);
+    const why = w.why === "height" ? `the thin air at ${c.elev.toLocaleString("en-GB")} m` : w.why === "heat" ? `the heat (about ${w.temp}°C in ${w.month})` : `the heat and the thin air at ${c.elev.toLocaleString("en-GB")} m`;
+    return `Ships lift about ${Math.round(w.f * 100)}% of their load here ${w.why === "height" ? "all year" : "in " + w.month}, because of ${why}${Math.abs(now.f - w.f) > 0.02 ? `; about ${Math.round(now.f * 100)}% now` : ""}. Designs with lift to spare lose less.`;
+  }
+  const liftRow = (state, id) => { const t = liftText(state, id); return t ? `</dl><p class="note">${t}</p><dl class="facts">` : ""; };
   function cityPanel(state, id) {
     if (!U.sim.hasRights(state, id)) return gatewayPanel(state, id);
     const c = city(id), tier = U.TIERS[c.tier], sp = U.SPECIALTIES[c.specialty];
@@ -259,7 +267,7 @@ window.UpShip = window.UpShip || {};
       <dl>
         ${row("Size", tier.name)}
         ${row("Specialty", `${sp.name}. ${sp.note}.`)}
-        ${row("Passenger demand", demand)}
+        ${row("Passenger demand", demand)}${liftRow(state, id)}
         ${row("First-class travelers", Math.round(U.passengers.FIRST_SHARE[c.specialty] * 100) + "%")}
         ${row("Your routes", routes.length ? routes.map(routeLink).join("<br>") : "None")}
         ${row("Moored here now", here.length ? here.map(shipLink).join(", ") : "None")}

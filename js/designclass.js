@@ -25,6 +25,7 @@ window.UpShip = window.UpShip || {};
       shedSize: f.shed ? f.shed.n : 3, liner: f.L > 200, gas: d.gas || "hydrogen",
       firstShare: berths && f.passengers ? first / f.passengers : 0, seats, fuelCal: FUEL_COST,
       hasBar: !!(f.plan && f.plan.roomKinds && f.plan.roomKinds.has("bar")),
+      liftSpare: Math.max(0, Math.min(0.1, (f.payloadRoom - f.demand) / Math.max(1, f.gross))),          // lift in hand, against heat and height
       cargoMix: f.cargoMix ? Object.fromEntries(Object.entries(f.cargoMix).map(([k0, v]) => [k0, Math.round(v * lift * 10) / 10])) : null, crewQ: f.crewQ, comfort: f.planned && f.comfort != null ? f.comfort : 55,
       baked: U.research.builtWith(state), names: [entry.name], requires: [],
       design: d, rev: 1, revs: { 1: JSON.parse(JSON.stringify(d.livery)) }, art: artKey(id, 1)

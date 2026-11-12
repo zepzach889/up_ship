@@ -13,6 +13,10 @@ window.UpShip = window.UpShip || {};
   });
   // Air services, loosely following history: [a, b, year, month, operator].
   const AIR = [
+    // The Middle East and Africa: the RAF's desert mail, Aéropostale, Imperial Airways, and the Italian line to Tripoli.
+    ["cairo", "baghdad", 1921, 1, "the Royal Air Force desert air mail"], ["casablanca", "dakar", 1925, 2, "Aéropostale"], ["baghdad", "basra", 1927, 1, "Imperial Airways"],
+    ["rome", "tripoli", 1928, 2, "an Italian air company"], ["basra", "karachi", 1929, 1, "Imperial Airways"], ["cairo", "khartoum", 1931, 1, "Imperial Airways"],
+    ["khartoum", "nairobi", 1931, 1, "Imperial Airways"], ["nairobi", "johannesburg", 1932, 1, "Imperial Airways"], ["johannesburg", "capetown", 1932, 1, "Imperial Airways"],
     // North America: the Post Office's air mail first, then the airlines.
     ["newyork", "washington", 1919, 2, "the Post Office air mail"], ["newyork", "chicago", 1920, 2, "the Post Office air mail"], ["chicago", "sanfrancisco", 1921, 1, "the Post Office air mail"],
     ["chicago", "dallas", 1926, 2, "National Air Transport"], ["seattle", "sanfrancisco", 1926, 2, "Pacific Air Transport"], ["newyork", "boston", 1927, 3, "Colonial Air Transport"],
@@ -23,6 +27,10 @@ window.UpShip = window.UpShip || {};
     ["milan", "rome", 1929, 9, "an Italian air company"], ["london", "cologne", 1930, 4, "Imperial Airways"], ["marseille", "algiers", 1932, 5, "Air France"],
     ["zurich", "milan", 1932, 6, "Swissair"], ["copenhagen", "stockholm", 1933, 5, "an air company"]];
   const EVENTS = [
+    { year: 1921, month: 6, text: "royal air force opens desert air mail cairo to baghdad stop air competition on the route to india stop" },
+    { year: 1925, month: 6, text: "aeropostale reaches dakar from casablanca stop air competition down the west african coast stop" },
+    { year: 1929, month: 4, text: "imperial airways opens through service cairo to karachi stop air competition on the imperial route stop" },
+    { year: 1932, month: 4, text: "imperial airways reaches cape town stop air competition the length of africa stop" },
     { year: 1920, month: 1, text: "prohibition begins in america stop ship bars are closed on american routes stop" },
     { year: 1933, month: 12, text: "prohibition repealed in america stop ship bars reopen on american routes stop" },
     { year: 1920, month: 9, text: "the post office opens its transcontinental air mail new york to san francisco stop air competition across america stop" },
