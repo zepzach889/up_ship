@@ -234,18 +234,21 @@ window.UpShip = window.UpShip || {};
   // A gateway to the wider world: what lies beyond, how far, and the survey flight that opens it.
   function gatewayPanel(state, id) {
     const c = city(id), g = state.gateways && state.gateways[id], open = U.sim.gatewayOpen(state, id), now = U.sim.H(state.tick);
-    const ready = state.ships.filter(x => x.deliveryTick <= state.tick && !x.lost && !x.overhaulUntil);
-    const rows = ready.map(x => { const km = U.sim.distanceKm(x.location, id), rs = U.research.stats(state, x), days = Math.round((km / rs.speedKmh * 2 + 48) / 24);
-      return { x, km, days, ok: rs.rangeKm >= km, range: rs.rangeKm }; }).sort((a, b) => a.km - b.km);
+    const ready = state.ships.filter(x => x.deliveryTick <= state.tick && !x.lost && !x.overhaulUntil && !x.orders);
+    const surveying = state.ships.find(x => x.orders && x.orders.kind === "survey" && x.orders.to === id);
+    // Each free ship: how far by the hops she would fly, and whether she can get there at all.
+    const rows = ready.map(x => { const km = U.sim.distanceKm(x.location, id), rs = U.research.stats(state, x), via = U.sim.hopPlan(state, x, x.location, id).dist[id];
+      return { x, km: via ?? km, hops: via != null && rs.rangeKm < km, days: Math.max(1, Math.round((via ?? km) / rs.speedKmh / 24 + 0.5)), ok: via != null, direct: rs.rangeKm >= km, range: rs.rangeKm }; }).sort((a, b) => a.km - b.km);
     return `<h2>${esc(c.name)}</h2><p class="sub">${c.empire ? `${esc(c.country)}, under ${U.sim.POWERS[c.empire].rule}` : !c.via && !c.station ? `${esc(c.country)}: a foreign country for your company` : c.station ? `${esc(c.country)}: a refuelling station. Few passengers of its own, but its mast and fuel let ships cross the ocean in shorter legs` : c.region === "na" ? `${esc(c.country)}, ${c.via}` : `Gateway to the wider world, ${c.via}`}. Your ships can land here once a survey flight has won landing rights.</p>${liftText(state, id) ? `<p class="note">${liftText(state, id)}</p>` : ""}
       ${open ? `<p class="status">Open. Landing rights won by ${esc(g.by)}'s survey flight; routes may end here.</p>`
         : g ? `<p class="status">${esc(g.by)} is flying the survey. Landing rights follow on ${shortDate(U.sim.dateOf((g.openAt) / 12))}.</p>`
+        : surveying ? `<p class="status">${esc(surveying.name)} is on her way to survey ${esc(c.name)}, now near ${esc(city(surveying.location).name)}. Landing rights are granted when she arrives.</p>`
         : U.sim.needsPermit(state, id) ? (state.permits && state.permits[U.sim.permitKey(id)]
           ? `<p class="status">Your application to ${U.sim.permitName(U.sim.permitKey(id))} is being considered; a permit is expected about ${shortDate(U.sim.dateOf(state.permits[U.sim.permitKey(id)].grantAt / 12))}.</p>`
           : `<p>A foreign line needs a permit from ${U.sim.permitName(U.sim.permitKey(id))} before its first survey here. The application costs £3,000 and takes five to eight weeks; after that, surveys win landing rights city by city.</p>
             <div class="btn-row"><button class="btn" data-permit="${U.sim.permitKey(id)}">Apply for a permit</button></div>`)
-        : `<p>Before routes can end here, a survey flight must prove the way and win landing rights. The ship leaves her route for the round trip and two days on the ground; the flight costs her fuel and about £4,000 in fees.</p>
-          <ul class="plain-list">${rows.map(r => `<li>${esc(r.x.name)}: ${Math.round(r.km).toLocaleString("en-GB")} km from ${esc(city(r.x.location).name)}, ${r.ok ? `about ${r.days} days away <button class="btn-quiet" data-survey="${id}:${r.x.id}">Send her</button> <button class="btn-quiet" data-survey-helm="${id}:${r.x.id}">Take the helm</button>` : `<span class="small">out of range (${r.range.toLocaleString("en-GB")} km)</span>`}</li>`).join("") || `<li class="note">No ship is free.</li>`}</ul>`}`;
+        : `<p>Before routes can end here, a survey flight must prove the way and win landing rights. The ship you send flies there, in hops through places she can land if it is beyond her range, and lies at ${esc(c.name)} once the rights are won. The survey costs about £4,000 in fees.</p>
+          <ul class="plain-list">${rows.map(r => `<li>${esc(r.x.name)}: ${Math.round(r.km).toLocaleString("en-GB")} km from ${esc(city(r.x.location).name)}, ${r.ok ? `${r.hops ? "by hops, " : ""}about ${r.days} ${r.days === 1 ? "day" : "days"} away <button class="btn-quiet" data-survey="${id}:${r.x.id}">Send her</button>${r.direct ? ` <button class="btn-quiet" data-survey-helm="${id}:${r.x.id}">Take the helm</button>` : ""}` : `<span class="small">cannot reach it: no chain of landing places within her ${r.range.toLocaleString("en-GB")} km range</span>`}</li>`).join("") || `<li class="note">No ship is free.</li>`}</ul>`}`;
   }
   // Heat and height: what a ship can lift here at the worst time of year, and now.
   function liftText(state, id) {
@@ -314,9 +317,16 @@ window.UpShip = window.UpShip || {};
     if (pos.flying) {
       const arrive = U.sim.dateAtHour(pos.leg.start + pos.leg.hours);
       const sameDay = arrive.getUTCDate() === U.sim.dateAtHour(pos.hour).getUTCDate();
-      return `${pos.leg.ferry ? "Positioning flight" : "Flying"} to ${c(pos.leg.to)}${pos.leg.note ? `, ${pos.leg.note}` : ""}, arriving about ${clock(arrive)}${sameDay ? "" : " " + shortDate(arrive)}`;
+      const o = ship.orders, bound = o && o.to !== pos.leg.to ? `, bound for ${c(o.to)}` : "";
+      const kind = !o ? (pos.leg.ferry ? "Positioning flight" : "Flying") : o.kind === "survey" ? "Survey flight" : o.kind === "charter" ? "Flying to her charter," : o.kind === "record" ? (o.stage === "run" ? "Record run" : "Flying to start a record attempt,") : "Under orders,";
+      return `${kind} to ${c(pos.leg.to)}${bound}${pos.leg.note ? `, ${pos.leg.note}` : ""}, arriving about ${clock(arrive)}${sameDay ? "" : " " + shortDate(arrive)}`;
     }
     if (ship.overhaulUntil && pos.hour < ship.overhaulUntil) return `In overhaul at ${c(pos.at)} until ${shortDate(U.sim.dateAtHour(ship.overhaulUntil))}`;
+    if (ship.orders) {
+      const o = ship.orders;
+      if (o.kind === "charter" && o.until != null) return `On charter for ${o.who} at ${c(pos.at)} until ${shortDate(U.sim.dateAtHour(o.until))}`;
+      return `At ${c(pos.at)}, ${o.kind === "survey" ? "on a survey flight to" : o.kind === "charter" ? "on her way to a charter at" : o.kind === "record" ? "on a record attempt, bound for" : "under orders for"} ${c(o.to)}`;
+    }
     if (pos.upcoming) return `Moored at ${c(pos.at)}, departing ${clock(U.sim.dateAtHour(pos.upcoming.start))} for ${c(pos.upcoming.to)}`;
     if (ship.readyHour > pos.hour + 12 && ship.routeId) return `Grounded for repairs at ${c(pos.at)} until ${shortDate(U.sim.dateAtHour(ship.readyHour))}`;
     if (!ship.routeId) return `Waiting at ${c(pos.at)} with no route`;
@@ -382,6 +392,7 @@ window.UpShip = window.UpShip || {};
         ${total ? `<p class="small">Planned: ${money(total)} at the next overhaul. Use "Overhaul at next chance" to fit them sooner.</p>` : ""}` : ""}`;
   }
 
+  const sendTo = {};          // where each ship's "Send her to a city" is pointing
   function shipPanel(state, id) {
     const ship = state.ships.find(s => s.id === id);
     if (!ship) return null;
@@ -410,6 +421,25 @@ window.UpShip = window.UpShip || {};
       routeBlock = `<dl>${row("Route", route ? routeLink(route) : "None")}</dl>
         <button class="btn" data-act="pick">${route ? "Change route" : "Assign a route"}</button>
         ${building && route ? `<p class="note">It will fly this route as soon as it is delivered.</p>` : ""}`;
+    }
+    // Orders, and sending her somewhere without a route.
+    if (picking !== ship.id && !building) {
+      const o = ship.orders, nm = id => esc(city(id).name);
+      const what = !o ? "" : o.kind === "survey" ? `On a survey flight to ${nm(o.to)}.` : o.kind === "send" ? `Under orders for ${nm(o.to)}.`
+        : o.kind === "charter" ? (o.until != null ? `On charter for ${esc(o.who)} at ${nm(o.to)} until ${shortDate(U.sim.dateAtHour(o.until))}.` : `Flying to ${nm(o.to)} for her charter for ${esc(o.who)}.`)
+        : o.stage === "toStart" ? `Flying to ${nm(o.a)} to start a record attempt to ${nm(o.b)}.` : `On her record run from ${nm(o.a)} to ${nm(o.b)}.`;
+      if (o) routeBlock += `<p class="status">${what}${route && o.kind !== "send" ? " She rejoins her route afterwards." : ""}</p>${o.until == null ? `<button class="btn-quiet" data-cancel-orders="${ship.id}">Cancel her orders</button>` : ""}`;
+      else if (!ship.overhaulUntil) {
+        const plan = U.sim.hopPlan(state, ship, ship.location);
+        const places = Object.keys(plan.dist).filter(k => k !== ship.location && U.facilities.canLand(state, k)).sort((a, b) => plan.dist[a] - plan.dist[b]);
+        if (places.length) {
+          if (!places.includes(sendTo[ship.id])) sendTo[ship.id] = places[0];
+          routeBlock += `<div class="send-to"><label class="field-label" for="send-to">Send her to a city</label>
+            <div class="btn-row"><select id="send-to" data-send-to="${ship.id}">${places.map(k => `<option value="${k}" ${sendTo[ship.id] === k ? "selected" : ""}>${nm(k)}, ${Math.round(plan.dist[k]).toLocaleString("en-GB")} km${plan.first[k] !== k ? " by hops" : ""}</option>`).join("")}</select>
+            <button class="btn-quiet" data-send-ship="${ship.id}">Send her</button></div>
+            <p class="note">She flies there in hops within her range and waits${route ? ", leaving her route" : ""}. Useful for placing a ship before a survey or a new route.</p></div>`;
+        }
+      }
     }
     const pos = building ? null : U.map.shipPosition(ship, U.progress || 0);
     const leg = pos && pos.flying ? pos.leg : null, st = ship.stats, profit = st.revenue - st.costs;
@@ -1016,7 +1046,7 @@ window.UpShip = window.UpShip || {};
     const a = city(o.a || o.b || "berlin"), b = o.b ? city(o.b) : null;
     if (o.kind === "charter") return `<h4>Charter: ${esc(o.who)}</h4><p>${esc(o.what[0].toUpperCase() + o.what.slice(1))}. ${o.days} days for ${money(o.pay)}, paid on acceptance. The ship that can cover ${o.range.toLocaleString("en-GB")} km and earns least on her route goes, and rejoins it afterwards.</p>`;
     if (o.kind === "record") { const r = (U.state.records || {})[o.a + ">" + o.b]; return `<h4>Record attempt: ${a.name} to ${b.name}</h4><p>${km(o.km)}. The record stands at ${r ? r.hours + " hours, set by " + esc(r.by) : "nothing yet"}. Beat it for ${money(o.prize)} and standing. Your fastest ship with the range flies it.</p>`; }
-    if (o.kind === "goal") return `<h4>Government offer: a service to ${city(o.city).name}</h4><p>Open a regular service to ${city(o.city).name}, with a ship on the route, within two years of accepting. ${money(o.pay)} and standing on success; nothing is lost if it lapses.</p>`;
+    if (o.kind === "goal") return `<h4>${o.scheme ? (o.city === "karachi" ? "The Imperial Airship Scheme" : "Government scheme") : "Government offer"}: a service to ${city(o.city).name}</h4><p>Open a regular service to ${city(o.city).name}, with a ship on the route, within ${o.years === 5 ? "five" : "two"} years of accepting. ${money(o.pay)} and standing on success; nothing is lost if it lapses.</p>`;
     if (o.kind === "mail" && o.diplomatic) return `<h4>Diplomatic mail: ${a.name} to ${b.name}</h4>
       <p>${o.perWeek} flights a week each way for ${o.years} years, ${money(o.monthly)} a month from ${esc(o.authority)}. Carrying another government's pouches costs a little standing.</p>`;
     if (o.kind === "mail") return `<h4>Mail contract: ${a.name} to ${b.name}</h4>
@@ -1027,9 +1057,18 @@ window.UpShip = window.UpShip || {};
     return `<h4>Construction grant</h4><p>The government pays ${Math.round(o.share * 100)}% of your next national-built ship (not war-surplus) ordered within ${U.ECONOMY.buildGrantMonths} months, in exchange for keeping it registered at home.</p>`;
   }
 
+  const offerShip = {};          // the ship chosen for each charter or record offer
   function contractsPanel(state) {
     const now = U.sim.H(state.tick);
-    const offers = state.offers.map(o => `<section class="card offer">${offerText(o)}
+    // For charters and record attempts: which free ship goes.
+    const shipPick = o => {
+      if (o.kind !== "charter" && o.kind !== "record") return "";
+      const ok = U.contracts.eligible(state, o);
+      if (!ok.length) return `<p class="note">No free ship has the ${(o.kind === "record" ? o.km : o.range).toLocaleString("en-GB")} km of range this needs.</p>`;
+      if (!ok.some(x => x.id === offerShip[o.id])) offerShip[o.id] = ok[0].id;
+      return `<label class="field-label" for="os-${o.id}">Ship to send</label><select id="os-${o.id}" data-offer-ship="${o.id}">${ok.map(x => `<option value="${x.id}" ${offerShip[o.id] === x.id ? "selected" : ""}>${esc(x.name)}, ${esc(U.SHIP_CLASSES[x.classId].name)}, at ${esc(city(x.location).name)}</option>`).join("")}</select>`;
+    };
+    const offers = state.offers.map(o => `<section class="card offer">${offerText(o)}${shipPick(o)}
       <p class="note">Open until ${shortDate(U.sim.dateAtHour(o.expiresHour))}.</p>
       <div class="btn-row"><button class="btn-quiet" data-decline="${o.id}">Decline</button>${o.kind === "record"
         ? `<button class="btn" data-record-helm="${o.id}" title="Plot the course and make the calls yourself">Take the helm</button><button class="btn-quiet" data-record="${o.id}:steady" title="No extra risk">Fly it steady</button><button class="btn-quiet" data-record="${o.id}:hard" title="Faster, some risk of strain">Push hard</button><button class="btn" data-record="${o.id}:allout" title="Fastest, real risk of damage">All out</button>`
@@ -1217,14 +1256,16 @@ window.UpShip = window.UpShip || {};
       picking = null; h.changed(); render(); return;
     }
     if (b.dataset.accept) {
-      const o = s.offers.find(x => x.id === b.dataset.accept), res = U.contracts.accept(s, b.dataset.accept);
-      if (o && o.kind === "charter") notify(res ? `${res.ship.name} leaves her route for ${o.days} days on charter for ${o.who}. ${money(o.pay)} paid.` : `No ship has the ${o.range.toLocaleString("en-GB")} km of range this charter needs.`);
+      const o = s.offers.find(x => x.id === b.dataset.accept), res = U.contracts.accept(s, b.dataset.accept, offerShip[b.dataset.accept]);
+      if (o && o.kind === "charter") notify(res ? `${res.ship.name} ${res.at === res.ship.location ? "begins" : `flies to ${city(res.at).name} for`} her ${o.days}-day charter for ${o.who}. ${money(o.pay)} paid.` : `No free ship has the ${o.range.toLocaleString("en-GB")} km of range this charter needs.`);
       h.changed(); render(); return;
     }
     if (b.dataset.recordHelm) {
-      const oid = b.dataset.recordHelm, o = s.offers.find(x => x.id === oid), ship = U.contracts.recordShip(s, oid);
+      const oid = b.dataset.recordHelm, o = s.offers.find(x => x.id === oid);
       if (!o) { notify("That offer has gone."); return; }
-      if (!ship) { notify("No ship has the range for this run."); return; }
+      const ship = U.contracts.eligible(s, o).find(x => x.id === offerShip[oid]) || U.contracts.recordShip(s, oid);
+      if (!ship) { notify("No free ship has the range for this run."); return; }
+      if (ship.location !== o.a) { notify(`To take the helm, ${ship.name} must be at ${city(o.a).name}: send her there first from her panel, or let her captain fly the attempt.`); return; }
       const rec = s.records[o.a + ">" + o.b].hours;
       U.helm.start({ title: `Record attempt: ${city(o.a).name} to ${city(o.b).name}`, ship, from: o.a, to: o.b, record: rec, cancelText: "Leave it for now",
         judge: hours => hours < rec ? { headline: `A new record: ${hours} hours.`, text: `${ship.name} beat the record of ${rec} hours. The prize of ${money(o.prize)} is yours.` }
@@ -1235,15 +1276,21 @@ window.UpShip = window.UpShip || {};
     if (b.dataset.surveyHelm) {
       const [gid, sid] = b.dataset.surveyHelm.split(":"), ship = s.ships.find(x => x.id === sid);
       U.helm.start({ title: `Survey flight to ${city(gid).name}`, ship, from: ship.location, to: gid, cancelText: "Not now",
-        judge: hours => ({ headline: `Arrived over ${city(gid).name} in ${hours} hours.`, text: "The survey is under way; landing rights follow when she is home again." }),
+        judge: hours => ({ headline: `Arrived over ${city(gid).name} in ${hours} hours.`, text: `She lies at ${city(gid).name}; landing rights are granted once the survey is done.` }),
         onFinish: r => { const why = U.sim.surveyFlight(s, gid, sid, r.hours, r.damage); if (why) notify(why); h.changed(); render(); } });
       return;
     }
     if (b.dataset.record) {
-      const [oid, push] = b.dataset.record.split(":"), r = U.contracts.attempt(s, oid, push);
-      notify(!r ? "That offer has gone." : r.none ? "No ship has the range for this run." : `${r.ship.name} sets out on the record attempt. The result comes by telegram.`);
+      const [oid, push] = b.dataset.record.split(":"), o = s.offers.find(x => x.id === oid), r = U.contracts.attempt(s, oid, push, offerShip[oid]);
+      notify(!r ? "That offer has gone." : r.none ? "No free ship has the range for this run." : r.unreachable ? `${r.ship.name} cannot reach ${city(o.a).name} to start the run.`
+        : r.atStart ? `${r.ship.name} sets out on the record attempt. The result comes when she lands.` : `${r.ship.name} flies to ${city(o.a).name} to start the record attempt. The result comes when she lands at ${city(o.b).name}.`);
       h.changed(); render(); return;
     }
+    if (b.dataset.sendShip) {
+      const sid = b.dataset.sendShip, ship = s.ships.find(x => x.id === sid), why = U.sim.sendShip(s, sid, sendTo[sid]);
+      notify(why || `${ship.name} is ordered to ${city(sendTo[sid]).name}.`); h.changed(); render(); return;
+    }
+    if (b.dataset.cancelOrders) { U.sim.cancelOrders(s, b.dataset.cancelOrders); notify("Her orders are cancelled."); h.changed(); render(); return; }
     if (b.dataset.permit) { const why = U.sim.applyPermit(s, b.dataset.permit); notify(why || "Application sent. A reply is expected in five to eight weeks."); h.changed(); render(); return; }
     if (b.dataset.survey) {
       const [gid, sid] = b.dataset.survey.split(":"), why = U.sim.surveyFlight(s, gid, sid);
@@ -1367,6 +1414,8 @@ window.UpShip = window.UpShip || {};
   }
   // Refit checkboxes in a ship's panel.
   function onPanelChange(e) {
+    if (e.target.dataset && e.target.dataset.offerShip) { offerShip[e.target.dataset.offerShip] = e.target.value; return; }
+    if (e.target.dataset && e.target.dataset.sendTo) { sendTo[e.target.dataset.sendTo] = e.target.value; return; }
     const all = e.target.closest("[data-refit-all]");
     if (all) {
       const tech = all.dataset.refitAll;
@@ -1430,8 +1479,10 @@ window.UpShip = window.UpShip || {};
     else if (n === 1) text = `${city(draft[0]).name}. Click the next city.`;
     else {
       const longest = U.sim.longestLeg(draft, circuit);
-      const cat = U.sim.catalog(U.state);
-      const fits = cat.filter(c => U.SHIP_CLASSES[c].rangeKm >= longest).map(c => U.SHIP_CLASSES[c].name);
+      // Every class the company can order or already flies: the builders' classes, its own designs, and its ships at their researched range.
+      const st0 = U.state, cat = [...new Set([...U.sim.catalog(st0), ...Object.keys(st0.designClasses || {}), ...st0.ships.map(x => x.classId)])].filter(c => U.SHIP_CLASSES[c]);
+      const rangeOf = c => Math.max(U.SHIP_CLASSES[c].rangeKm || 0, ...st0.ships.filter(x => x.classId === c).map(x => U.research.stats(st0, x).rangeKm));
+      const fits = cat.filter(c => rangeOf(c) >= longest).map(c => U.SHIP_CLASSES[c].name);
       text = `${U.sim.routeName(draft, circuit)}. Longest leg ${km(longest)}. ` +
         (fits.length === cat.length ? "Every ship class can fly it." : fits.length ? `Only the ${fits.join(" and ")} can fly it.` : "No ship class has the range for it.");
       if (n < max) text += ` Up to ${max - n} more.`;
@@ -1540,6 +1591,6 @@ window.UpShip = window.UpShip || {};
     $("#panel-body").querySelector("[data-act=bankrupt-new]").addEventListener("click", () => { U.sim.clearSave(); location.reload(); });
   }
 
-  U.ui = { setSkipping, init, showCompany, showTelegram, showBankrupt, dismissAll, openTelegramCount, openMajorCount,
+  U.ui = { shipStatus, setSkipping, init, showCompany, showTelegram, showBankrupt, dismissAll, openTelegramCount, openMajorCount,
     onTelegramClosed: fn => { onTelegramClosed = fn; }, updateBar, select, render, notify, isDrawing: () => !!draft, rerenderIf: types => { if (selection && types.includes(selection.type) && !editing) render(); } };
 })(window.UpShip);

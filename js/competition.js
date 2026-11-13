@@ -27,6 +27,8 @@ window.UpShip = window.UpShip || {};
     ["milan", "rome", 1929, 9, "an Italian air company"], ["london", "cologne", 1930, 4, "Imperial Airways"], ["marseille", "algiers", 1932, 5, "Air France"],
     ["zurich", "milan", 1932, 6, "Swissair"], ["copenhagen", "stockholm", 1933, 5, "an air company"]];
   const EVENTS = [
+    { year: 1926, month: 1, text: "air ministry completes its mooring mast at ismailia on the suez canal stop a public mast on the imperial route stop" },
+    { year: 1927, month: 1, text: "air ministry completes its mooring mast at karachi stop a public mast at the gate of india stop" },
     { year: 1921, month: 6, text: "royal air force opens desert air mail cairo to baghdad stop air competition on the route to india stop" },
     { year: 1925, month: 6, text: "aeropostale reaches dakar from casablanca stop air competition down the west african coast stop" },
     { year: 1929, month: 4, text: "imperial airways opens through service cairo to karachi stop air competition on the imperial route stop" },

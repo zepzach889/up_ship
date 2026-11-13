@@ -205,6 +205,7 @@ window.UpShip = window.UpShip || {};
     if (longest > c.rangeKm) return `A leg of ${Math.round(longest)} km is beyond its ${c.rangeKm.toLocaleString("en-GB")} km range`;
     if (ship.gas === "helium" && state.company.nation !== "usa" && route.stops.some(id => U.cityById[id].country === "United States"))
       return "America sells no helium to foreign lines: American routes need a hydrogen ship";
+    { const p = hopPlan(state, ship, ship.location); if (!route.stops.some(id => id === ship.location || p.dist[id] != null)) return cannotReach(ship, "this route", p.range) + ": send her nearer, or build masts on the way"; }
     const closed = route.stops.find(id => !hasRights(state, id));
     if (closed) return `No landing rights at ${U.cityById[closed].name} yet: send a survey flight first`;
     return null;
@@ -292,12 +293,31 @@ window.UpShip = window.UpShip || {};
   }
 
   // Flying ------------------------------------------------------------------------------
+  // Finding the way: a ship off her route flies in hops, each within her range, through places she can land.
+  // Returns, for every place she can reach from where she is, the distance by the shortest chain and the first hop on it.
+  function hopPlan(state, ship, from, freeEnd) {
+    const range = U.research.stats(state, ship).rangeKm, nodes = U.CITIES.map(c => c.id).filter(id => id === from || id === freeEnd || U.facilities.canLand(state, id));
+    const dist = {}, first = {}, done = new Set(); dist[from] = 0;
+    for (;;) {
+      let u = null; for (const id of nodes) if (!done.has(id) && dist[id] != null && (u == null || dist[id] < dist[u])) u = id;
+      if (u == null) break; done.add(u);
+      if (u === freeEnd) continue;                              // a place she may reach but not fly on from (a survey's end)
+      for (const v of nodes) {
+        if (done.has(v)) continue; const d = distanceKm(u, v); if (d > range) continue;
+        if (dist[v] == null || dist[u] + d < dist[v]) { dist[v] = dist[u] + d; first[v] = u === from ? v : first[u]; }
+      }
+    }
+    return { dist, first, range };
+  }
+  const hopToward = (state, ship, to, freeEnd) => { const p = hopPlan(state, ship, ship.location, freeEnd ? to : null); return p.dist[to] != null ? p.first[to] : null; };
+  const cannotReach = (ship, name, range) => `${ship.name} cannot reach ${name}: no chain of landing places within her ${Math.round(range).toLocaleString("en-GB")} km range`;
   function nextStop(state, ship, route) {
     const at = route.stops.indexOf(ship.location);
     if (at < 0) {
-      let best = route.stops[0], bd = Infinity;
-      for (const s of route.stops) { const d = distanceKm(ship.location, s); if (d < bd) { bd = d; best = s; } }
-      return { to: best, ferry: true };
+      // Off her route: by hops to whichever stop on it is nearest by the way she can actually fly.
+      const p = hopPlan(state, ship, ship.location);
+      let best = null; for (const s of route.stops) if (p.dist[s] != null && (best == null || p.dist[s] < p.dist[best])) best = s;
+      return best ? { to: p.first[best], ferry: true } : { stuck: true, range: p.range };
     }
     ship.stop = at;
     if (route.circuit && route.stops.length > 2) { ship.dir = 1; return { to: route.stops[(at + 1) % route.stops.length], ferry: false }; }
@@ -445,6 +465,16 @@ window.UpShip = window.UpShip || {};
       const t = Math.max(ship.readyHour, T0);
       if (t >= T1 || ship.overhaulUntil) return;
       let next;
+      // Orders (a survey, a charter, a record attempt, or simply being sent somewhere) come first: she flies there in real hops.
+      if (ship.orders) {
+        const o = ship.orders;
+        if (o.until != null) { if (t < o.until) { ship.readyHour = o.until; return; } endOrders(state, ship, t); continue; }
+        if (ship.location === o.to) { arriveOrders(state, ship, t); continue; }
+        const hop = hopToward(state, ship, o.to, o.kind === "survey");
+        if (!hop) { telegram(state, t, `${cannotReach(ship, U.cityById[o.to].name, U.research.stats(state, ship).rangeKm)} stop her orders are cancelled stop`, true, { type: "ship", id: ship.id }); ship.orders = null; continue; }
+        if (!fly(state, ship, { to: hop, ferry: true }, t)) return;
+        continue;
+      }
       const shed = ship.condition < ship.overhaulAt || ship.overhaulNow ? U.facilities.nearestShed(state, ship) : null;
       if (shed) {
         if (ship.location === shed) { startOverhaul(state, ship, t); continue; }
@@ -461,6 +491,11 @@ window.UpShip = window.UpShip || {};
         if (!route) { ship.readyHour = t; return; }
         if (!ship.captainId) { ship.readyHour = T1; return; }        // no captain, no flight
         next = nextStop(state, ship, route);
+        if (next.stuck) {
+          const month = Math.floor(t / 720);
+          if (ship.stuckWarned !== month) { ship.stuckWarned = month; telegram(state, t, `${cannotReach(ship, "her route", next.range)} stop send her nearer or build masts on the way stop`, true, { type: "ship", id: ship.id }); }
+          ship.readyHour = T1; return;
+        }
         // A ship won't leave nearly empty: it waits for a fair load, but never more than about half a day.
         if (!next.ferry && !worthLeaving(state, ship, route, next, t)) { ship.readyHour = T1; return; }
       }
@@ -468,6 +503,38 @@ window.UpShip = window.UpShip || {};
     }
   }
 
+  // Arriving where her orders sent her.
+  function arriveOrders(state, ship, t) {
+    const o = ship.orders, name = U.cityById[o.to].name;
+    if (o.kind === "survey") {
+      state.gateways = state.gateways || {}; state.gateways[o.to] = { openAt: t, by: ship.name };
+      telegram(state, t, `survey flight to ${name} complete stop ${ship.name} lies at ${name} stop landing rights granted stop routes may now end there stop`, true, { type: "city", id: o.to });
+      ship.orders = null;
+    } else if (o.kind === "charter") {
+      o.until = t + o.days * 24; ship.readyHour = o.until;
+    } else if (o.kind === "record" && o.stage === "toStart") {
+      o.stage = "run"; o.to = o.b;
+    } else if (o.kind === "record") {
+      U.contracts.settleRecord(state, ship, o, t); ship.orders = null;
+    } else {
+      telegram(state, t, `${ship.name} arrives at ${name} as ordered stop`, false, { type: "ship", id: ship.id }); ship.orders = null;
+    }
+  }
+  function endOrders(state, ship, t) {
+    const o = ship.orders;
+    if (o.kind === "charter") telegram(state, t, `${ship.name} ends her charter for ${o.who} at ${U.cityById[o.to].name} stop back in service stop`, false, { type: "ship", id: ship.id });
+    ship.orders = null;
+  }
+  // Sending a ship somewhere without a route: she leaves any route she is on, and flies there in hops.
+  function sendShip(state, shipId, cityId) {
+    const ship = state.ships.find(s => s.id === shipId); if (!ship) return "No such ship.";
+    if (ship.location === cityId && !ship.orders) return `${ship.name} is already at ${U.cityById[cityId].name}.`;
+    if (!U.facilities.canLand(state, cityId)) return `${U.cityById[cityId].name} has no mast she can use.`;
+    if (!hopToward(state, ship, cityId)) return cannotReach(ship, U.cityById[cityId].name, U.research.stats(state, ship).rangeKm) + ".";
+    ship.routeId = null; ship.orders = { kind: "send", to: cityId };
+    return null;
+  }
+  function cancelOrders(state, shipId) { const ship = state.ships.find(s => s.id === shipId); if (ship && ship.orders && ship.orders.until == null) ship.orders = null; }
   function worthLeaving(state, ship, route, next, t) {
     if (U.crew.mods(state, ship).punctual) return true;              // a punctual captain leaves on time, full or not
     if (t - (ship.arrivedHour ?? -1e9) >= E().maxWaitHours) return true;
@@ -744,14 +811,20 @@ window.UpShip = window.UpShip || {};
     if (needsPermit(state, gatewayId)) return `A permit from ${permitName(permitKey(gatewayId))} comes first: apply in this city's panel.`;
     const ship = state.ships.find(s => s.id === shipId), g = U.cityById[gatewayId], c = cls(ship), now = H(state.tick);
     const km = distanceKm(ship.location, gatewayId), rs = U.research.stats(state, ship);
-    if (rs.rangeKm < km) return `${ship.name} cannot reach ${g.name}: ${Math.round(km)} km, against her range of ${rs.rangeKm} km.`;
-    const hours = flownHours ? Math.round(flownHours * 2 + 48) : Math.round(km / rs.speedKmh * 2 + 48), cost = Math.round(km * 2 * c.fuelPerKm * E().costFactor + 4000);
-    if (damage > 0) ship.condition = Math.max(0.2, ship.condition - damage);
-    addCost(state, ship, cost);
-    ship.readyHour = Math.max(ship.readyHour, now) + hours;
-    state.gateways = state.gateways || {};
-    state.gateways[gatewayId] = { openAt: now + hours, by: ship.name };
-    telegram(state, now + hours, `survey flight to ${g.name} complete stop ${ship.name} home again stop landing rights granted stop routes may now end at ${g.name} stop`, true, { type: "city", id: gatewayId });
+    if (flownHours) {
+      // Flown at the helm: the flight has been made; she lies at the city, and the rights are granted on arrival.
+      if (rs.rangeKm < km) return `${ship.name} cannot reach ${g.name}: ${Math.round(km)} km, against her range of ${rs.rangeKm} km.`;
+      if (damage > 0) ship.condition = Math.max(0.2, ship.condition - damage);
+      addCost(state, ship, 4000);
+      ship.routeId = null; ship.orders = null; ship.location = gatewayId; ship.readyHour = Math.max(ship.readyHour, now) + Math.round(flownHours + 24);
+      state.gateways = state.gateways || {}; state.gateways[gatewayId] = { openAt: ship.readyHour, by: ship.name };
+      telegram(state, ship.readyHour, `survey flight to ${g.name} complete stop ${ship.name} lies at ${g.name} stop landing rights granted stop routes may now end there stop`, true, { type: "city", id: gatewayId });
+      return null;
+    }
+    // Sent with her captain: she flies there in hops, each within her range, and the rights are granted when she arrives.
+    if (!hopToward(state, ship, gatewayId, true)) return cannotReach(ship, g.name, rs.rangeKm) + ".";
+    addCost(state, ship, 4000);
+    ship.orders = { kind: "survey", to: gatewayId };
     return null;
   }
   const gatewayOpen = (state, id) => { const g = state.gateways && state.gateways[id]; return !!g && g.openAt <= H(state.tick); };
@@ -760,7 +833,7 @@ window.UpShip = window.UpShip || {};
     try { for (const k of ["upship.save.v1", "upship.save.v2", "upship.save.v3", "upship.save.v4", "upship.save.v5", "upship.save.v6", "upship.save.v7", "upship.save.v8", "upship.save.v9", "upship.save.v10", SAVE_KEY]) localStorage.removeItem(k); } catch (e) {}
   }
 
-  U.sim = { liftAt, liftWorst, legLift, POWERS, authority, ownEmpire, permitKey, permitName, hasRights, oceanLeg, regionOf, homeRegion, needsPermit, applyPermit, REGION_GOV, surveyFlight, gatewayOpen, stopSaving, finishOverhaul, telegram, addGeneral, addIncome, nearestCity, distanceKm, fare, freightRate, dailyPassengers, dailyFreight, start, advance, beginTurn, dateOf, dateAtHour, H,
+  U.sim = { hopPlan, hopToward, sendShip, cancelOrders, liftAt, liftWorst, legLift, POWERS, authority, ownEmpire, permitKey, permitName, hasRights, oceanLeg, regionOf, homeRegion, needsPermit, applyPermit, REGION_GOV, surveyFlight, gatewayOpen, stopSaving, finishOverhaul, telegram, addGeneral, addIncome, nearestCity, distanceKm, fare, freightRate, dailyPassengers, dailyFreight, start, advance, beginTurn, dateOf, dateAtHour, H,
     routeSummary, save, load, clearSave, editRoute, routeOf, routeName, routeLegs, createRoute, deleteRoute, canAssign, assign,
     order, priceToOrder, HELIUM_FILL, policyGas, heliumFill, rename, suggestName, longestLeg, catalog, orderTerms, saleValue, canSell, sell, positionAt, ageYears, roman };
 })(window.UpShip);

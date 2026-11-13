@@ -1019,3 +1019,7 @@ body.skipping #map svg, body.skipping .traffic-canvas { filter: saturate(0.35) b
 #map svg.map { position: absolute; inset: 0; width: 100%; height: 100%; background: transparent; }
 
 body.skipping .globe-base { filter: saturate(0.35) brightness(0.72); transition: filter 0.5s; }
+
+/* Sending a ship to a city: the chooser and its button side by side. */
+.send-to { margin-top: 12px; padding-top: 10px; border-top: 1px dotted rgba(214,177,95,0.35); }
+.send-to select, select[data-offer-ship] { max-width: 100%; min-width: 0; flex: 1 1 auto; }

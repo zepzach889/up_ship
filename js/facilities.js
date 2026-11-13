@@ -28,7 +28,9 @@ window.UpShip = window.UpShip || {};
   const UPKEEP = 0.02;                                  // of building cost, per year
 
   // Public masts, terminals, and sheds stand at major and large cities and capitals.
-  const hasPublic = id => { const c = U.cityById[id]; return c.tier === "major" || c.tier === "large" || c.specialty === "capital" || !!c.station; };
+  // Public facilities: at great cities, capitals, and stations; and where a government built a mast, from the year it opened.
+  const hasPublic = id => { const c = U.cityById[id]; return c.tier === "major" || c.tier === "large" || c.specialty === "capital" || !!c.station
+    || !!(c.govMast && U.state && U.sim && U.sim.dateOf(U.state.tick).getUTCFullYear() >= c.govMast); };
 
   // Ship sizes: 1919 purpose-built ships are small; surplus, medium passenger, and freighter medium; liners large.
   function shipSize(classId) {

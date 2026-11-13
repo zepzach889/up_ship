@@ -60,7 +60,21 @@ window.UpShip = window.UpShip || {};
       drawings(c, c.rev);
     }
   }
+  // The builders' classes are drawn as the designs they are: the same drawing as the player's own ships, at the same scale,
+  // in the builders' paint (the company's colour, darker fins). Redrawn for each company, since the colour is the company's.
+  function builderDrawings(state) {
+    if (!state || !document.querySelector("#map svg defs")) return;
+    const paint = U.livery.builders(state);
+    for (const c of Object.values(U.SHIP_CLASSES)) {
+      if (!c.fromDesign || !c.design || c.designed) continue;
+      const key = artKey(c.id, 1);
+      for (const id of ["art-" + key, "art-top-" + key]) { const old = document.getElementById(id); if (old) old.remove(); }
+      c.rev = 1; c.revs = { 1: JSON.parse(JSON.stringify(paint)) }; c.art = key;
+      drawings(c, 1);
+    }
+  }
   function restore(state) {
+    builderDrawings(state);
     for (const c of Object.values(state.designClasses || {})) {
       // Classes made before the fuel figure was recalibrated burn as they should from now on.
       if (!c.fuelCal) { c.fuelPerKm = Math.round(c.fuelPerKm * FUEL_COST / 110 * 1000) / 1000; c.fuelCal = FUEL_COST; }
@@ -93,7 +107,7 @@ window.UpShip = window.UpShip || {};
       const src = US_FROM[id] || (id.endsWith("-usa") ? id.replace(/-usa$/, "-germany") : null), L = src && U.LINEUP && U.LINEUP[src];
       if (!L) continue;
       const k = US_SCALE[id] || { load: 1, price: 1 }, h = 0.85 * k.load, d = JSON.parse(JSON.stringify(L.design)); d.gas = "helium";
-      out[id] = { ...L, design: d, passengers: Math.floor(L.passengers * h), seats: Math.floor((L.seats || 0) * h), cargoTons: Math.round(L.cargoTons * h * 10) / 10,
+      out[id] = { ...L, usLoad: h, design: d, passengers: Math.floor(L.passengers * h), seats: Math.floor((L.seats || 0) * h), cargoTons: Math.round(L.cargoTons * h * 10) / 10,
         price: Math.round(L.price * 1.12 * k.price / 1000) * 1000 };
     }
     return out;
@@ -101,15 +115,23 @@ window.UpShip = window.UpShip || {};
   function applyLineup() {
     for (const [id, L] of Object.entries({ ...(U.LINEUP || {}), ...usLineup() })) {
       const c = U.SHIP_CLASSES[id]; if (!c) continue;
-      // A comfort floor by role: the builders' interiors predate the comfort rules built round the new rooms,
-      // and would otherwise score almost nothing. (To be replaced when their interiors are redrawn.)
-      const role = /greatliner/.test(id) ? 70 : /liner/.test(id) ? 60 : /medium|express/.test(id) ? 45 : 40;
-      Object.assign(c, { passengers: L.passengers, seats: L.seats, firstShare: L.firstShare, comfort: L.passengers ? Math.max(L.comfort || 0, role) : L.comfort, cargoTons: L.cargoTons,
+      Object.assign(c, { passengers: L.passengers, seats: L.seats, firstShare: L.firstShare, comfort: L.comfort, cargoTons: L.cargoTons,
         speedKmh: L.speedKmh, rangeKm: L.rangeKm, crew: L.crew, price: L.price, dailyCost: L.dailyCost, fuelPerKm: L.fuelPerKm,
         buildDays: L.buildDays, shedSize: L.shedSize, baked: L.baked, design: L.design, fromDesign: true });
       if (c.kind !== "surplus") c.kind = L.passengers ? "passenger" : "cargo";
+      // Passenger ships are fitted out by the present rules (a day ship or a liner, as the builders would), on a copy of the
+      // design, and take their passengers, seats, and comfort from that deck plan. American classes carry the helium share of it.
+      if (L.passengers) {
+        const d = JSON.parse(JSON.stringify(L.design));
+        try {
+          U.decks.standardLayout(d, L.seats > 0 ? "day" : "liner");
+          const st = U.decks.stats(d), k = L.usLoad || 1;
+          if (st.passengers) Object.assign(c, { design: d, passengers: Math.floor(st.passengers * k), seats: Math.floor((st.daySeats || 0) * k), comfort: st.comfort,
+            firstShare: st.passengers ? (st.first || 0) / st.passengers : 0, hasBar: !!(st.roomKinds && st.roomKinds.has("bar")) });
+        } catch (e) { console.warn("fit-out failed for", id, e); }
+      }
     }
   }
   applyLineup();
-  U.designClass = { ensure, restore, syncLivery, artKey, applyLineup };
+  U.designClass = { builderDrawings, ensure, restore, syncLivery, artKey, applyLineup };
 })(window.UpShip);

@@ -166,23 +166,33 @@ window.UpShip = window.UpShip || {};
     state.offers.push({ id: "o" + state.nextId++, kind: "record", a, b, km, prize, expiresHour: nowHour(state) + 21 * 24, warned: false });
     S().telegram(state, nowHour(state), `aero club prize offered stop fastest ${name(a)} to ${name(b)} stop record ${state.records[key].hours} hours stop ${gbp(prize)} to beat it stop see contracts stop`, false, { type: "contracts" });
   }
-  // The attempt: the fastest ship with the range goes; pushing harder beats the record more often but risks damage.
-  function attempt(state, offerId, push) {
+  // Ships free to take a mission: in service, not under overhaul or other orders, with the range it needs.
+  function eligible(state, o) {
+    const need = o.kind === "record" ? o.km : o.range || 0;
+    return state.ships.filter(s => s.deliveryTick <= state.tick && !s.lost && !s.overhaulUntil && !s.orders && U.research.stats(state, s).rangeKm >= need);
+  }
+  // The attempt: the chosen ship (or the fastest with the range) flies to the starting city, then makes the run.
+  // Pushing harder beats the record more often but risks damage. The result is settled when she lands.
+  function attempt(state, offerId, push, shipId) {
     const o = state.offers.find(x => x.id === offerId); if (!o) return null;
-    const P = PUSH[push], now = nowHour(state), key = o.a + ">" + o.b, rec = state.records[key];
-    const ok = state.ships.filter(s => s.deliveryTick <= state.tick && !s.lost && !s.overhaulUntil && U.research.stats(state, s).rangeKm >= o.km);
-    if (!ok.length) return { none: true };
+    const ok = eligible(state, o); if (!ok.length) return { none: true };
+    const ship = (shipId && ok.find(s => s.id === shipId)) || ok.sort((x, y) => U.research.stats(state, y).speedKmh - U.research.stats(state, x).speedKmh)[0];
+    if (ship.location !== o.a && !S().hopToward(state, ship, o.a)) return { unreachable: true, ship };
     state.offers = state.offers.filter(x => x !== o);
-    const ship = ok.sort((x, y) => U.research.stats(state, y).speedKmh - U.research.stats(state, x).speedKmh)[0];
+    const atStart = ship.location === o.a;
+    ship.orders = { kind: "record", stage: atStart ? "run" : "toStart", to: atStart ? o.b : o.a, a: o.a, b: o.b, km: o.km, prize: o.prize, push };
+    return { ship, pending: true, atStart };
+  }
+  function settleRecord(state, ship, o, t) {
+    const P = PUSH[o.push] || PUSH.steady, key = o.a + ">" + o.b, rec = state.records[key];
     const cap = state.captains.find(c => c.shipId === ship.id), tr = cap ? cap.traits : [];
     const skill = (tr.includes("weatherwise") ? 0.95 : 1) * (tr.includes("harddriving") ? 0.97 : 1) * (tr.includes("careful") ? 1.03 : 1);
     const hours = Math.round(o.km / (U.research.stats(state, ship).speedKmh * P.speed) * skill * (0.9 + Math.random() * 0.22) * 10) / 10;
     const won = hours < rec.hours, damaged = Math.random() < P.risk * (tr.includes("reckless") ? 1.5 : 1) * (tr.includes("careful") ? 0.5 : 1);
-    ship.readyHour = Math.max(ship.readyHour, now) + Math.ceil(hours * 2 + 24);
     if (damaged) ship.condition = Math.max(0.2, ship.condition - 0.3);
     if (won) { state.records[key] = { hours, by: ship.name }; S().addIncome(state, o.prize, "prizes"); }
     adjustStanding(state, won ? 6 : 1);
-    S().telegram(state, now + Math.ceil(hours), won ? `new record stop ${ship.name} flies ${name(o.a)} to ${name(o.b)} in ${hours} hours stop beating ${rec.hours} stop prize of ${gbp(o.prize)} won stop${damaged ? " ship strained and in need of repair stop" : ""}`
+    S().telegram(state, t, won ? `new record stop ${ship.name} flies ${name(o.a)} to ${name(o.b)} in ${hours} hours stop beating ${rec.hours} stop prize of ${gbp(o.prize)} won stop`
       : `record attempt fails stop ${ship.name} ${name(o.a)} to ${name(o.b)} in ${hours} hours against ${rec.hours} stop${damaged ? " ship strained and in need of repair stop" : " a creditable run stop"}`, true, { type: "ship", id: ship.id });
     return { ship, won, hours };
   }
@@ -197,14 +207,29 @@ window.UpShip = window.UpShip || {};
     const o = state.offers.find(x => x.id === offerId); if (!o) return null;
     state.offers = state.offers.filter(x => x !== o);
     const now = nowHour(state), key = o.a + ">" + o.b, rec = state.records[key], won = hours < rec.hours;
-    ship.readyHour = Math.max(ship.readyHour, now) + Math.ceil(hours * 2 + 24);
+    ship.location = o.b; ship.orders = null; ship.readyHour = Math.max(ship.readyHour, now) + Math.ceil(hours + 12);          // she lies at the far end
     if (damage > 0) ship.condition = Math.max(0.2, ship.condition - damage);
     if (won) { state.records[key] = { hours, by: ship.name }; S().addIncome(state, o.prize, "prizes"); }
     adjustStanding(state, won ? 7 : 1);
     return { won, prize: o.prize, rec: rec.hours };
   }
   // Government offers with conditions, about twice a year: opening a far destination, diplomatic mail, a grant for two ships.
-  const FAR = { germany: ["moscow", "constantinople", "cairo"], britain: ["cairo", "bombay", "newyork"], france: ["algiers", "tunis", "cairo"], italy: ["tunis", "cairo", "constantinople"] };
+  const FAR = { germany: ["moscow", "constantinople", "cairo", "newyork"], britain: ["cairo", "baghdad", "karachi", "bombay", "nairobi", "capetown", "newyork"],
+    france: ["algiers", "tunis", "casablanca", "dakar", "beirut"], italy: ["tripoli", "benghazi", "tunis", "constantinople"], usa: ["havana", "mexicocity", "montreal", "london"] };
+  // The great schemes, offered once each: a large sum for a regular service to the far end of an imperial route within five years.
+  const SCHEMES = { britain: { year: 1924, month: 9, city: "karachi", pay: 120000, who: "the Air Ministry", text: "air ministry announces the imperial airship scheme stop a regular service to karachi by way of egypt within five years" },
+    france: { year: 1925, month: 3, city: "dakar", pay: 80000, who: "the Ministry of Colonies", text: "ministry of colonies seeks an airship line to dakar within five years" },
+    italy: { year: 1926, month: 3, city: "tripoli", pay: 40000, who: "the Ministry of Colonies", text: "ministry of colonies seeks an airship line to tripoli within five years" } };
+  function maybeScheme(state) {
+    const sc = SCHEMES[state.company.nation]; if (!sc || state.schemeOffered) return;
+    const d = S().dateOf(state.tick), y = d.getUTCFullYear(), m = d.getUTCMonth();
+    if (y < sc.year || (y === sc.year && m < sc.month)) return;
+    state.schemeOffered = true;
+    if (state.routes.some(r => r.stops.includes(sc.city))) return;          // already flying there
+    const now = nowHour(state);
+    state.offers.push({ id: "o" + state.nextId++, kind: "goal", city: sc.city, pay: sc.pay, years: 5, scheme: true, authority: sc.who, expiresHour: now + 90 * 24, warned: false });
+    S().telegram(state, now, `${sc.text} stop ${gbp(sc.pay)} on success stop see contracts stop`, true, { type: "contracts" });
+  }
   const CAPITALS = ["london", "paris", "berlin", "rome", "moscow", "madrid", "vienna"];
   function maybeGovernment(state) {
     if (Math.random() > 0.17) return;
@@ -242,7 +267,7 @@ window.UpShip = window.UpShip || {};
     state.rep.standing = Math.max(0, Math.min(100, (+state.rep.standing || 50) + d));
   }
   function describe(o) {
-    if (o.kind === "goal") return `government offer stop open a regular service to ${name(o.city)} within two years stop ${gbp(o.pay)} on success stop`;
+    if (o.kind === "goal") return `government offer stop open a regular service to ${name(o.city)} within ${o.years === 5 ? "five" : "two"} years stop ${gbp(o.pay)} on success stop`;
     if (o.kind === "record") { const r = (U.state.records || {})[o.a + ">" + o.b]; return `aero club prize stop fastest ${name(o.a)} to ${name(o.b)} stop ${o.km.toLocaleString("en-GB")} km stop record ${r ? r.hours + " hours by " + r.by : "unclaimed"} stop ${gbp(o.prize)} to beat it stop`; }
     if (o.kind === "charter") return `charter for ${o.who} stop ${o.what} stop ${o.days} days for ${gbp(o.pay)} stop needs a ship with ${o.range.toLocaleString("en-GB")} km of range stop`;
     if (o.kind === "mail") return `mail contract ${name(o.a)} to ${name(o.b)} stop ${o.perWeek === 7 ? "daily" : o.perWeek + " times weekly"} each way stop ${gbp(o.monthly)} monthly for ${o.years} year${o.years > 1 ? "s" : ""} stop`;
@@ -251,7 +276,7 @@ window.UpShip = window.UpShip || {};
   }
 
   // Player choices ----------------------------------------------------------------------
-  function accept(state, offerId) {
+  function accept(state, offerId, shipId) {
     const o = state.offers.find(x => x.id === offerId);
     if (!o) return null;
     state.offers = state.offers.filter(x => x !== o);
@@ -263,17 +288,20 @@ window.UpShip = window.UpShip || {};
       state.contracts.push(k);
       return k;
     }
-    if (o.kind === "goal") { state.goals = state.goals || []; const g = { city: o.city, pay: o.pay, until: now + 2 * 365 * 24 }; state.goals.push(g); return g; }
+    if (o.kind === "goal") { state.goals = state.goals || []; const g = { city: o.city, pay: o.pay, until: now + (o.years || 2) * 365 * 24 }; state.goals.push(g); return g; }
     if (o.kind === "charter") {
-      // The ship that can go and earns least on her route goes; she rejoins it when the charter ends.
-      const ok = state.ships.filter(s => s.deliveryTick <= state.tick && !s.lost && !s.overhaulUntil && U.research.stats(state, s).rangeKm >= o.range);
+      // The chosen ship goes (or the one that earns least on her route); she flies to where the charter is, and rejoins her route after.
+      const ok = eligible(state, o);
       if (!ok.length) { state.offers.push(o); return null; }
-      const ship = ok.sort((a, b) => (a.stats && a.stats.revenue || 0) - (b.stats && b.stats.revenue || 0))[0];
-      ship.readyHour = Math.max(ship.readyHour, now) + o.days * 24;
+      const ship = (shipId && ok.find(x => x.id === shipId)) || ok.sort((a, b) => (a.stats && a.stats.revenue || 0) - (b.stats && b.stats.revenue || 0))[0];
+      // Where: a place she can land within reach, a fair way off; failing that, where she lies.
+      const plan = S().hopPlan(state, ship, ship.location);
+      const places = Object.keys(plan.dist).filter(id => id !== ship.location && plan.dist[id] >= 150 && plan.dist[id] <= Math.max(400, o.range));
+      const at = places.length ? places[Math.floor(Math.random() * places.length)] : ship.location;
+      ship.orders = { kind: "charter", to: at, days: o.days, who: o.who };
       S().addIncome(state, o.pay, "charters");
       adjustStanding(state, 2);
-      S().telegram(state, now + o.days * 24, `${ship.name} returns from her charter for ${o.who} stop back in service stop`, false, { type: "ship", id: ship.id });
-      return { charter: true, ship };
+      return { charter: true, ship, at };
     }
     if (o.kind === "route") {
       const g = { id: "g" + state.nextId++, a: o.a, b: o.b, upfront: o.upfront, monthly: o.monthly, years: o.years,
@@ -379,6 +407,7 @@ window.UpShip = window.UpShip || {};
     maybeCharter(state);
     maybeRecord(state);
     maybeGovernment(state);
+    maybeScheme(state);
     checkGoals(state);
     const now = nowHour(state);
     for (const k of state.contracts.slice()) {
@@ -467,6 +496,6 @@ window.UpShip = window.UpShip || {};
     state.year.grants = (state.year.grants || 0) + amount;
   }
 
-  U.contracts = { recordShip, attemptFlown, attempt, init, dropContract, accept, decline, describe, loadMail, recordGrantFlight, daily, weekly, monthly,
+  U.contracts = { eligible, settleRecord, recordShip, attemptFlown, attempt, init, dropContract, accept, decline, describe, loadMail, recordGrantFlight, daily, weekly, monthly,
     loanLimit, borrow, repay, setInstallment, buildGrantFor, useBuildGrant, mailMonthly };
 })(window.UpShip);

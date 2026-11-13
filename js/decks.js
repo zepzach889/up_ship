@@ -814,8 +814,11 @@ const DEFS_BODY = `
     // staircase, an observation room) adds what only great liners reach.
     const P = out.berths + out.daySeats; out.passengers = P;
     if (P) {
-      const space = Math.min(1, out.publicSq / P / 1.2), light = Math.min(1, out.windowsSq / P / 0.4);
-      const wash = Math.min(1, out.washSq * 8 / P), fed = P < 20 ? 1 : (out.seats >= P * 0.5 && out.galley ? 1 : out.seats ? 0.5 : 0);
+      // A passenger with a berth lives aboard for days: 1.2 squares of public room each, and a dining seat for every second one.
+      // A seated passenger is aboard for hours: a third of the room, and a bar or buffet in place of a dining room.
+      const space = Math.min(1, out.publicSq / (out.berths * 1.2 + out.daySeats * 0.4)), light = Math.min(1, out.windowsSq / P / 0.4);
+      const wash = Math.min(1, out.washSq * 8 / P);
+      const fed = out.berths >= 20 ? (out.seats >= out.berths * 0.5 && out.galley ? 1 : out.seats ? 0.5 : 0) : out.berths ? 1 : (out.roomKinds.has("bar") || out.seats ? 1 : 0.7);
       const kinds = out.roomKinds.size, rooms = 1 - Math.exp(-kinds / 4), suites = Math.min(1, out.first / P / 0.4);
       const grandeur = Math.min(1, out.voidSq / Math.max(4, P * 0.12) * 0.5 + (out.grand ? 0.3 : 0) + (out.observation ? 0.25 : 0));
       out.comfort = Math.max(5, Math.min(100, Math.round(18 + 30 * space + 12 * light + 12 * rooms + 10 * suites + 18 * grandeur - 25 * (1 - wash) - 15 * (1 - fed))));
@@ -828,7 +831,7 @@ const DEFS_BODY = `
     if (out.seats && !out.galley) out.notes.push("A dining room but no galley to cook for it.");
     if (P && out.washSq * 8 < P) out.notes.push(`Too few washrooms: one square serves about eight passengers.`);
     // Short hops need no meals; longer services do.
-    if (P >= 20 && out.seats < P * 0.5) out.notes.push("Too few dining seats: passengers eat in two sittings at most.");
+    if (out.berths >= 20 && out.seats < out.berths * 0.5) out.notes.push("Too few dining seats: passengers eat in two sittings at most.");
     if (out.daySeats && !out.berths) out.notes.push("Seats only: this ship carries passengers on legs of up to 12 hours.");
     return out;
   }
@@ -855,7 +858,8 @@ const DEFS_BODY = `
   // A standard layout, so starting designs arrive furnished: promenades along the windows and a corridor
   // down the middle; in each run of bays, a dining room with its galley and a lounge in the first bay,
   // then cabins, two squares wide, either side of the corridor, and a washroom at the far end.
-  function standardLayout(d) {
+  // style: none (the usual sleeper layout), "day" (a builders' day ship), or "liner" (a builders' liner, with the finer rooms).
+  function standardLayout(d, style) {
     d.plan = { nextId: 1, cells: {}, first: {} };
     for (const deck of ["lower", "upper"]) {
       const ctx = context(d, deck);
@@ -865,13 +869,41 @@ const DEFS_BODY = `
       const blocks = [...new Set(ctx.cols.map(c => c.block))];
       for (const b of blocks) {
         const cs = ctx.cols.map((c, i) => i).filter(i => ctx.cols[i].block === b), a = cs[0], z = cs[cs.length - 1];
+        if (style === "day") {
+          // A day ship: entrance hall and washroom at the bow, saloon seating amidships, lounge and washroom at the stern;
+          // the larger ones with a buffet (dining room and galley) and a bar. Upper decks are all seating.
+          const n = z - a + 1, T = 0, B = R - 1;
+          room("corridor", mid, mid, a, z);
+          if (deck !== "lower") { room("saloon", T, mid - 1, a, z - 1); room("saloon", mid + 1, B, a, z - 1); room("wash", T, mid - 1, z, z); room("wash", mid + 1, B, z, z); continue; }
+          // Small hulls give the ends a single column; the largest add a bar. Seating takes all the rest.
+          if (n >= 10) {
+            room("hall", T, mid - 1, a, a + 1); room("wash", mid + 1, B, a, a + 1);
+            room("lounge", T, mid - 1, z - 1, z); room("wash", mid + 1, B, z - 1, z); room("bar", mid + 1, B, z - 2, z - 2);
+            room("saloon", T, mid - 1, a + 2, z - 2); room("saloon", mid + 1, B, a + 2, z - 3);
+          } else if (n >= 6) {
+            room("hall", T, mid - 1, a, a); room("wash", mid + 1, B, a, a);
+            room("lounge", T, mid - 1, z - 1, z); room("wash", mid + 1, B, z, z);
+            room("saloon", T, mid - 1, a + 1, z - 2); room("saloon", mid + 1, B, a + 1, z - 1);
+          } else {
+            room("hall", T, mid - 1, a, a); room("wash", mid + 1, B, a, a);
+            room("lounge", T, mid - 1, z, z);
+            if (z - 1 >= a + 1) room("saloon", T, mid - 1, a + 1, z - 1); room("saloon", mid + 1, B, a + 1, z);
+          }
+          continue;
+        }
         if (R >= 6) { room("promenade", 0, 0, a, z); room("promenade", R - 1, R - 1, a, z); }
         const top = R >= 6 ? 1 : 0, bot = R >= 6 ? R - 2 : R - 1;
         room("corridor", mid, mid, a, z);
         let c = a;
         if (deck === "lower") {
-          if (z - a >= 7) { room("dining", top, mid - 1, a, a + 3); room("galley", mid + 1, bot, a, a + 1); room("lounge", mid + 1, bot, a + 2, a + 3); c = a + 4; }
-        }
+          if (style === "liner" && z - a >= 9) {
+            // A builders' liner: dining rooms either side of the corridor, to seat her passengers in two sittings; then the lounge
+            // and smoking room on one side, the galley and bar on the other.
+            room("dining", top, mid - 1, a, a + 3); room("dining", mid + 1, bot, a, a + 3);
+            room("lounge", top, mid - 1, a + 4, a + 6); room("galley", mid + 1, bot, a + 4, a + 5);
+            room("smoking", top, mid - 1, a + 7, a + 8); room("bar", mid + 1, bot, a + 6, a + 8); c = a + 9;
+          } else if (z - a >= 7) { room("dining", top, mid - 1, a, a + 3); room("galley", mid + 1, bot, a, a + 1); room("lounge", mid + 1, bot, a + 2, a + 3); c = a + 4; }
+        } else if (style === "liner" && z - a >= 9) { room("library", top, mid - 1, a, a + 1); room("writing", mid + 1, bot, a, a + 1); c = a + 2; }
         for (; c + 1 <= z - 1; c += 2) { room("cabin", top, mid - 1, c, c + 1); room("cabin", mid + 1, bot, c, c + 1); }
         room("wash", top, mid - 1, c, z); room("wash", mid + 1, bot, c, z);
       }
