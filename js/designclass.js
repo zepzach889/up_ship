@@ -101,18 +101,19 @@ window.UpShip = window.UpShip || {};
   // American classes take the German counterpart's design, filled with helium.
   const JP_FROM = { tsubame: "gabbiano", hato: "colombo", kaigun: "militare" };
   const US_FROM = { goodyear: "seeschwalbe", goodyearcargo: "brieftaube", navyrigid: "marine" };
-  const US_SCALE = { goodyear: { load: 0.5, price: 0.75 }, goodyearcargo: { load: 0.6, price: 0.75 } };          // the non-rigids: small and cheap
+  const US_SCALE = { goodyear: { load: 0.8, price: 0.75, run: 0.8 }, goodyearcargo: { load: 0.6, price: 0.75, run: 0.8 } };          // the non-rigids: small, cheap to buy and cheap to run
+  const JP_RUN = { tsubame: 0.85, hato: 0.85 };               // Japan's semi-rigids are cheap to run
   function usLineup() {
     const out = {};
     for (const id of Object.keys(U.SHIP_CLASSES)) {
       // Japan's classes take the Italian counterpart's design as it is (hydrogen).
       const jp = JP_FROM[id] || (id.endsWith("-japan") ? id.replace(/-japan$/, "-italy") : null);
-      if (jp && U.LINEUP && U.LINEUP[jp]) { out[id] = { ...U.LINEUP[jp], design: JSON.parse(JSON.stringify(U.LINEUP[jp].design)) }; continue; }
+      if (jp && U.LINEUP && U.LINEUP[jp]) { const k = JP_RUN[id] || 1; out[id] = { ...U.LINEUP[jp], design: JSON.parse(JSON.stringify(U.LINEUP[jp].design)), dailyCost: Math.round(U.LINEUP[jp].dailyCost * k), fuelPerKm: Math.round(U.LINEUP[jp].fuelPerKm * k * 1000) / 1000 }; continue; }
       const src = US_FROM[id] || (id.endsWith("-usa") ? id.replace(/-usa$/, "-germany") : null), L = src && U.LINEUP && U.LINEUP[src];
       if (!L) continue;
       const k = US_SCALE[id] || { load: 1, price: 1 }, h = 0.85 * k.load, d = JSON.parse(JSON.stringify(L.design)); d.gas = "helium";
       out[id] = { ...L, usLoad: h, liftsAs: L.passengers, design: d, passengers: Math.floor(L.passengers * h), seats: Math.floor((L.seats || 0) * h), cargoTons: Math.round(L.cargoTons * h * 10) / 10,
-        price: Math.round(L.price * 1.12 * k.price / 1000) * 1000 };
+        price: Math.round(L.price * 1.12 * k.price / 1000) * 1000, dailyCost: Math.round(L.dailyCost * (k.run || 1)), fuelPerKm: Math.round(L.fuelPerKm * (k.run || 1) * 1000) / 1000 };
     }
     return out;
   }

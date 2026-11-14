@@ -403,6 +403,14 @@ window.UpShip = window.UpShip || {};
     }
   }
 
+  // Company overheads for a fleet of n ships in service, a month: offices, clerks, ground staff, management. Each ship
+  // costs more to manage the larger the fleet, so they rise faster than the fleet, steadily and without a sudden wall.
+  function overheads(n) { return n > 0 ? Math.round((E().overheadPerShip * n + E().overheadGrowth * Math.pow(n - 1, E().overheadPower)) / 25) * 25 : 0; }
+  // What overheads are now, and what one more ship in service would add (ships on order are counted as coming).
+  function overheadNote(state) {
+    const live = state.ships.filter(s => !s.lost), n = live.filter(s => s.deliveryTick <= state.tick).length, all = live.length;
+    return { ships: n, now: overheads(n), coming: all - n, withOrders: overheads(all), next: overheads(all + 1) - overheads(all) };
+  }
   function monthly(state) {
     maybeCharter(state);
     maybeRecord(state);
@@ -458,7 +466,7 @@ window.UpShip = window.UpShip || {};
     }
     // Company overheads: offices, clerks, ground staff, management. Each ship in service costs more to manage
     // the larger the fleet, so overheads grow with the square of the fleet: trivial for a few ships, heavy for many.
-    const fleet = state.ships.filter(s => !s.lost && s.deliveryTick <= state.tick).length, over = Math.round(E().overheadPerShip * fleet * fleet);
+    const fleet = state.ships.filter(s => !s.lost && s.deliveryTick <= state.tick).length, over = overheads(fleet);
     if (over) { S().addGeneral(state, over); state.year.overheads = (state.year.overheads || 0) + over; state.overheadsLast = over; }
     // Loan interest and bankruptcy.
     if (state.loan > 0) {
@@ -510,6 +518,6 @@ window.UpShip = window.UpShip || {};
     state.year.grants = (state.year.grants || 0) + amount;
   }
 
-  U.contracts = { randomMailOffer, weeklyService, eligible, settleRecord, recordShip, attemptFlown, attempt, init, dropContract, accept, decline, describe, loadMail, recordGrantFlight, daily, weekly, monthly,
+  U.contracts = { overheads, overheadNote, randomMailOffer, weeklyService, eligible, settleRecord, recordShip, attemptFlown, attempt, init, dropContract, accept, decline, describe, loadMail, recordGrantFlight, daily, weekly, monthly,
     loanLimit, borrow, repay, setInstallment, buildGrantFor, useBuildGrant, mailMonthly };
 })(window.UpShip);

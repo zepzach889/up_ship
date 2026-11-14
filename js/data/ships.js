@@ -154,7 +154,7 @@ UpShip.ECONOMY = {
   fareBase: 1.5, farePerKm: 0.0042,       // passenger fare, pounds
   freightBase: 2.5, freightPerKm: 0.035,    // per ton, pounds
   passengerShare: 0.65,                   // daily passengers per direction = sqrt(wA * wB) * share
-  overheadPerShip: 275,                     // monthly company overheads: this times the fleet size, for each ship (so they grow with the square)
+  overheadPerShip: 275, overheadGrowth: 737, overheadPower: 1.7,   // monthly company overheads: 275 a ship, plus 737 x (fleet - 1) ^ 1.7
   freightShare: 1.125,                     // daily tons per direction, same form
   demandSwing: 0.15,                      // random daily variation
   passengerWaitDays: 2,                   // unserved passengers give up after about this long

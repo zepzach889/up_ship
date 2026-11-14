@@ -72,18 +72,23 @@ window.UpShip = window.UpShip || {};
   }
   const canLand = (state, id) => { if (U.sim && U.sim.hasRights && !U.sim.hasRights(state, id)) return false; return effective(state, id, "mast").level > 0; };
 
+  // A grand terminal's field, where one stands here and is the company's to use.
+  const grandAt = (state, id) => (U.grand && U.grand.effects(state, id)) || null;
   function terminalLimits(state, id) {
     const t = effective(state, id, "terminal");
     const handling = U.research && U.research.has(state, "operations7") ? 1.25 : 1;    // mechanical ground handling
+    const G = grandAt(state, id);
+    if (G && t.own) return { pax: G.pax * handling, tons: G.tons * handling, own: true, level: t.level };
     if (t.level) return { pax: TYPES.terminal.pax[t.level - 1] * handling, tons: TYPES.terminal.tons[t.level - 1] * handling, own: t.own, level: t.level };
     if (ownLevel(state, id, "mast")) return { pax: BASIC_ROOM.pax, tons: BASIC_ROOM.tons, own: true, level: 0 };
     return { pax: 0, tons: 0, own: false, level: 0 };
   }
-  const demandBoost = (state, id) => ownLevel(state, id, "terminal") === 3 ? 1.1 : 1;
+  const demandBoost = (state, id) => { const G = grandAt(state, id); return G ? G.demand : ownLevel(state, id, "terminal") === 3 ? 1.1 : 1; };
 
   // Building ---------------------------------------------------------------------------
   function nextCost(state, id, type) {
     const lvl = ownLevel(state, id, type);
+    if (grandAt(state, id) && U.grand.MANAGED.includes(type)) return null;                              // built on the grand terminal's site plan instead
     if (type === "shed" && U.cityById[id] && U.cityById[id].empire === "ussr") return null;          // no foreign sheds on Soviet soil
     return lvl >= TYPES[type].costs.length ? null : TYPES[type].costs[lvl];
   }
@@ -119,13 +124,15 @@ window.UpShip = window.UpShip || {};
   function recordBoarding(state, id, pax, tons) {
     const d = state.cityDay[id] = state.cityDay[id] || { pax: 0, tons: 0 };
     d.pax += pax; d.tons += tons;
+    if (U.grand) U.grand.boarded(state, id, pax);
     return roomToday(state, id).own ? 0 : pax * FEES.pax + tons * FEES.ton;
   }
 
   // Docking: a ship arriving when every berth is taken circles until one frees up.
   // Returns the extra hours spent circling and any mast fee.
   function dock(state, id, arrive, stay) {
-    const cap = TYPES.mast.docks[effective(state, id, "mast").level - 1] || 1;
+    const em = effective(state, id, "mast"), G = grandAt(state, id);
+    const cap = G && em.own ? G.masts : TYPES.mast.docks[em.level - 1] || 1;
     const list = (state.docking[id] = (state.docking[id] || []).filter(x => x.to > arrive - 48));
     let t = arrive;
     for (let guard = 0; guard < 20; guard++) {

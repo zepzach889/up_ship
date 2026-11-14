@@ -283,7 +283,8 @@ window.UpShip = window.UpShip || {};
   function facilitiesBlock(state, id) {
     const F = U.facilities, pub = F.hasPublic(id), hasMast = F.canLand(state, id);
     const lim = F.terminalLimits(state, id), used = state.cityDay[id] || { pax: 0, tons: 0 };
-    const rows = ["mast", "terminal", "shed", "school", "lab", "gasplant", "hestore"].concat(U.aether.discovered(state) ? ["refinery"] : []).map(type => {
+    const G = U.grand.get(state, id);
+    const rows = ["mast", "terminal", "shed", "school", "lab", "gasplant", "hestore"].concat(U.aether.discovered(state) ? ["refinery"] : []).filter(type => !G || !U.grand.MANAGED.includes(type)).map(type => {
       const T = F.TYPES[type], lvl = F.ownLevel(state, id, type), cost = F.nextCost(state, id, type), single = T.costs.length === 1;
       if (single) {
         const needsMast = !hasMast;
@@ -302,7 +303,15 @@ window.UpShip = window.UpShip || {};
         <small class="fac-next">${T.about[lvl]}${needsMast ? ". Needs a mast here first." : ""}</small></div></div>`;
       return `<li><div class="fac-head">${now}<b>${T.name}</b><span>${yours}</span></div>${button}</li>`;
     }).join("");
-    return `<h3>Facilities</h3>
+    const gs = G && U.grand.summary(state, id), cant = !G && U.grand.canFound(state, id);
+    const grand = G ? `<h3>Grand terminal</h3>
+      <p class="small">This port is laid out on its own site plan: its masts, terminal building, shed, and gas supply are built there.</p>
+      <dl>${gs.rows.map(r => row(r[0], r[1])).join("")}${row("Upkeep", `${money(gs.upkeep)} a year`)}${row("Concessions earned", money(G.earned || 0))}</dl>
+      <p><button class="btn" data-grand-open="${id}">Open the site plan</button></p>`
+      : F.ownLevel(state, id, "mast") ? `<h3>Grand terminal</h3>
+      <p class="small">Make this a signature port: a field you lay out yourself, with as many masts as you choose, a terminal building, a hotel and restaurant, a railway halt, and more. What stands here now is carried over.</p>
+      <p><button class="btn-quiet" data-grand-found="${id}" ${cant ? "disabled" : ""}>Found a grand terminal, ${money(U.grand.FOUND)}</button>${cant ? ` <small class="fac-next">${cant}</small>` : ""}</p>` : "";
+    return `${grand}<h3>${G ? "Other facilities" : "Facilities"}</h3>
       <p class="small">${pub ? `A public mast, terminal, and shed (medium size) are open to any company here; their fees are shown beside each. Your own charge no fees, only upkeep of ${Math.round(F.UPKEEP * 100)}% of their building price a year.` : "No public facilities here. You need your own mast to land."}</p>
       <ul class="facilities">${rows}</ul>
 
@@ -682,11 +691,17 @@ window.UpShip = window.UpShip || {};
     h.changed(); render();
     notify(`${ship.name} ordered${first ? `: the first of the ${name} class` : ""}.`);
   }
+  // Company overheads, and what the next ship would add: shown wherever ships are counted or ordered.
+  function overheadLine(state) {
+    const o = U.contracts.overheadNote(state);
+    return `<p class="status overhead-note">Company overheads: ${money(o.now)} a month for ${o.ships} ${o.ships === 1 ? "ship" : "ships"} in service${o.coming ? `, rising to ${money(o.withOrders)} when the ${o.coming} on order ${o.coming === 1 ? "arrives" : "arrive"}` : ""}. One more ship would add ${money(o.next)} a month.</p>`;
+  }
   function shipyardPanel(state) {
     const home = city(state.company.home), nation = U.NATIONS[state.company.nation];
     return `
       <h2>Shipyard</h2>
       <p class="sub">${nation.name}'s builders. New ships are delivered at ${home.name}${home.works ? ", where your works build them faster and cheaper" : ""}.</p>
+      ${overheadLine(state)}
       ${state.buildGrant ? `<p class="status">Government construction grant: ${Math.round(state.buildGrant.share * 100)}% off your next national-built ship, until ${shortDate(U.sim.dateAtHour(state.buildGrant.until))}.</p>` : ""}
       ${U.sim.catalog(state).map(id => {
         const c = U.SHIP_CLASSES[id], t = Object.assign({}, U.sim.orderTerms(state, id));
@@ -1011,6 +1026,7 @@ window.UpShip = window.UpShip || {};
     const committed = state.ships.reduce((a, sh) => a + U.research.refitOptions(state, sh).filter(o => (sh.refitPlan || []).includes(o.id)).reduce((x, o) => x + o.cost, 0), 0);
     return `
       <h2>Fleet</h2>
+      ${overheadLine(state)}
       <p class="sub">${state.ships.length} ship${state.ships.length === 1 ? "" : "s"}</p>
       <div class="filters">${Object.keys(names).map(k => `<button class="${fleetFilter === k ? "btn" : "btn-quiet"}" data-filter="${k}">${names[k]} ${groups[k]}</button>`).join("")}</div>
       <div class="seg fleet-sort" role="group" aria-label="Sort the fleet">${[["class", "By class"], ["name", "Name"], ["route", "Route"], ["cond", "Condition"]].map(([k, n]) => `<button data-fleet-sort="${k}" aria-pressed="${fleetSort === k}">${n}</button>`).join("")}</div>
@@ -1184,7 +1200,7 @@ window.UpShip = window.UpShip || {};
       <h3>Income sources, ${y.year}</h3>
       <dl>
         ${row("Mail", money(y.mail || 0))}
-        ${row("Government grants", money(y.grants || 0))}
+        ${row("Government grants", money(y.grants || 0))}${y.concessions ? row("Terminal concessions", money(y.concessions)) : ""}
         ${row("Loan interest paid", money(y.interest || 0))}
         ${row("Company overheads", `${money(y.overheads || 0)}${state.overheadsLast ? ` (now ${money(state.overheadsLast)} a month)` : ""}`)}
       </dl>
@@ -1329,6 +1345,13 @@ window.UpShip = window.UpShip || {};
       if (k && confirm(`Give up the ${city(k.a).name}–${city(k.b).name} mail award? There is no penalty; the retainer stops.`)) {
         U.contracts.dropContract(s, k.id); notify("Award given up."); h.changed(); render();
       }
+      return;
+    }
+    if (b.dataset.grandOpen) { U.grand.open(b.dataset.grandOpen); return; }
+    if (b.dataset.grandFound) {
+      const cid = b.dataset.grandFound;
+      if (!confirm(`Found a grand terminal at ${city(cid).name} for ${money(U.grand.FOUND)}? The mast, terminal, shed, and gas supply you have here are carried onto its site plan, and from then on they are built there.`)) return;
+      if (U.grand.found(s, cid)) { notify(`Grand terminal founded at ${city(cid).name}.`); render(); U.grand.open(cid); } else notify(U.grand.canFound(s, cid) || "There is no room to lay it out.");
       return;
     }
     if (b.dataset.build) {

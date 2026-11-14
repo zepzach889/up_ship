@@ -1033,3 +1033,65 @@ body.skipping .globe-base { filter: saturate(0.35) brightness(0.72); transition:
 label.check { display: flex; align-items: center; gap: 8px; margin: 8px 0 2px; cursor: pointer; }
 label.check input { width: 16px; height: 16px; accent-color: var(--brass); }
 .card select { max-width: 100%; margin-bottom: 4px; }
+
+/* The ship drawing: fine lines and gentle shading, after a period engineering illustration. */
+.lv-seams line.faint { opacity: 0.09; }
+.lv-girders polyline { fill: none; stroke: #000; stroke-width: 0.5; opacity: 0.13; }
+.lv-ribs line { stroke: #000; stroke-width: 0.5; opacity: 0.34; }
+.lv-glass { fill: #cfe1ea; stroke: #2d2418; stroke-width: 0.5; }
+.lv-mullion { stroke: #2d2418; stroke-width: 0.5; opacity: 0.7; }
+.lv-hullwin { fill: #d6e6ee; opacity: 0.9; stroke: #2d2418; stroke-width: 0.35; }
+.lv-wire { stroke: #2d2418; stroke-width: 0.4; opacity: 0.6; }
+.lv-prop { fill: rgba(60,50,40,0.16); stroke: #2d2418; stroke-width: 0.4; }
+.lv-blade { fill: #8a6238; stroke: #2d2418; stroke-width: 0.5; }
+.lv-hub { fill: #4a4038; stroke: #2d2418; stroke-width: 0.4; stroke-linejoin: round; }
+/* Class drawings are shown at many sizes: their lines keep a constant, fine weight on screen. */
+.art-designed .lv-outline { stroke-width: 0.95px; vector-effect: non-scaling-stroke; }
+.art-designed .lv-edge, .art-designed .lv-strut { stroke-width: 0.6px; vector-effect: non-scaling-stroke; }
+.art-designed .lv-seams line, .art-designed .lv-girders polyline, .art-designed .lv-ribs line, .art-designed .lv-mullion, .art-designed .lv-wire, .art-designed .lv-glass, .art-designed .lv-hullwin, .art-designed .lv-prop { stroke-width: 0.4px; vector-effect: non-scaling-stroke; }
+.art-designed .lv-blade, .art-designed .lv-hub { stroke-width: 0.4px; vector-effect: non-scaling-stroke; }
+.lv-prop-top { stroke: #6b4a2a; stroke-width: 0.9; stroke-linecap: round; }
+.art-designed .lv-prop-top { stroke-width: 0.9px; vector-effect: non-scaling-stroke; }
+
+/* The grand terminal's site plan. */
+.grand-office { position: fixed; inset: 0; z-index: 900; background: var(--ink); color: var(--ivory); display: grid; grid-template-rows: auto 1fr; font-family: var(--ui); }
+.grand-office[hidden] { display: none; }
+.g-bar { display: flex; align-items: center; gap: 24px; padding: 12px 20px; border-bottom: 1px solid var(--brass-dim); }
+.g-bar h1 { font-family: var(--deco); font-weight: 400; font-size: 26px; margin: 0; color: var(--brass-hi); letter-spacing: 0.04em; }
+.g-sub { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ivory-dim); }
+.g-money { margin-left: auto; font-size: 15px; }
+.grand-office button { font-family: var(--ui); font-size: 13px; color: var(--ivory); background: var(--ink-2); border: 1px solid var(--brass-dim); padding: 7px 12px; cursor: pointer; }
+.grand-office button:hover:not(:disabled) { border-color: var(--brass-hi); background: var(--ink-3); }
+.grand-office button:disabled { opacity: 0.45; cursor: default; }
+.g-body { display: grid; grid-template-columns: 270px 1fr 290px; min-height: 0; }
+.g-palette, .g-summary { overflow-y: auto; padding: 14px 16px; }
+.g-palette { border-right: 1px solid var(--brass-dim); } .g-summary { border-left: 1px solid var(--brass-dim); }
+.grand-office h3 { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--brass); margin: 16px 0 8px; font-weight: 600; }
+.grand-office h3:first-child { margin-top: 0; }
+.g-item { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; width: 100%; text-align: left; margin-bottom: 6px; }
+.g-item b { font-weight: 600; } .g-item span { color: var(--brass-hi); } .g-item small { grid-column: 1 / -1; color: var(--ivory-dim); font-size: 11.5px; line-height: 1.35; }
+.g-item.on { border-color: var(--brass-hi); background: var(--ink-3); }
+.g-field { display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 14px; }
+.g-svg { flex: 1; min-height: 0; width: 100%; }
+.g-msg { min-height: 20px; margin: 8px 0 0; color: #f0b9a8; font-size: 13.5px; text-align: center; }
+.g-summary dl { display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; margin: 0; font-size: 13.5px; }
+.g-summary dt { color: var(--ivory-dim); } .g-summary dd { margin: 0; text-align: right; }
+.g-summary p { font-size: 13.5px; line-height: 1.45; margin: 0 0 8px; }
+.g-hint { color: var(--ivory-dim); }
+.g-chosen { border: 1px solid var(--brass-dim); padding: 10px 12px; margin-bottom: 4px; }
+.g-chosen button { display: block; width: 100%; margin-top: 6px; text-align: left; }
+.g-beyond { fill: #c9c39c; } .g-grass { fill: #d9d7ac; } .g-fence { fill: none; stroke: #6d5a3c; stroke-width: 2; stroke-dasharray: 9 4; }
+.g-grid line { stroke: #6d5a3c; stroke-width: 0.5; opacity: 0.22; }
+.g-roof { stroke: #2d2418; stroke-width: 1.2; } .g-shed { fill: #b9bcbd; } .g-hall { fill: #e9dcc0; } .g-plain { fill: #cdbb98; }
+.g-inner { fill: none; stroke: #2d2418; stroke-width: 0.6; opacity: 0.5; } .g-porch { fill: #f3ead6; stroke: #2d2418; stroke-width: 0.8; } .g-dome { fill: #9fb3a9; stroke: #2d2418; stroke-width: 1; }
+.g-ribs line { stroke: #2d2418; stroke-width: 0.6; opacity: 0.35; } .g-ridge { stroke: #2d2418; stroke-width: 1; opacity: 0.6; } .g-door { stroke: #9b2a24; stroke-width: 4; stroke-linecap: round; }
+.g-apron { fill: #e6e0bd; stroke: #6d5a3c; stroke-width: 0.8; stroke-dasharray: 4 4; opacity: 0.8; }
+.g-circle { fill: #e6e0bd; stroke: #6d5a3c; stroke-width: 1; stroke-dasharray: 5 4; } .g-steel { fill: #5a5650; stroke: #2d2418; stroke-width: 0.8; }
+.g-tank { fill: #b9bcbd; stroke: #2d2418; stroke-width: 1; } .g-green { fill: #a9bf8c; stroke: #5d7248; stroke-width: 1; } .g-pond { fill: #adc4c1; stroke: #56706d; stroke-width: 0.8; }
+.g-path { fill: none; stroke: #6d5a3c; stroke-width: 1; } .g-platform { fill: #c9bfa6; stroke: #2d2418; stroke-width: 1; } .g-rail { fill: none; stroke: #2d2418; stroke-width: 1.2; } .g-face { fill: #f3ead6; stroke: #2d2418; stroke-width: 1; }
+.g-label { font-family: var(--ui); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; fill: #2d2418; text-anchor: middle; pointer-events: none; paint-order: stroke; stroke: rgba(240,231,209,0.75); stroke-width: 2.5px; }
+.g-hit { fill: transparent; stroke: none; cursor: pointer; }
+.g-piece.sel .g-hit { stroke: #c9a65b; stroke-width: 3; }
+.g-ghost { pointer-events: none; opacity: 0.8; } .g-ghost .g-hit { stroke-width: 3; }
+.g-ghost .good .g-hit { stroke: #2e6b47; fill: rgba(46,107,71,0.18); } .g-ghost .bad .g-hit { stroke: #a3372c; fill: rgba(163,55,44,0.28); }
+.g-label.small { font-size: 8.5px; letter-spacing: 0.04em; }

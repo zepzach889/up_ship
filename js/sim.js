@@ -37,7 +37,9 @@ window.UpShip = window.UpShip || {};
   const freightRate = km => E().freightBase + E().freightPerKm * km;
   // A city's tier, allowing for booms (Oklahoma City's oil from 1928).
   const tierOf = c => c.boom && U.state && dateOf(U.state.tick).getUTCFullYear() >= c.boom.year ? c.boom.tier : c.tier;
-  function paxWeight(c) { return U.TIERS[tierOf(c)].demand * U.SPECIALTIES[c.specialty].passengerBoost * (c.station ? 0.15 : 1); }
+  // A line's home base draws passengers as a large city would, however small the town: it is where the company is known.
+  const homeDemand = c => { const d = U.TIERS[tierOf(c)].demand; return U.state && U.state.company && U.state.company.home === c.id ? Math.max(d, U.TIERS.large.demand) : d; };
+  function paxWeight(c) { return homeDemand(c) * U.SPECIALTIES[c.specialty].passengerBoost * (c.station ? 0.15 : 1); }
   function freightWeight(c) { return U.TIERS[tierOf(c)].demand / 6 * U.SPECIALTIES[c.specialty].freightBoost; }
   // Seasons: travel peaks in high summer and falls off in winter, about 15% either way.
   const season = () => { if (!U.state) return 1; const m = dateOf(U.state.tick).getUTCMonth(); return 1 + 0.15 * Math.cos((m - 6.5) / 12 * 2 * Math.PI); };
@@ -446,7 +448,7 @@ window.UpShip = window.UpShip || {};
   function startOverhaul(state, ship, t) {
     const frac = ageYears(state, ship) / ship.lifeYears;
     const publicShed = !U.facilities.effective(state, ship.location, "shed").own;
-    const cost = Math.round(cls(ship).price * E().overhaulCostShare * (frac > 0.8 ? 1.5 : 1) * (publicShed ? 1 + U.facilities.FEES.shed : 1) / 100) * 100;
+    const cost = Math.round(cls(ship).price * E().overhaulCostShare * (frac > 0.8 ? 1.5 : 1) * (publicShed ? 1 + U.facilities.FEES.shed : 1) * (!publicShed && U.grand && (U.grand.effects(state, ship.location) || {}).works ? 0.75 : 1) / 100) * 100;
     const refit = U.research.applyRefits(state, ship);
     if (ship.reconfigTo && ship.reconfigTo !== ship.config) {
       const rc = Math.round(cls(ship).price * U.passengers.RECONFIG_SHARE / 100) * 100;
@@ -751,6 +753,7 @@ window.UpShip = window.UpShip || {};
     const month = d.getUTCFullYear() * 12 + d.getUTCMonth();
     if (state.month && month !== state.month) {
       U.contracts.monthly(state);
+      if (U.grand) U.grand.monthly(state);
       U.passengers.monthly(state);
       U.weather.monthly(state);
       U.crew.monthly(state);

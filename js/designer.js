@@ -983,7 +983,7 @@ window.UpShip = window.UpShip || {};
     if (paintSel === "name" && lv.name.text) { const x = f.L * lv.name.x, y = lv.name.y * P().radius(d, x), h = R * 0.4 * lv.name.size;
       return `<rect x="${X(x) - 6}" y="${Y(y - h / 2) - 4}" width="${(Y(h) - Y(0)) * lv.name.text.length * 0.72 + 12}" height="${Y(h) - Y(0) + 8}" class="lv-sel"/>`; }
     if (paintSel && paintSel.startsWith("emblem")) { const e = lv.emblems[+paintSel.split(":")[1]]; if (!e) return "";
-      const x = f.L * e.x, y = U.livery.emblemY(e, P().radius(d, x), R), sz = Y(R * 0.55 * e.size) - Y(0);
+      const { x, y, m } = U.livery.emblemPlace(d, f, e), sz = Y(m) - Y(0);
       return `<rect x="${X(x) - sz / 2 - 4}" y="${Y(y) - sz / 2 - 4}" width="${sz + 8}" height="${sz + 8}" class="lv-sel"/>`; }
     return "";
   }

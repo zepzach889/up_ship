@@ -28,7 +28,7 @@ window.UpShip = window.UpShip || {};
     const e = state.company.emblem || { c1: "#9b2a24", c2: "#f0e7d1" };
     return { preset: "company", hull: "#c9cbc8", twoTone: false, lower: "#e9e4d6", split: 0.35, nose: null, tail: null,
       fins: e.c1, rudders: e.c1, car: "#b9bcbd", engines: "#b9bcbd", gondolas: "#b9bcbd",
-      decorations: [{ type: "cheat", color: e.c1, y: 0.2, t: 0.05, flag: false }],
+      decorations: [{ type: "cheat", color: e.c1, y: 0, t: 0.05, flag: false }],
       name: { text: "", font: "deco", size: 1, color: e.c1, x: 0.16, y: 0.05 },
       emblems: [{ x: 0.9, y: -1.3, size: 0.9 }] };
   }
@@ -86,6 +86,16 @@ window.UpShip = window.UpShip || {};
         <path d="M${g.rud.map(p => `${X(p[0])},${Y(p[1])}`).join(" L")} Z" fill="${rudC}" class="lv-edge"/>`;
       if (g.twin) fins += `<path d="M${g.twin.map(p => `${X(p[0])},${Y(p[1])}`).join(" L")} Z" fill="${finC}" class="lv-edge"/>`;
     }
+    // Fin structure: ribs running out from the hull, and the shading of a surface seen at a slant.
+    let finRibs = "";
+    for (const s of [-1, 1]) {
+      const g = fin.side(s), cf = `${id}r${s}`;
+      finRibs += `<clipPath id="${cf}"><path d="M${g.fin.map(p => `${X(p[0])},${Y(p[1])}`).join(" L")} Z M${g.rud.map(p => `${X(p[0])},${Y(p[1])}`).join(" L")} Z"/></clipPath><g clip-path="url(#${cf})" class="lv-ribs">`;
+      const n = Math.max(4, Math.round((g.x1 - g.x0) / 5));
+      for (let i = 1; i < n; i++) { const x = g.x0 + (g.x1 - g.x0) * i / n; finRibs += `<line x1="${X(x)}" y1="${Y(0)}" x2="${X(x)}" y2="${Y(g.tip * 1.05)}"/>`; }
+      finRibs += `<line x1="${X(g.x0)}" y1="${Y(s * (Math.abs(g.tip) - g.span * 0.42))}" x2="${X(g.x1)}" y2="${Y(s * (Math.abs(g.tip) - g.span * 0.42))}"/>
+        <rect ${span(X(g.x0), X(g.x1))} y="${Math.min(Y(g.tip), Y(g.tip - s * g.span * 0.3))}" height="${Math.abs(Y(g.span * 0.3) - Y(0))}" fill="${s < 0 ? "#fff" : "#000"}" opacity="${s < 0 ? 0.1 : 0.14}"/></g>`;
+    }
     // Fin decorations: stripes across or along the fins.
     let finDeco = "";
     for (const dc of lv.decorations.filter(x => x.type === "finstripe")) for (const s of [-1, 1]) {
@@ -127,9 +137,25 @@ window.UpShip = window.UpShip || {};
       }
     }
     // Shading, so the hull reads as round: light from above, darker below; and faint panel seams at each ring.
+    // Main rings every bay, carried on into the nose and tail, with a fainter intermediate ring between each pair.
     let seams = "";
-    for (let b = 0; b <= d.bays; b++) { const x = f.ln + b * 15; seams += `<line x1="${X(x)}" y1="${Y(-r(x))}" x2="${X(x)}" y2="${Y(r(x))}"/>`; }
-    const shade = `<linearGradient id="${id}s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.45"/><stop offset="0.3" stop-color="#fff" stop-opacity="0.08"/><stop offset="0.62" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.38"/></linearGradient>`;
+    const ring = (x, faint) => { if (x > 2.5 && x < L - 2.5) seams += `<line x1="${X(x)}" y1="${Y(-r(x))}" x2="${X(x)}" y2="${Y(r(x))}"${faint ? ' class="faint"' : ""}/>`; };
+    for (let x = f.ln % 15; x < L; x += 15) { ring(x, false); ring(x + 7.5, true); }
+    // Longitudinal girders showing faintly through the fabric, following the hull's taper, closer together toward the edges as on a round body.
+    let girders = "";
+    for (const a of [-72, -52, -34, -17, 0, 17, 34, 52, 72]) { const fy = Math.sin(a * Math.PI / 180), pts = [];
+      for (let i = 2; i <= N - 2; i++) { const x = L * i / N; pts.push(`${X(x).toFixed(1)},${Y(r(x) * fy).toFixed(1)}`); }
+      girders += `<polyline points="${pts.join(" ")}"/>`; }
+    // Light from above and a little forward: a highlight high on the flank, falling to shadow beneath, with light thrown back along the keel.
+    const shade = `<linearGradient id="${id}s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0.2"/><stop offset="0.05" stop-color="#000" stop-opacity="0.04"/><stop offset="0.1" stop-color="#fff" stop-opacity="0.12"/><stop offset="0.17" stop-color="#fff" stop-opacity="0.28"/><stop offset="0.24" stop-color="#fff" stop-opacity="0.34"/><stop offset="0.31" stop-color="#fff" stop-opacity="0.28"/><stop offset="0.4" stop-color="#fff" stop-opacity="0.14"/><stop offset="0.5" stop-color="#fff" stop-opacity="0.03"/><stop offset="0.6" stop-color="#000" stop-opacity="0.07"/><stop offset="0.7" stop-color="#000" stop-opacity="0.2"/><stop offset="0.8" stop-color="#000" stop-opacity="0.33"/><stop offset="0.9" stop-color="#000" stop-opacity="0.42"/><stop offset="0.96" stop-color="#000" stop-opacity="0.38"/><stop offset="1" stop-color="#000" stop-opacity="0.28"/></linearGradient>
+      <linearGradient id="${id}h" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity="0.26"/><stop offset="0.14" stop-color="#000" stop-opacity="0"/><stop offset="0.86" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.26"/></linearGradient>`;
+    // The horizontal fins, seen edge-on: a slim blade along the centreline at the tail, with the elevator behind its hinge.
+    let hfin = "";
+    { const g = fin.side(1), len = g.x1 - g.x0, t = Math.max(0.8, D * 0.042), fx = g.x0 - len * 0.12, gp = Math.min(0.45, len * 0.02);
+      const pt = (x, y) => `${X(x).toFixed(1)},${Y(y).toFixed(1)}`;
+      hfin = `<path d="M${pt(fx, 0)} L${pt(fx + len * 0.4, -t)} L${pt(g.xr - gp, -t * 0.85)} L${pt(g.xr - gp, t * 0.85)} L${pt(fx + len * 0.4, t)} Z" fill="${finC}" class="lv-edge"/>
+        <path d="M${pt(g.xr + gp, -t * 0.8)} L${pt(g.x1, -t * 0.3)} L${pt(g.x1, t * 0.3)} L${pt(g.xr + gp, t * 0.8)} Z" fill="${lv.rudders || finC}" class="lv-edge"/>
+        <path d="M${pt(fx, 0)} L${pt(fx + len * 0.4, -t)} L${pt(g.xr - gp, -t * 0.85)} L${pt(g.xr - gp, 0)} Z" fill="#fff" opacity="0.16"/>`; }
     // The name and the emblems, placed where they were dragged.
     const nm = lv.name, font = FONTS[nm.font] || FONTS.deco;
     const nameSize = R * 0.34 * nm.size, nx = L * nm.x, ny = nm.y * r(nx);
@@ -138,7 +164,8 @@ window.UpShip = window.UpShip || {};
       font-size="${(Y(nameSize) - Y(0)).toFixed(1)}" letter-spacing="${((Y(nameSize) - Y(0)) * font.spacing).toFixed(1)}" dominant-baseline="middle">${esc(nm.text.toUpperCase())}</text>` : "";
     const em = (U.state && U.state.company.emblem) || null;
     const emblems = em ? lv.emblems.map((e, i) => {
-      const x = L * e.x, y = emblemY(e, r(x), R), sz = (Y(R * 0.55 * e.size) - Y(0));
+      const { x, y, m } = emblemPlace(d, f, e);
+      const sz = Y(m) - Y(0);
       return `<g data-drag="emblem:${i}" class="lv-emblem">${U.emblem.svg(em, sz, `x="${(X(x) - sz / 2).toFixed(1)}" y="${(Y(y) - sz / 2).toFixed(1)}" style="width:${sz.toFixed(1)}px;height:${sz.toFixed(1)}px"`)}</g>`;
     }).join("") : "";
     // Gondolas in their colors.
@@ -148,24 +175,42 @@ window.UpShip = window.UpShip || {};
     for (const [b0, m] of Object.entries((d.systems || {}).modules || {})) {
       if (m !== "passenger" || +b0 > d.bays) continue;
       const a = f.ln + (+b0 - 1) * 15, rows = ((d.systems.deckCount || {})[b0] || 1) > 1 && d.D >= P().TWO_DECKS ? [0.62, 0.44] : [0.62];
-      for (const fy of rows) for (let x = a + 1.2; x < a + 14; x += 2.5) hullWins += `<rect x="${Math.min(X(x), X(x + 1.4))}" y="${Y(r(x) * fy)}" width="${Math.abs(X(1.4) - X(0))}" height="${Math.max(1, Y(D * 0.035) - Y(0))}" class="lv-hullwin"/>`;
+      for (const fy of rows) for (let x = a + 0.9; x < a + 13.4; x += 2.1) hullWins += `<rect x="${Math.min(X(x), X(x + 1.6))}" y="${Y(r(x) * fy)}" width="${Math.abs(X(1.6) - X(0))}" height="${Math.max(1, Y(D * 0.05) - Y(0))}" class="lv-hullwin"/>`;
     }
     const engines = d.systems.engines.map(e => engineShape(P().bayCentre(d, f.ln, e.bay), e.mount, r, X, Y, D, lv.engines)).join("");
     return `<defs><clipPath id="${id}c"><path d="${outline}"/></clipPath>${shade}</defs>
-      ${fins}${finDeco}
-      <g clip-path="url(#${id}c)">${body}${hullWins}<path d="${outline}" fill="url(#${id}s)"/><g class="lv-seams">${seams}</g></g>
-      <path d="${outline}" class="lv-outline"/>${car}${engines}${nameSvg}${emblems}`;
+      ${fins}${finDeco}${finRibs}
+      <g clip-path="url(#${id}c)">${body}<path d="${outline}" fill="url(#${id}s)"/><path d="${outline}" fill="url(#${id}h)"/><g class="lv-girders">${girders}</g><g class="lv-seams">${seams}</g>${hullWins}</g>
+      <path d="${outline}" class="lv-outline"/>${hfin}${car}${engines}${nameSvg}${emblems}`;
   }
   // The fins as shapes, shared by the side and top views.
+  // Where an emblem is drawn in the side view, and how large (metres). On the hull it lies where it was dragged; off the
+  // hull means on a fin, where it is held within the fixed part of the upper or lower fin and made to fit.
+  function emblemPlace(d, f, e) {
+    const L = f.L, R = d.D / 2, r = x => P().radius(d, x);
+    let x = L * e.x, y = emblemY(e, r(x), R), m = R * 0.55 * e.size;
+    if (Math.abs(e.y) > 1) {
+      const s0 = Math.sign(e.y), g = finShapes(d, f).side(s0), len = g.x1 - g.x0, a = g.apex, b = g.xr - 0.4;
+      m = Math.min(m, (b - a) * 0.86);
+      x = Math.max(a + m / 2, Math.min(b - m / 2, x));
+      const hull = Math.max(r(Math.min(x - m / 2, L - 0.01)), r(Math.min(x + m / 2, L - 0.01))), room = Math.abs(g.tip) - hull;
+      m = Math.min(m, room * 0.84); x = Math.max(a + m / 2, Math.min(b - m / 2, x));
+      y = s0 * (hull + room / 2);
+    }
+    return { x, y, m };
+  }
   function finShapes(d, f) {
     const L = f.L, D = d.D, r = x => P().radius(d, x);
     const len = f.lt * (d.fins === "large" ? 0.72 : 0.6), xe = L - f.lt * (d.tail === "cruciform" ? -0.04 : 0.1), xs = xe - len;
     const proj = D * (d.fins === "large" ? 0.3 : d.fins === "twin" ? 0.17 : 0.22);
+    const apex = 0.46, rf = 0.3;
     return { x0: xs, x1: xe, proj, side(s) {
-      const tip = s * (r(xs) * 0.92 + proj), xr = xe - len * 0.28;
-      const out = { x0: xs, x1: xe, root: s * r(xs), span: proj + r(xs) * 0.2,
-        fin: [[xs, s * r(xs)], [xs + len * 0.42, tip], [xe, tip], [xe, s * r(Math.min(xe, L))]],
-        rud: [[xr, s * r(xr)], [xr, tip], [xe, tip], [xe, s * r(Math.min(xe, L))]] };
+      // A fixed fin swept back from the hull to its tip, and behind it, across a narrow gap at the hinge, the moving surface.
+      const rr = x => r(Math.max(0, Math.min(x, L - 0.01)));
+      const tip = s * (r(xs) * 0.92 + proj), xr = xe - len * rf, gap = Math.min(0.45, len * 0.02);
+      const out = { x0: xs, x1: xe, xr, tip, apex: xs + len * apex, root: s * r(xs), span: proj + r(xs) * 0.2,
+        fin: [[xs, s * r(xs) * 0.96], [xs + len * apex, tip], [xr - gap, tip], [xr - gap, s * rr(xr - gap) * 0.9]],
+        rud: [[xr + gap, s * rr(xr + gap) * 0.9], [xr + gap, tip], [xe - len * 0.06, tip], [xe, s * (Math.abs(tip) - proj * 0.24)], [xe, s * rr(xe) * 0.9]] };
       if (d.fins === "twin") { const a = xs - len * 0.55, b = xs - len * 0.05, t2 = s * (r(a) * 0.92 + proj * 0.9); out.twin = [[a, s * r(a)], [a + (b - a) * 0.42, t2], [b, t2], [b, s * r(b)]]; }
       return out;
     } };
@@ -175,16 +220,40 @@ window.UpShip = window.UpShip || {};
     const g = d.systems && d.systems.gondola;
     const D = d.D, a = f.ln + 1, b = g ? f.ln + g.len * 15 - 1 : f.ln + Math.min(14, f.mid - 1), h = g ? Math.max(3, D * 0.15) : Math.max(2.4, D * 0.11), yb = r(a + 3);
     const top = d.car === "recessed" ? yb - h * 0.5 : yb, bottom = top + h;
-    const wins = Array.from({ length: Math.max(3, Math.floor((b - a) / 2.2)) }, (_, i) => `<rect x="${Math.min(X(a + 1.5 + i * 2.2), X(a + 2.7 + i * 2.2))}" y="${Y(top + h * 0.25)}" width="${Math.max(1.5, Math.abs(X(1.2) - X(0)))}" height="${Math.max(1.5, Y(h * 0.3) - Y(0))}" class="lv-win"/>`).join("");
-    if (d.car === "streamlined" && !g) return `<path d="M${X(a)},${Y(top)} C${X(a - 2)},${Y(bottom)} ${X(a + 4)},${Y(bottom + 1)} ${X(a + 8)},${Y(bottom)} L${X(b)},${Y(top + h * 0.45)} L${X(b)},${Y(top)} Z" fill="${color}" class="lv-edge"/>`;
-    return `<rect ${span(X(a), X(b))} y="${Y(top)}" height="${Y(h) - Y(0)}" rx="${Math.min(6, (Y(h) - Y(0)) * 0.35)}" fill="${color}" class="lv-edge"/>${wins}`;
+    // A shaped car: an upright bow rounded under like a boat's, a flat keel, and a long fairing up into the hull aft; a row of separate panes.
+    const px = Y(1) - Y(0), pt = (x, y) => `${X(x).toFixed(1)},${Y(y).toFixed(1)}`;
+    const w0 = a + 0.55, w1 = b - h * 1.25, wh = Math.min(h * 0.32, 1), pw = Math.max(1.3, wh * 1.45), step = pw + 0.42, n = Math.max(2, Math.floor((w1 - w0 + (step - pw)) / step)), wy = top + h * 0.2;
+    const inset = 0;
+    let wins = "";
+    for (let i = 0; i < n; i++) { const x = w0 + inset + i * step; wins += `<rect ${span(X(x), X(x + pw))} y="${Y(wy).toFixed(1)}" height="${Math.max(1.2, wh * px).toFixed(1)}" rx="${(0.12 * px).toFixed(2)}" class="lv-glass"/>`; }
+    const belly = `<path d="M${pt(a, top + h * 0.72)} L${pt(b, top + h * 0.72)} L${pt(b, bottom + 1)} L${pt(a, bottom + 1)} Z" fill="#000" opacity="0.14"/><line x1="${X(a)}" y1="${Y(top + h * 0.72)}" x2="${X(b - h * 0.5)}" y2="${Y(top + h * 0.72)}" class="lv-wire"/>`;
+    const shape = d.car === "streamlined" && !g
+      ? `M${X(a)},${Y(top)} C${X(a - 2)},${Y(bottom)} ${X(a + 4)},${Y(bottom + 1)} ${X(a + 8)},${Y(bottom)} L${X(b)},${Y(top + h * 0.45)} L${X(b)},${Y(top)} Z`
+      : `M${pt(a, top)} L${pt(a, top + h * 0.6)} Q${pt(a, bottom)} ${pt(a + h * 0.8, bottom)} L${pt(b - h * 1.5, bottom)} Q${pt(b - h * 0.5, bottom)} ${pt(b, top)} Z`;
+    const cid = "lvc" + (++uid);
+    // A bumper under the bow, for landing.
+    const bump = `<path d="M${pt(a + h * 0.7, bottom)} Q${pt(a + h * 1.1, bottom + h * 0.28)} ${pt(a + h * 1.5, bottom)} Z" fill="#4a3f33" class="lv-edge"/>`;
+    return `${bump}<clipPath id="${cid}"><path d="${shape}"/></clipPath><path d="${shape}" fill="${color}"/><g clip-path="url(#${cid})">${belly}${d.car === "streamlined" && !g ? "" : wins}</g><path d="${shape}" fill="none" class="lv-edge"/>`;
   }
   function engineShape(x, mount, r, X, Y, D, color) {
-    const len = Math.max(5, D * 0.26), h = Math.max(1.8, D * 0.08), yb = mount === "sides" ? r(x) * 0.5 : r(x) + D * 0.1;
-    const s0 = mount === "sides" ? r(x) * 0.3 : r(x) * 0.98;
-    return `<line x1="${X(x - len * 0.2)}" y1="${Y(s0)}" x2="${X(x - len * 0.2)}" y2="${Y(yb)}" class="lv-strut"/><line x1="${X(x + len * 0.25)}" y1="${Y(s0)}" x2="${X(x + len * 0.25)}" y2="${Y(yb)}" class="lv-strut"/>
-      <path d="M${X(x - len / 2)},${Y(yb + h / 2)} C${X(x - len / 2)},${Y(yb - h * 0.2)} ${X(x + len * 0.3)},${Y(yb - h * 0.1)} ${X(x + len / 2)},${Y(yb + h / 2)} C${X(x + len * 0.3)},${Y(yb + h * 1.1)} ${X(x - len / 2)},${Y(yb + h * 1.2)} ${X(x - len / 2)},${Y(yb + h / 2)} Z" fill="${color}" class="lv-edge"/>
-      <ellipse cx="${X(x - len / 2 - 0.6)}" cy="${Y(yb + h / 2)}" rx="${Math.max(0.8, Math.abs(X(0.35) - X(0)))}" ry="${Y(h * 1.4) - Y(0)}" class="lv-prop"/>`;
+    // An engine car: an egg-shaped gondola, radiator in its nose, hung beneath the hull on struts braced with wires, a ladder up
+    // into the ship, and a two-bladed wooden propeller behind.
+    const h = Math.max(2.8, D * 0.13), len = h * 2.7, yb = mount === "sides" ? r(x) * 0.5 : r(x) + D * 0.1, yc = yb + h / 2, y0 = yb, y1 = yb + h;
+    const s0 = mount === "sides" ? r(x) * 0.3 : r(x) * 0.985, px = Y(1) - Y(0), xf = x - len / 2, xt = x + len * 0.42, xp = xt + len * 0.07;
+    const pt = (px0, py0) => `${X(px0).toFixed(1)},${Y(py0).toFixed(1)}`, ln = (x1, yy1, x2, y2, c) => `<line x1="${X(x1).toFixed(1)}" y1="${Y(yy1).toFixed(1)}" x2="${X(x2).toFixed(1)}" y2="${Y(y2).toFixed(1)}" class="${c}"/>`;
+    const pod = `M${pt(xf, yc - h * 0.05)} C${pt(xf, y0 + h * 0.12)} ${pt(xf + len * 0.1, y0)} ${pt(xf + len * 0.28, y0)} L${pt(xf + len * 0.56, y0)} C${pt(xf + len * 0.78, y0)} ${pt(xt, yc - h * 0.3)} ${pt(xt, yc - h * 0.17)} L${pt(xt, yc + h * 0.17)} C${pt(xt, yc + h * 0.34)} ${pt(xf + len * 0.74, y1)} ${pt(xf + len * 0.48, y1)} L${pt(xf + len * 0.26, y1)} C${pt(xf + len * 0.08, y1)} ${pt(xf, y1 - h * 0.18)} ${pt(xf, yc - h * 0.05)} Z`;
+    const cid = "lve" + (++uid), R = Math.max(1.7, h * 0.82), bw = 0.26;
+    const blade = sg => `<path d="M${pt(xp, yc)} Q${pt(xp - bw, yc + sg * R * 0.55)} ${pt(xp, yc + sg * R)} Q${pt(xp + bw * 1.3, yc + sg * R * 0.5)} ${pt(xp, yc)} Z" class="lv-blade"/>`;
+    let ladder = ln(xf + len * 0.4, s0, xf + len * 0.4, y0, "lv-wire") + ln(xf + len * 0.4 + 0.4, s0, xf + len * 0.4 + 0.4, y0, "lv-wire");
+    for (let y = s0 + 0.35; y < y0 - 0.1; y += 0.4) ladder += ln(xf + len * 0.4, y, xf + len * 0.4 + 0.4, y, "lv-wire");
+    return `${ln(xf + len * 0.16, s0, xf + len * 0.26, y0, "lv-strut")}${ln(xf + len * 0.7, s0, xf + len * 0.58, y0, "lv-strut")}
+      ${ln(xf + len * 0.16, s0, xf + len * 0.58, y0, "lv-wire")}${ln(xf + len * 0.7, s0, xf + len * 0.26, y0, "lv-wire")}${ln(xf - len * 0.12, s0, xf + len * 0.08, y0 + h * 0.1, "lv-wire")}${ladder}
+      <clipPath id="${cid}"><path d="${pod}"/></clipPath><path d="${pod}" fill="${color}"/>
+      <g clip-path="url(#${cid})"><rect ${span(X(xf), X(xt))} y="${Y(yc + h * 0.14)}" height="${(h * px).toFixed(1)}" fill="#000" opacity="0.2"/><rect ${span(X(xf), X(xt))} y="${Y(y0)}" height="${(h * 0.16 * px).toFixed(1)}" fill="#fff" opacity="0.28"/>
+        ${[0.035, 0.065, 0.095].map(k => ln(xf + len * k, y0, xf + len * k, y1, "lv-wire")).join("")}${ln(xf, yc + h * 0.14, xt, yc + h * 0.14, "lv-wire")}</g>
+      <rect ${span(X(xf + len * 0.2), X(xf + len * 0.2 + 0.8))} y="${Y(yc - h * 0.26)}" height="${(h * 0.26 * px).toFixed(1)}" rx="${(0.1 * px).toFixed(2)}" class="lv-glass"/><rect ${span(X(xf + len * 0.2 + 1.1), X(xf + len * 0.2 + 1.9))} y="${Y(yc - h * 0.26)}" height="${(h * 0.26 * px).toFixed(1)}" rx="${(0.1 * px).toFixed(2)}" class="lv-glass"/>
+      <path d="${pod}" fill="none" class="lv-edge"/>
+      ${blade(-1)}${blade(1)}<path d="M${pt(xt, yc - h * 0.17)} L${pt(xp + len * 0.07, yc)} L${pt(xt, yc + h * 0.17)} Z" class="lv-hub"/>`;
   }
 
   // The top view, as seen on the map: only what shows from above.
@@ -202,11 +271,19 @@ window.UpShip = window.UpShip || {};
       return band(-1) + band(1);
     };
     const fin = finShapes(d, f);
-    const g = fin.side(-1), hf = [[g.fin[0][0], -r(g.fin[0][0])], [g.fin[1][0], g.fin[1][1]], [g.fin[2][0], g.fin[2][1]], [g.fin[3][0], g.fin[3][1]]];
+    const g = fin.side(-1), hf = g.fin;
     const finPath = s => `M${hf.map(p => `${X(p[0])},${Y(s * Math.abs(p[1]))}`).join(" L")} Z`;
     const rud = s => `M${g.rud.map(p => `${X(p[0])},${Y(s * Math.abs(p[1]))}`).join(" L")} Z`;
     let fins = `<path d="${finPath(-1)}" fill="${lv.fins}" class="lv-edge"/><path d="${finPath(1)}" fill="${lv.fins}" class="lv-edge"/>
       <path d="${rud(-1)}" fill="${lv.rudders || lv.fins}" class="lv-edge"/><path d="${rud(1)}" fill="${lv.rudders || lv.fins}" class="lv-edge"/>`;
+    // Ribs across the horizontal fins.
+    { const n = Math.max(4, Math.round((g.x1 - g.x0) / 5)); fins += `<clipPath id="${id}r"><path d="${finPath(-1)} ${finPath(1)} ${rud(-1)} ${rud(1)}"/></clipPath><g clip-path="url(#${id}r)" class="lv-ribs">`;
+      for (let i = 1; i < n; i++) { const x = g.x0 + (g.x1 - g.x0) * i / n; fins += `<line x1="${X(x)}" y1="${Y(-Math.abs(g.tip) * 1.05)}" x2="${X(x)}" y2="${Y(Math.abs(g.tip) * 1.05)}"/>`; }
+      fins += `</g>`; }
+    // Rings and girders seen from above.
+    let seams = "", girders = "";
+    for (let x = f.ln % 15; x < L; x += 15) if (x > 2.5 && x < L - 2.5) seams += `<line x1="${X(x)}" y1="${Y(-r(x))}" x2="${X(x)}" y2="${Y(r(x))}"/>`;
+    for (const a of [-60, -36, -17, 17, 36, 60]) { const fy = Math.sin(a * Math.PI / 180), pts = []; for (let i = 2; i <= N - 2; i++) { const x = L * i / N; pts.push(`${X(x).toFixed(1)},${Y(r(x) * fy).toFixed(1)}`); } girders += `<polyline points="${pts.join(" ")}"/>`; }
     let body = `<rect ${span(X(-2), X(L + 2))} y="${Y(-R * 1.1)}" height="${Y(R * 1.1) - Y(-R * 1.1)}" fill="${lv.hull}"/>`;
     if (lv.twoTone && lv.split < 0) body += pair(lv.split, 2, lv.lower);
     if (lv.nose) body += vband(-2, f.ln * 0.42, lv.nose);
@@ -244,12 +321,17 @@ window.UpShip = window.UpShip || {};
         for (const side of [1, -1]) hullEmblems += placed(X(x), Y(side * w), sz, side > 0 ? 0 : 180, Math.max(0.15, up));
       }
     }
-    const shade = `<linearGradient id="${id}s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0.3"/><stop offset="0.35" stop-color="#fff" stop-opacity="0.18"/><stop offset="0.5" stop-color="#fff" stop-opacity="0.3"/><stop offset="0.65" stop-color="#fff" stop-opacity="0.18"/><stop offset="1" stop-color="#000" stop-opacity="0.3"/></linearGradient>`;
+    const shade = `<linearGradient id="${id}s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0.4"/><stop offset="0.16" stop-color="#000" stop-opacity="0.12"/><stop offset="0.36" stop-color="#fff" stop-opacity="0.2"/><stop offset="0.5" stop-color="#fff" stop-opacity="0.34"/><stop offset="0.64" stop-color="#fff" stop-opacity="0.2"/><stop offset="0.84" stop-color="#000" stop-opacity="0.12"/><stop offset="1" stop-color="#000" stop-opacity="0.4"/></linearGradient>
+      <linearGradient id="${id}h" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity="0.24"/><stop offset="0.14" stop-color="#000" stop-opacity="0"/><stop offset="0.86" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.24"/></linearGradient>`;
     return `<defs><clipPath id="${id}c"><path d="${outline}"/></clipPath>${shade}</defs>${fins}
       ${(d.systems && d.systems.engines || []).map(e => { const x = P().bayCentre(d, f.ln, e.bay), w = Math.max(3, d.D * 0.24), ry = Math.max(1.2, d.D * 0.05);
         // Engine cars seen from above: out on struts either side of the hull.
-        return [1, -1].map(sd => `<line x1="${X(x)}" y1="${Y(sd * r(x) * 0.9)}" x2="${X(x)}" y2="${Y(sd * (r(x) + d.D * 0.1))}" stroke="#5a5650" stroke-width="0.8"/><ellipse cx="${X(x)}" cy="${Y(sd * (r(x) + d.D * 0.12))}" rx="${Math.abs(X(w / 2) - X(0))}" ry="${Math.abs(Y(ry) - Y(0))}" fill="${lv.engines || "#b9bcbd"}" class="lv-edge"/>`).join(""); }).join("")}
-      <g clip-path="url(#${id}c)">${body}${hullEmblems}<path d="${outline}" fill="url(#${id}s)"/></g><path d="${outline}" class="lv-outline"/>${spineFin}${emblems}`;
+        const h = Math.max(2.8, d.D * 0.13), len = h * 2.7, hw = h * 0.36, xf = x - len / 2, xt = x + len * 0.42, xp = xt + len * 0.07, pr = Math.max(1.7, h * 0.82);
+        return [1, -1].map(sd => { const yc = sd * (r(x) + d.D * 0.1 + hw);
+          return `<line x1="${X(xf + len * 0.26)}" y1="${Y(sd * r(x) * 0.9)}" x2="${X(xf + len * 0.26)}" y2="${Y(yc)}" class="lv-strut"/><line x1="${X(xf + len * 0.58)}" y1="${Y(sd * r(x) * 0.9)}" x2="${X(xf + len * 0.58)}" y2="${Y(yc)}" class="lv-strut"/>
+            <path d="M${X(xf)},${Y(yc)} C${X(xf)},${Y(yc - hw)} ${X(xf + len * 0.1)},${Y(yc - hw)} ${X(xf + len * 0.28)},${Y(yc - hw)} L${X(xf + len * 0.56)},${Y(yc - hw)} C${X(xf + len * 0.8)},${Y(yc - hw)} ${X(xt)},${Y(yc - hw * 0.6)} ${X(xt)},${Y(yc - hw * 0.4)} L${X(xp + len * 0.07)},${Y(yc)} L${X(xt)},${Y(yc + hw * 0.4)} C${X(xt)},${Y(yc + hw * 0.6)} ${X(xf + len * 0.8)},${Y(yc + hw)} ${X(xf + len * 0.56)},${Y(yc + hw)} L${X(xf + len * 0.28)},${Y(yc + hw)} C${X(xf + len * 0.1)},${Y(yc + hw)} ${X(xf)},${Y(yc + hw)} ${X(xf)},${Y(yc)} Z" fill="${lv.engines || "#b9bcbd"}" class="lv-edge"/>
+            <line x1="${X(xp)}" y1="${Y(yc - pr)}" x2="${X(xp)}" y2="${Y(yc + pr)}" class="lv-prop-top"/>`; }).join(""); }).join("")}
+      <g clip-path="url(#${id}c)">${body}${hullEmblems}<path d="${outline}" fill="url(#${id}s)"/><path d="${outline}" fill="url(#${id}h)"/><g class="lv-girders">${girders}</g><g class="lv-seams">${seams}</g></g><path d="${outline}" class="lv-outline"/>${spineFin}${emblems}`;
   }
   // On the hull, y is a share of the local radius; beyond +/-1 it is on a fin, measured out from the hull's surface in radii.
   const emblemY = (e, rx, R) => Math.abs(e.y) <= 1 ? e.y * rx : Math.sign(e.y) * (rx + (Math.abs(e.y) - 1) * R);
@@ -261,5 +343,5 @@ window.UpShip = window.UpShip || {};
     let wins = ""; for (let x = a + 2.5; x < b - 2; x += 3) wins += `<rect x="${Math.min(X(x), X(x + 1.6))}" y="${Y(top + h * 0.3)}" width="${Math.abs(X(1.6) - X(0))}" height="${Y(h * 0.32) - Y(0)}" fill="#cfe1ea"/>`;
     return `<g class="lv-gondola"><rect x="${Math.min(X(a), X(b))}" y="${Y(top)}" width="${Math.abs(X(b) - X(a))}" height="${Y(h) - Y(0)}" rx="${Math.min(8, (Y(h) - Y(0)) * 0.45)}" fill="${col}" class="lv-edge"/>${wins}</g>`;
   }
-  U.livery = { builders, emblemY, PALETTE, FONTS, DECOR, fresh, presets, applyPreset, side, top, finShapes };
+  U.livery = { builders, emblemY, emblemPlace, PALETTE, FONTS, DECOR, fresh, presets, applyPreset, side, top, finShapes };
 })(window.UpShip);
