@@ -99,15 +99,19 @@ window.UpShip = window.UpShip || {};
 
   // The builders' classes are designs too: their figures come from the lineup the physics produced.
   // American classes take the German counterpart's design, filled with helium.
+  const JP_FROM = { tsubame: "gabbiano", hato: "colombo", kaigun: "militare" };
   const US_FROM = { goodyear: "seeschwalbe", goodyearcargo: "brieftaube", navyrigid: "marine" };
   const US_SCALE = { goodyear: { load: 0.5, price: 0.75 }, goodyearcargo: { load: 0.6, price: 0.75 } };          // the non-rigids: small and cheap
   function usLineup() {
     const out = {};
     for (const id of Object.keys(U.SHIP_CLASSES)) {
+      // Japan's classes take the Italian counterpart's design as it is (hydrogen).
+      const jp = JP_FROM[id] || (id.endsWith("-japan") ? id.replace(/-japan$/, "-italy") : null);
+      if (jp && U.LINEUP && U.LINEUP[jp]) { out[id] = { ...U.LINEUP[jp], design: JSON.parse(JSON.stringify(U.LINEUP[jp].design)) }; continue; }
       const src = US_FROM[id] || (id.endsWith("-usa") ? id.replace(/-usa$/, "-germany") : null), L = src && U.LINEUP && U.LINEUP[src];
       if (!L) continue;
       const k = US_SCALE[id] || { load: 1, price: 1 }, h = 0.85 * k.load, d = JSON.parse(JSON.stringify(L.design)); d.gas = "helium";
-      out[id] = { ...L, usLoad: h, design: d, passengers: Math.floor(L.passengers * h), seats: Math.floor((L.seats || 0) * h), cargoTons: Math.round(L.cargoTons * h * 10) / 10,
+      out[id] = { ...L, usLoad: h, liftsAs: L.passengers, design: d, passengers: Math.floor(L.passengers * h), seats: Math.floor((L.seats || 0) * h), cargoTons: Math.round(L.cargoTons * h * 10) / 10,
         price: Math.round(L.price * 1.12 * k.price / 1000) * 1000 };
     }
     return out;
@@ -120,14 +124,27 @@ window.UpShip = window.UpShip || {};
         buildDays: L.buildDays, shedSize: L.shedSize, baked: L.baked, design: L.design, fromDesign: true });
       if (c.kind !== "surplus") c.kind = L.passengers ? "passenger" : "cargo";
       // Passenger ships are fitted out by the present rules (a day ship or a liner, as the builders would), on a copy of the
-      // design, and take their passengers, seats, and comfort from that deck plan. American classes carry the helium share of it.
+      // design, and take their figures from that deck plan: passengers are the seats and berths her hull can actually lift.
+      // The medium ships take two or three passenger bays, whichever carries more. American classes carry the helium share.
       if (L.passengers) {
-        const d = JSON.parse(JSON.stringify(L.design));
-        try {
+        const fit = bays3 => {
+          const d = JSON.parse(JSON.stringify(L.design)), m = d.systems.modules;
+          if (L.usLoad) d.gas = "hydrogen";                    // the helium share is taken off afterwards, once
+          if (bays3) { const pb = Object.keys(m).filter(k0 => m[k0] === "passenger").map(Number), free = pb.length ? [Math.max(...pb) + 1, Math.min(...pb) - 1].find(b => b >= 2 && b <= d.bays && !m[b]) : null; if (!free) return null; m[free] = "passenger"; }
           U.decks.standardLayout(d, L.seats > 0 ? "day" : "liner");
-          const st = U.decks.stats(d), k = L.usLoad || 1;
-          if (st.passengers) Object.assign(c, { design: d, passengers: Math.floor(st.passengers * k), seats: Math.floor((st.daySeats || 0) * k), comfort: st.comfort,
-            firstShare: st.passengers ? (st.first || 0) / st.passengers : 0, hasBar: !!(st.roomKinds && st.roomKinds.has("bar")) });
+          const f = P().figures(null, d), lift = f.demand > 0 ? Math.max(0, Math.min(1, f.payloadRoom / f.demand)) : 1;
+          // What she carries: what the plan seats, limited to what her hull lifts (the builders' figure, or today's reckoning if higher).
+          const lifts = Math.max(L.liftsAs || L.passengers, Math.floor(f.passengers * lift)), pax = Math.min(f.passengers, lifts);
+          return { d, f, share: f.passengers ? pax / f.passengers : 1, pax };
+        };
+        try {
+          let best = fit(false);
+          if (/^medium-/.test(id)) { const three = fit(true); if (three && three.pax > best.pax) best = three; }
+          const { d, f, share } = best, k = L.usLoad || 1;
+          if (L.usLoad) d.gas = "helium";
+          if (f.passengers) Object.assign(c, { design: d, passengers: Math.floor(f.passengers * share * k), seats: Math.floor((f.daySeats || 0) * share * k), comfort: f.comfort,
+            firstShare: f.passengers ? (f.firstBerths || 0) / f.passengers : 0, hasBar: !!(f.plan && f.plan.roomKinds && f.plan.roomKinds.has("bar")),
+            liftSpare: Math.max(0, Math.min(0.1, (f.payloadRoom - f.demand) / Math.max(1, f.gross))) });
         } catch (e) { console.warn("fit-out failed for", id, e); }
       }
     }

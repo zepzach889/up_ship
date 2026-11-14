@@ -17,6 +17,8 @@ window.UpShip = window.UpShip || {};
       about: ["Trains 3 hands a month, and now and then an officer", "Trains 6 hands a month, officers more often", "Trains 10 hands a month, officers often"] },
     refinery: { name: "Aetherium refinery", costs: [40000, 60000, 90000],
       about: ["Supplies Aetherium for 4 ships", "Supplies Aetherium for 10 ships", "Supplies Aetherium for 25 ships"] },
+    lab: { name: "Research laboratory", costs: [25000, 45000, 80000],
+      about: ["Research goes a fifth faster", "Research goes two fifths faster", "Research goes three fifths faster"] },
     gasplant: { name: "Gas plant", costs: [4000], about: ["Hydrogen for your ships here, without the public supply"] },
     hestore: { name: "Helium store", costs: [6000], about: ["Helium bought by the trainload: much cheaper here inland"] }
   };
@@ -56,7 +58,7 @@ window.UpShip = window.UpShip || {};
   }
   function own(state, id) {
     const f = state.facilities[id] = state.facilities[id] || { mast: 0, terminal: 0, shed: 0 };
-    f.gasplant = f.gasplant || 0; f.hestore = f.hestore || 0; f.school = f.school || 0; f.refinery = f.refinery || 0;
+    f.gasplant = f.gasplant || 0; f.hestore = f.hestore || 0; f.school = f.school || 0; f.refinery = f.refinery || 0; f.lab = f.lab || 0;
     return f;
   }
   const ownLevel = (state, id, type) => (state.facilities[id] || {})[type] || 0;
@@ -82,14 +84,19 @@ window.UpShip = window.UpShip || {};
   // Building ---------------------------------------------------------------------------
   function nextCost(state, id, type) {
     const lvl = ownLevel(state, id, type);
+    if (type === "shed" && U.cityById[id] && U.cityById[id].empire === "ussr") return null;          // no foreign sheds on Soviet soil
     return lvl >= TYPES[type].costs.length ? null : TYPES[type].costs[lvl];
   }
+  // Every laboratory level, wherever built, makes research a fifth faster (up to six levels: just over twice the speed).
+  const labLevels = state => Object.values(state.facilities || {}).reduce((n, f) => n + (f.lab || 0), 0);
+  function syncLabs(state) { if (state.research) state.research.labMult = 1 + 0.2 * Math.min(6, labLevels(state)); }
   function build(state, id, type) {
     if (U.sim && U.sim.hasRights && !U.sim.hasRights(state, id)) return false;          // landing rights first
     const cost = nextCost(state, id, type);
     if (cost == null || state.money < cost) return false;
     state.money -= cost;
     own(state, id)[type] += 1;
+    if (type === "lab") syncLabs(state);
     state.facilityCost[id] = (state.facilityCost[id] || 0) + cost;
     state.year.facilities = (state.year.facilities || 0) + cost;
     return true;
@@ -202,5 +209,5 @@ window.UpShip = window.UpShip || {};
 
   U.facilities = { TYPES, GAS_TYPES, GAS, HELIUM_PORTS, publicGas, canTopUp, heliumPrice, gasGap, SIZE_NAMES, FEES, BASIC_ROOM, hasPublic, shipSize, init, ownLevel, effective, canLand, terminalLimits,
     demandBoost, nextCost, build, mastsNeeded, daily, roomToday, recordBoarding, dock, congested, shedFits, nearestShed, deliveryCity };
-  Object.assign(U.facilities, { hasPublic, FEES, UPKEEP });
+  Object.assign(U.facilities, { labLevels, syncLabs, hasPublic, FEES, UPKEEP });
 })(window.UpShip);

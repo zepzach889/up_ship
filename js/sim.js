@@ -15,9 +15,16 @@ window.UpShip = window.UpShip || {};
     if (typeof b === "string") b = U.cityById[b];
     const R = 6371, rad = Math.PI / 180;
     const la = a.realLat ?? a.lat, lo = a.realLon ?? a.lon, lb = b.realLat ?? b.lat, lob = b.realLon ?? b.lon;      // gateways measure from their real places
+    // Mountain walls: where the straight way would cross one, the distance is by a pass or round an end.
+    if (U.barriers) return U.barriers.route([la, lo], [lb, lob]).km;
     const dLat = (lb - la) * rad, dLon = (lob - lo) * rad;
     const h = Math.sin(dLat / 2) ** 2 + Math.cos(la * rad) * Math.cos(lb * rad) * Math.sin(dLon / 2) ** 2;
     return 2 * R * Math.asin(Math.sqrt(h));
+  }
+  // The way between two places: its distance, the passes or headlands it goes by, and any load limit a high pass sets.
+  function legWay(a, b) {
+    if (typeof a === "string") a = U.cityById[a]; if (typeof b === "string") b = U.cityById[b];
+    return U.barriers.route([a.realLat ?? a.lat, a.realLon ?? a.lon], [b.realLat ?? b.lat, b.realLon ?? b.lon]);
   }
   function nearestCity(lat, lon) {
     let best = null, bd = Infinity;
@@ -34,7 +41,9 @@ window.UpShip = window.UpShip || {};
   function freightWeight(c) { return U.TIERS[tierOf(c)].demand / 6 * U.SPECIALTIES[c.specialty].freightBoost; }
   // Seasons: travel peaks in high summer and falls off in winter, about 15% either way.
   const season = () => { if (!U.state) return 1; const m = dateOf(U.state.tick).getUTCMonth(); return 1 + 0.15 * Math.cos((m - 6.5) / 12 * 2 * Math.PI); };
-  function dailyPassengers(a, b) { return Math.sqrt(paxWeight(U.cityById[a]) * paxWeight(U.cityById[b])) * E().passengerShare * season(); }
+  // Travel into and out of the Soviet Union was restricted: few visas, so few passengers for a foreign line.
+  const soviet = id => U.cityById[id].empire === "ussr";
+  function dailyPassengers(a, b) { return Math.sqrt(paxWeight(U.cityById[a]) * paxWeight(U.cityById[b])) * E().passengerShare * season() * (soviet(a) || soviet(b) ? 0.6 : 1); }
   function dailyFreight(a, b) { return Math.sqrt(freightWeight(U.cityById[a]) * freightWeight(U.cityById[b])) * E().freightShare; }
   const pairKey = (a, b) => a + ">" + b;
 
@@ -77,8 +86,13 @@ window.UpShip = window.UpShip || {};
     return out;
   }
   // Uses every name in the class's list, then the whole list again with II, III, and so on.
+  // The next name for a ship of a class: the class's own names first, then the theme chosen for the design (or the
+  // nation's usual style), and only then numerals.
   function suggestName(state, classId) {
-    const names = U.SHIP_CLASSES[classId].names;
+    const c = U.SHIP_CLASSES[classId], e = c.designed && (state.designs || []).find(x => x.id === c.designId);
+    const own = c.names || [], pool = U.themeNames ? U.themeNames(state, e && e.theme) : [];
+    const names = own.concat(pool).filter((n, i, all) => all.indexOf(n) === i);
+    for (const n of names) if (!state.usedNames[n]) return n;
     for (let round = 1; round < 100; round++)
       for (const n of names) {
         const name = round === 1 ? n : `${n} ${roman(round)}`;
@@ -136,7 +150,8 @@ window.UpShip = window.UpShip || {};
     U.research.init(state);
     U.facilities.init(state);
     U.passengers.init(state);
-    state.empireCarried = true;
+    state.empireCarried = true; state.sovietCarried = true;
+    if (config.nation === "japan" && state.research) { state.research.done = state.research.done || {}; state.research.done.operations1 = true; }          // an island empire keeps a weather service
     if (config.nation === "usa") state.gasPolicy = { all: "helium", byClass: {} };          // America's helium, from the start
     U.weather.init(state);
     for (const id of catalog(state)) if (U.SHIP_CLASSES[id].kind === "surplus") state.surplusLeft[id] = E().surplusStock;
@@ -202,7 +217,11 @@ window.UpShip = window.UpShip || {};
   }
   function canAssign(state, ship, route) {
     const c = U.research.stats(state, ship), longest = longestLeg(route.stops, route.circuit);
-    if (longest > c.rangeKm) return `A leg of ${Math.round(longest)} km is beyond its ${c.rangeKm.toLocaleString("en-GB")} km range`;
+    if (longest > c.rangeKm) {
+      // If the mountains are why, say which way the leg must go.
+      const legs = routeLegs(route).map(([a, b]) => ({ a, b, w: legWay(a, b) })).sort((x, y) => y.w.km - x.w.km)[0], by = legs.w.via.length ? `, which goes by ${legs.w.via.map(v => v.name).join(" and ")} because the mountains bar the direct way,` : "";
+      return `A leg of ${Math.round(longest).toLocaleString("en-GB")} km${by} is beyond its ${c.rangeKm.toLocaleString("en-GB")} km range`;
+    }
     if (ship.gas === "helium" && state.company.nation !== "usa" && route.stops.some(id => U.cityById[id].country === "United States"))
       return "America sells no helium to foreign lines: American routes need a hydrogen ship";
     { const p = hopPlan(state, ship, ship.location); if (!route.stops.some(id => id === ship.location || p.dist[id] != null)) return cannotReach(ship, "this route", p.range) + ": send her nearer, or build masts on the way"; }
@@ -351,7 +370,11 @@ window.UpShip = window.UpShip || {};
   function legLift(state, ship, a, b) {
     const A = liftAt(state, a), B = liftAt(state, b), w = A.f <= B.f ? { ...A, at: a } : { ...B, at: b };
     const spare = cls(ship).liftSpare || 0;
-    return { f: Math.min(1, w.f + spare * 3), why: w.why, at: w.at };
+    // A high pass on the way sets its own limit.
+    const way = legWay(a, b), pass = way.load < 1 ? way.via.find(v => v.load) : null;
+    const f = Math.min(1, w.f + spare * 3);
+    if (pass && way.load < f) return { f: way.load, why: "climb over " + pass.name, at: b, pass: pass.name };
+    return { f, why: w.why, at: w.at };
   }
   function board(state, ship, route, reserved = 0) {
     const c = U.research.stats(state, ship);
@@ -365,6 +388,8 @@ window.UpShip = window.UpShip || {};
     // Special compartments: their own capacity, cut back only if the terminal cannot take a full hold today.
     const cut0 = Math.min(1, room.tons / Math.max(0.1, c.cargoTons));
     if (mix0) for (const [k0, v] of Object.entries(mix0)) { cap[k0] = v * cut0; hold -= cap[k0]; }
+    // Every ship carries a little mail in her hold, between the cities she already serves; a mail room carries far more.
+    if (!cap.mail && hold > 0.4) { cap.mail = Math.min(0.5, hold * 0.15); hold -= cap.mail; }
     hold = Math.max(0, hold);
     // Heat and height: she lifts less out of, or into, a hot or high city, so she boards fewer and loads less.
     const nextStop = downstream(route, ship)[0], LF = nextStop ? legLift(state, ship, from, nextStop) : { f: 1 };
@@ -491,6 +516,32 @@ window.UpShip = window.UpShip || {};
         if (!route) { ship.readyHour = t; return; }
         if (!ship.captainId) { ship.readyHour = T1; return; }        // no captain, no flight
         next = nextStop(state, ship, route);
+        // A stop where her landing rights have lapsed (a Soviet permit not renewed): she waits, and says so.
+        if (!next.stuck && !hasRights(state, next.to)) {
+          const month = Math.floor(t / 720);
+          if (ship.rightsWarned !== month) { ship.rightsWarned = month; telegram(state, t, `${ship.name} held at ${U.cityById[ship.location].name} stop no landing rights at ${U.cityById[next.to].name} stop renew the permit or change her route stop`, true, { type: "ship", id: ship.id }); }
+          ship.readyHour = T1; return;
+        }
+        // Soviet inspections: now and then a ship leaving a Soviet city is held while her papers, crew, and cargo are checked.
+        if (!next.stuck && authority(ship.location) === "ussr" && ship.inspectedAt !== ship.location + ":" + (ship.arrivedHour ?? 0)) {
+          ship.inspectedAt = ship.location + ":" + (ship.arrivedHour ?? 0);
+          if (Math.random() < (state.company.nation === "germany" ? 0.01 : 0.04)) {
+            const days = 1 + Math.floor(Math.random() * 3), who = dateAtHour(t).getUTCFullYear() >= 1934 ? "nkvd" : "ogpu";
+            telegram(state, t, `${ship.name} held at ${U.cityById[ship.location].name} stop ${who} inspection of papers crew and cargo stop released in ${days} day${days > 1 ? "s" : ""} stop`, false, { type: "ship", id: ship.id });
+            ship.readyHour = t + days * 24; ship.waitNote = "Held for inspection"; return;
+          }
+        }
+        // An even timetable: ships on the route keep their distance, so they do not fly nose to tail.
+        if (!next.stuck && !next.ferry && route.even) {
+          const hold = evenHold(state, ship, route, next, t);
+          if (hold > t + 0.5) { ship.readyHour = hold; ship.waitNote = "Holding for the timetable"; if (hold >= T1) return; continue; }
+        }
+        // A leg of her route now beyond her range (the mountain walls may have lengthened it): she waits, and says so.
+        if (!next.stuck && !next.ferry && distanceKm(ship.location, next.to) > U.research.stats(state, ship).rangeKm * 1.001) {
+          const month = Math.floor(t / 720), way = legWay(ship.location, next.to);
+          if (ship.stuckWarned !== month) { ship.stuckWarned = month; telegram(state, t, `${ship.name} cannot fly ${U.cityById[ship.location].name} to ${U.cityById[next.to].name} stop ${Math.round(way.km).toLocaleString("en-GB")} km${way.via.length ? " by " + way.via.map(v => v.name).join(" and ") : ""} is beyond her range stop change her route stop`, true, { type: "ship", id: ship.id }); }
+          ship.readyHour = T1; return;
+        }
         if (next.stuck) {
           const month = Math.floor(t / 720);
           if (ship.stuckWarned !== month) { ship.stuckWarned = month; telegram(state, t, `${cannotReach(ship, "her route", next.range)} stop send her nearer or build masts on the way stop`, true, { type: "ship", id: ship.id }); }
@@ -499,10 +550,24 @@ window.UpShip = window.UpShip || {};
         // A ship won't leave nearly empty: it waits for a fair load, but never more than about half a day.
         if (!next.ferry && !worthLeaving(state, ship, route, next, t)) { ship.readyHour = T1; return; }
       }
-      if (!fly(state, ship, next, t)) return;
+      const depFrom = ship.location, went = fly(state, ship, next, t);
+      if (went && !next.ferry) { const r0 = routeOf(state, ship); if (r0 && r0.even) { r0.lastDep = r0.lastDep || {}; r0.lastDep[depFrom + ">" + next.to] = t; } }
+      if (!went) return;
     }
   }
 
+  // The round trip of a route for a ship, in hours, and the gap an even timetable keeps between its ships.
+  function routeRound(state, ship, route) {
+    let hours = 0; const sp = U.research.stats(state, ship).speedKmh;
+    for (const [a, b] of routeLegs(route)) hours += distanceKm(a, b) / sp + E().turnaroundHours;
+    return route.circuit && route.stops.length > 2 ? hours : hours * 2;
+  }
+  function evenHold(state, ship, route, next, t) {
+    const n = state.ships.filter(sh => sh.routeId === route.id && sh.deliveryTick <= state.tick && !sh.lost && !sh.overhaulUntil && !sh.orders).length;
+    if (n < 2) return t;
+    const gap = routeRound(state, ship, route) / n * 0.85, last = (route.lastDep || {})[ship.location + ">" + next.to];
+    return last != null && t < last + gap ? last + gap : t;
+  }
   // Arriving where her orders sent her.
   function arriveOrders(state, ship, t) {
     const o = ship.orders, name = U.cityById[o.to].name;
@@ -615,7 +680,7 @@ window.UpShip = window.UpShip || {};
     const leg0 = ship.legs[ship.legs.length - 1];
     if (wx.via) leg0.via = wx.via;
     if (wx.notes.length) leg0.note = wx.notes[0];
-    else if (ship.lastLift && !next.ferry) leg0.note = `load cut to ${Math.round(ship.lastLift.f * 100)}% by the ${ship.lastLift.why} at ${U.cityById[ship.lastLift.at].name}`;
+    else if (ship.lastLift && !next.ferry) leg0.note = ship.lastLift.pass ? `load cut to ${Math.round(ship.lastLift.f * 100)}% for the ${ship.lastLift.why}` : `load cut to ${Math.round(ship.lastLift.f * 100)}% by the ${ship.lastLift.why} at ${U.cityById[ship.lastLift.at].name}`;
     // Serious accidents: rare, likelier in storms, in worn ships, and on hydrogen.
     {
       const kind = U.weather.serious(state, ship, leg0, wx.risk);
@@ -747,6 +812,17 @@ window.UpShip = window.UpShip || {};
       if (s.gasPolicy && typeof s.gasPolicy === "object" && !s.gasPolicy.byClass) s.gasPolicy.byClass = {};
       // A company that already surveyed an American city before permits existed holds America's permit.
       if (s.gateways && !(s.permits && s.permits.na) && Object.keys(s.gateways).some(id => regionOf(id) === "na")) { s.permits = s.permits || {}; s.permits.na = { appliedAt: 0, grantAt: 0 }; }
+      // The Soviet rules arrived later: a company keeps each Soviet city it already flies to or has built at, with a permit running two years from now.
+      if (!s.sovietCarried) {
+        s.sovietCarried = true; s.gateways = s.gateways || {}; s.permits = s.permits || {};
+        const keep = new Set(); for (const r of s.routes || []) for (const id of r.stops) keep.add(id);
+        for (const id in (s.facilities || {})) { const f = s.facilities[id]; if (f && (f.mast || f.terminal || f.shed)) keep.add(id); }
+        if (s.company && s.company.home) keep.add(s.company.home);
+        for (const id of keep) if (U.cityById[id] && U.cityById[id].empire === "ussr") {
+          if (!s.gateways[id]) s.gateways[id] = { openAt: 0, carried: true };
+          if (!s.permits["city:" + id]) s.permits["city:" + id] = { appliedAt: 0, grantAt: 0, expires: s.tick * 12 + SOVIET.years * 365 * 24 };
+        }
+      }
       // The empire rule arrived later: a company keeps landing rights wherever it already flies or has built.
       if (!s.empireCarried) {
         s.empireCarried = true; s.gateways = s.gateways || {};
@@ -754,6 +830,8 @@ window.UpShip = window.UpShip || {};
         for (const id in (s.facilities || {})) { const f = s.facilities[id]; if (f && (f.mast || f.terminal || f.shed)) keep.add(id); }
         for (const id of keep) if (authority(id) && !s.gateways[id]) s.gateways[id] = { openAt: 0, carried: true };
       }
+      // And one that surveyed Rio as a gateway holds South America's.
+      if (s.gateways && !(s.permits && s.permits.sa) && Object.keys(s.gateways).some(id => regionOf(id) === "sa")) { s.permits = s.permits || {}; s.permits.sa = { appliedAt: 0, grantAt: 0 }; }
       // Likewise a company that surveyed Cape Town or Bombay as gateways holds the region's permit.
       if (s.gateways && !(s.permits && s.permits.mea) && Object.keys(s.gateways).some(id => regionOf(id) === "mea")) { s.permits = s.permits || {}; s.permits.mea = { appliedAt: 0, grantAt: 0 }; }
       // Repair: an earlier version could overwrite the standing record with a bare number, lost on saving.
@@ -772,38 +850,100 @@ window.UpShip = window.UpShip || {};
   const regionOf = id => (U.cityById[id] && U.cityById[id].region) || "eu";
   const homeRegion = state => regionOf(state.company.home);
   const REGION_GOV = { na: { name: "Washington", country: "America" }, eu: { name: "the European governments", country: "Europe" },
-    mea: { name: "the governments of the region", country: "the Middle East and Africa" } };          // until the empire rule replaces it
+    mea: { name: "the governments of the region", country: "the Middle East and Africa" },
+    sa: { name: "the governments of South America", country: "South America" }, as: { name: "the governments of Asia", country: "Asia" }, oc: { name: "the governments of Oceania", country: "Oceania" } };          // until the empire rule replaces it
   // An ocean leg: to or from a station, or between the Old World and the Americas.
-  const landmass = id => regionOf(id) === "na" ? "americas" : "oldworld";
-  function oceanLeg(a, b) { const A = U.cityById[a], B = U.cityById[b]; return !!(A && B && (A.station || B.station || landmass(a) !== landmass(b))); }
+  const landmass = id => regionOf(id) === "na" || regionOf(id) === "sa" ? "americas" : "oldworld";
+  // The sea crossings to and within Oceania count too: the Timor and Coral Seas, the Tasman, and the south Pacific.
+  function oceanLeg(a, b) {
+    const A = U.cityById[a], B = U.cityById[b]; if (!A || !B) return false;
+    if (A.station || B.station || landmass(a) !== landmass(b)) return true;
+    return (A.region === "oc" || B.region === "oc") && A.country !== B.country && distanceKm(a, b) > 1200;
+  }
   // The empire rule: a colony, mandate, or dominion is governed by its imperial power; independent countries of the region by themselves.
   // A company of the governing nation flies there as at home; anyone else needs that power's permit, then landing rights by survey.
   const POWERS = { britain: { name: "the Colonial Office in London", rule: "British rule" }, france: { name: "the Ministry of Colonies in Paris", rule: "French rule" },
     italy: { name: "the Ministry of Colonies in Rome", rule: "Italian rule" }, belgium: { name: "the Ministry of Colonies in Brussels", rule: "Belgian rule" },
-    egypt: { name: "the Egyptian government", rule: "the Egyptian government" }, ethiopia: { name: "the Emperor's government in Addis Ababa", rule: "the Ethiopian empire" } };
-  const authority = id => (U.cityById[id] && U.cityById[id].empire) || null;
+    egypt: { name: "the Egyptian government", rule: "the Egyptian government" }, ethiopia: { name: "the Emperor's government in Addis Ababa", rule: "the Ethiopian empire" },
+    // Asia: the Dutch and American possessions, Japan's empire, the Soviet Union's far side, and the independent states.
+    netherlands: { name: "the Ministry of Colonies in The Hague", rule: "Dutch rule" }, usa: { name: "Washington", rule: "American rule" }, japan: { name: "the Japanese government", rule: "Japanese rule" },
+    // The Soviet Union: a permit for each city, renewed every two years; inspections; few travellers; no foreign sheds.
+    ussr: { name: "the Soviet government", rule: "Soviet rule", perCity: true },
+    china: { name: "the Chinese government", rule: "its own government" }, siam: { name: "the Siamese government", rule: "its own government" },
+    persia: { name: "the Persian government", rule: "its own government" }, afghanistan: { name: "the Afghan government", rule: "its own government" },
+    // South America's republics: each grants its own permit, cheaper and quicker than a great power's; German companies
+    // are welcome where German communities and German-run airlines are established.
+    brazil: { name: "the Brazilian government", rule: "its own government", republic: true, germanTies: true }, argentina: { name: "the Argentine government", rule: "its own government", republic: true, germanTies: true }, chile: { name: "the Chilean government", rule: "its own government", republic: true, germanTies: true }, colombia: { name: "the Colombian government", rule: "its own government", republic: true, germanTies: true }, uruguay: { name: "the Uruguayan government", rule: "its own government", republic: true }, peru: { name: "the Peruvian government", rule: "its own government", republic: true }, venezuela: { name: "the Venezuelan government", rule: "its own government", republic: true }, paraguay: { name: "the Paraguayan government", rule: "its own government", republic: true }, bolivia: { name: "the Bolivian government", rule: "its own government", republic: true }, ecuador: { name: "the Ecuadorian government", rule: "its own government", republic: true } };
+  // What a permit costs and how long it takes.
+  const SOVIET = { fee: 2000, renew: 1000, years: 2 };
+  function permitTerms(state, key) {
+    if (key.startsWith("city:")) { const g = state.company.nation === "germany";          // German ties (Deruluft, the joint airline of 1922): half the wait
+      return { fee: SOVIET.fee, days: g ? [21, 14] : [42, 28], weeks: g ? "three to five weeks" : "six to ten weeks", perCity: true }; }
+    const P0 = key.startsWith("emp:") ? POWERS[key.slice(4)] : null;
+    let fee = P0 && P0.republic ? 1500 : 3000, days = P0 && P0.republic ? [14, 14] : [35, 20];
+    if (P0 && P0.germanTies && state.company.nation === "germany") { fee = 750; days = [7, 7]; }
+    // The Soviet permit is slow and dear, except for a German company (Deruluft, the joint airline, flew from 1922).
+    if (P0 && P0.fee && !(P0.germanUsual && state.company.nation === "germany")) return { fee: P0.fee, days: P0.days, weeks: P0.weeks };
+    return { fee, days, weeks: P0 && P0.republic ? (fee === 750 ? "one to two weeks" : "two to four weeks") : "five to eight weeks" };
+  }
+  // Who governs a city; some change hands (Mukden and Harbin pass to Japan in September 1931).
+  const authority = id => {
+    const c = U.cityById[id]; if (!c || !c.empire) return null;
+    if (c.empireLater && U.state) { const d = dateOf(U.state.tick); if (d.getUTCFullYear() * 12 + d.getUTCMonth() >= c.empireLater.year * 12 + c.empireLater.month) return c.empireLater.to; }
+    return c.empire;
+  };
   // Britain kept imperial communications and the Canal under Egypt's independence of 1922: a British company keeps its rights there.
   const ownEmpire = (state, id) => { const a = authority(id), n = state.company.nation; return !!a && (a === n || (a === "egypt" && n === "britain")); };
-  const permitKey = id => authority(id) ? "emp:" + authority(id) : regionOf(id);
-  const permitName = key => key.startsWith("emp:") ? POWERS[key.slice(4)].name : REGION_GOV[key].name;
-  const permitHeld = (state, key) => !!(state.permits && state.permits[key] && state.permits[key].grantAt <= H(state.tick));
+  const perCity = id => { const a = authority(id); return !!(a && POWERS[a].perCity); };
+  const permitKey = id => authority(id) ? (perCity(id) ? "city:" + id : "emp:" + authority(id)) : regionOf(id);
+  const permitName = key => key.startsWith("city:") ? `the Soviet government (for ${U.cityById[key.slice(5)].name})` : key.startsWith("emp:") ? POWERS[key.slice(4)].name : REGION_GOV[key].name;
+  const permitHeld = (state, key) => { const pm = state.permits && state.permits[key], now = H(state.tick); return !!(pm && pm.grantAt <= now && (!pm.expires || pm.expires > now)); };
+  // A Soviet permit's state for a city: none, pending, valid (with its expiry), or lapsed.
+  function permitState(state, id) {
+    const pm = state.permits && state.permits[permitKey(id)], now = H(state.tick);
+    if (!pm) return { status: "none" };
+    if (pm.grantAt > now) return { status: "pending", at: pm.grantAt };
+    if (pm.expires && pm.expires <= now) return { status: "lapsed", at: pm.expires };
+    return { status: "valid", at: pm.expires || null };
+  }
+  // Once a month: warnings a month before a Soviet permit lapses, and when it does.
+  function sovietMonthly(state) {
+    const now = H(state.tick);
+    for (const [key, pm] of Object.entries(state.permits || {})) {
+      if (!key.startsWith("city:") || !pm.expires || pm.grantAt > now) continue;
+      const nm = U.cityById[key.slice(5)].name, target = { type: "city", id: key.slice(5) };
+      if (pm.expires <= now && !pm.lapsedTold) { pm.lapsedTold = true; telegram(state, now, `soviet permit for ${nm} has lapsed stop your ships may not land there until it is renewed stop`, true, target); }
+      else if (pm.expires > now && pm.expires - now <= 45 * 24 && !pm.warned) { pm.warned = true; telegram(state, now, `soviet permit for ${nm} lapses on ${dateAtHour(pm.expires).toLocaleDateString("en-GB", { day: "numeric", month: "long", timeZone: "UTC" })} stop renew it at the city for £${SOVIET.renew.toLocaleString("en-GB")} stop`, true, target); }
+    }
+  }
   function hasRights(state, id) {
     const c = U.cityById[id]; if (!c) return false;
+    if (perCity(id)) return gatewayOpen(state, id) && permitHeld(state, permitKey(id));          // the Soviet permit must be in force
     if (authority(id)) return ownEmpire(state, id) || gatewayOpen(state, id);
     const r = regionOf(id);
     if (r === homeRegion(state) && !c.station && !(c.gateway && r === "eu")) return true;
     return gatewayOpen(state, id);
   }
   function needsPermit(state, id) {
-    if (authority(id)) return !ownEmpire(state, id) && !permitHeld(state, permitKey(id)) && !permitHeld(state, "mea");          // (older games may hold the region's permit)
+    if (perCity(id)) return !permitHeld(state, permitKey(id));
+    if (authority(id)) return !ownEmpire(state, id) && !permitHeld(state, permitKey(id)) && !permitHeld(state, "mea") && !permitHeld(state, regionOf(id)) && !(authority(id) === "usa" && permitHeld(state, "na"));          // (older games may hold the region's permit)
     const r = regionOf(id); if (r === "ocean") return false; return r !== homeRegion(state) && !(state.permits && state.permits[r] && state.permits[r].grantAt <= H(state.tick)); }
   function applyPermit(state, region) {
     state.permits = state.permits || {};
-    if (state.permits[region]) return "Already applied for.";
-    const fee = 3000; if (state.money < fee) return "Not enough money for the application.";
+    const old = state.permits[region];
+    if (old && region.startsWith("city:") && old.grantAt <= H(state.tick)) {
+      // Renewing a Soviet permit: two more years from its expiry, or from now if it has lapsed.
+      if (state.money < SOVIET.renew) return "Not enough money for the renewal.";
+      state.money -= SOVIET.renew; addGeneral(state, 0);
+      old.expires = Math.max(H(state.tick), old.expires || 0) + SOVIET.years * 365 * 24; old.warned = false; old.lapsedTold = false;
+      return null;
+    }
+    if (old) return "Already applied for.";
+    const T = permitTerms(state, region), fee = T.fee; if (state.money < fee) return "Not enough money for the application.";
     state.money -= fee; addGeneral(state, 0);
-    const now = H(state.tick), grantAt = now + (35 + Math.floor(Math.random() * 20)) * 24;
+    const now = H(state.tick), grantAt = now + (T.days[0] + Math.floor(Math.random() * T.days[1])) * 24;
     state.permits[region] = { appliedAt: now, grantAt };
+    if (region.startsWith("city:")) state.permits[region].expires = grantAt + SOVIET.years * 365 * 24;
     telegram(state, grantAt, `${permitName(region)} grants your company a permit to operate stop surveys may now win landing rights city by city stop foreign lines pay the usual fees stop`, true, { type: "company" });
     return null;
   }
@@ -833,7 +973,7 @@ window.UpShip = window.UpShip || {};
     try { for (const k of ["upship.save.v1", "upship.save.v2", "upship.save.v3", "upship.save.v4", "upship.save.v5", "upship.save.v6", "upship.save.v7", "upship.save.v8", "upship.save.v9", "upship.save.v10", SAVE_KEY]) localStorage.removeItem(k); } catch (e) {}
   }
 
-  U.sim = { hopPlan, hopToward, sendShip, cancelOrders, liftAt, liftWorst, legLift, POWERS, authority, ownEmpire, permitKey, permitName, hasRights, oceanLeg, regionOf, homeRegion, needsPermit, applyPermit, REGION_GOV, surveyFlight, gatewayOpen, stopSaving, finishOverhaul, telegram, addGeneral, addIncome, nearestCity, distanceKm, fare, freightRate, dailyPassengers, dailyFreight, start, advance, beginTurn, dateOf, dateAtHour, H,
+  U.sim = { permitState, sovietMonthly, SOVIET, routeRound, permitTerms, legWay, hopPlan, hopToward, sendShip, cancelOrders, liftAt, liftWorst, legLift, POWERS, authority, ownEmpire, permitKey, permitName, hasRights, oceanLeg, regionOf, homeRegion, needsPermit, applyPermit, REGION_GOV, surveyFlight, gatewayOpen, stopSaving, finishOverhaul, telegram, addGeneral, addIncome, nearestCity, distanceKm, fare, freightRate, dailyPassengers, dailyFreight, start, advance, beginTurn, dateOf, dateAtHour, H,
     routeSummary, save, load, clearSave, editRoute, routeOf, routeName, routeLegs, createRoute, deleteRoute, canAssign, assign,
     order, priceToOrder, HELIUM_FILL, policyGas, heliumFill, rename, suggestName, longestLeg, catalog, orderTerms, saleValue, canSell, sell, positionAt, ageYears, roman };
 })(window.UpShip);

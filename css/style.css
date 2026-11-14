@@ -1023,3 +1023,13 @@ body.skipping .globe-base { filter: saturate(0.35) brightness(0.72); transition:
 /* Sending a ship to a city: the chooser and its button side by side. */
 .send-to { margin-top: 12px; padding-top: 10px; border-top: 1px dotted rgba(214,177,95,0.35); }
 .send-to select, select[data-offer-ship] { max-width: 100%; min-width: 0; flex: 1 1 auto; }
+
+/* The list of nations in setup: all six in view; on a short window, each keeps its headline and drops its second sentence. */
+.nations .ledger-item { padding-top: 7px; padding-bottom: 7px; }
+.nations .ledger-item small { line-height: 1.35; }
+@media (max-height: 840px) { .nations .more { display: none; } }
+
+/* A tick-box with its label, and a chooser inside a card. */
+label.check { display: flex; align-items: center; gap: 8px; margin: 8px 0 2px; cursor: pointer; }
+label.check input { width: 16px; height: 16px; accent-color: var(--brass); }
+.card select { max-width: 100%; margin-bottom: 4px; }

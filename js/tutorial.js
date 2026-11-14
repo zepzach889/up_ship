@@ -27,7 +27,7 @@ window.UpShip = window.UpShip || {};
     const k = contract(), ship = U.state.ships[0];
     const a = k ? name(k.a) : "", b = k ? name(k.b) : "";
     return {
-      1: `Your government has offered ${U.state.company.name} its first mail contract, ${a} to ${b}. Open <b>Contracts</b> and accept it.`,
+      1: `Your government has offered ${U.state.company.name} its first mail award, ${a} to ${b}. Open <b>Contracts</b> and accept it.`,
       2: `Now fly it. Open <b>Routes</b>, choose <b>Draw a new route</b>, click ${a} and then ${b} on the map, and press <b>Create route</b>. (The contract's <b>Draw this route</b> button does the first part for you.)`,
       3: `Put ${ship ? ship.name : "your ship"} on the new route: in the route's panel, choose <b>Add a ship</b> and pick it.`,
       4: `Press <b>Next turn</b> to play half a day, and keep going until ${ship ? ship.name : "your ship"} has flown the route. Auto-play works too.`,

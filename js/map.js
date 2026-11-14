@@ -220,8 +220,12 @@ window.UpShip = window.UpShip || {};
 
   // Routes and ships -------------------------------------------------------
   function routePathD(stops, circuit) {
-    const pts = stops.map(id => U.cityById[id]).map(c => [dLon(c), dLat(c)]);
-    if (circuit && stops.length > 2) pts.push(pts[0]);
+    const ids = circuit && stops.length > 2 ? stops.concat(stops[0]) : stops, pts = [];
+    ids.forEach((id, i) => {
+      // Between stops, by the passes where the mountains bar the straight way.
+      if (i) for (const v of U.sim.legWay(ids[i - 1], id).via) pts.push([v.at[1], v.at[0]]);
+      const c = U.cityById[id]; pts.push([dLon(c), dLat(c)]);
+    });
     return U.globe.linePath(pts);
   }
 
@@ -278,7 +282,11 @@ window.UpShip = window.UpShip || {};
         return { x: -9999, y: -9999, angle: 0, flying: true, fraction: f, leg: p.leg, hour, vis: false };
       }
       // Otherwise along the great circle, facing along it.
-      const gi = d3.geoInterpolate([dLon(a), dLat(a)], [dLon(b), dLat(b)]), here = gi(f), ahead = gi(Math.min(1, f + 0.01)), behind = gi(Math.max(0, f - 0.01));
+      // By the passes where the mountains bar the straight way: a chain of great circles, measured out by distance.
+      const chain = [[dLon(a), dLat(a)], ...U.sim.legWay(a, b).via.map(v => [v.at[1], v.at[0]]), [dLon(b), dLat(b)]];
+      const lens = chain.slice(1).map((q, i) => d3.geoDistance(chain[i], q)), total = lens.reduce((x, y) => x + y, 0) || 1;
+      const gi = t0 => { let d = Math.max(0, Math.min(1, t0)) * total; for (let i = 0; i < lens.length; i++) { if (d <= lens[i] || i === lens.length - 1) return d3.geoInterpolate(chain[i], chain[i + 1])(lens[i] ? Math.min(1, d / lens[i]) : 0); d -= lens[i]; } return chain[chain.length - 1]; };
+      const here = gi(f), ahead = gi(Math.min(1, f + 0.01)), behind = gi(Math.max(0, f - 0.01));
       const s1 = project(...here), s2 = project(...ahead), s0 = project(...behind);
       return { x: s1[0], y: s1[1], angle: Math.atan2(s2[1] - s0[1], s2[0] - s0[0]) * 180 / Math.PI, flying: true, fraction: f, leg: p.leg, hour, vis: U.globe.facing(...here) };
       if (p.leg.via) {
@@ -413,7 +421,7 @@ window.UpShip = window.UpShip || {};
   }
 
   // New-game setup: highlight the playable countries, then the home cities.
-  const PLAYABLE = ["Germany", "United Kingdom", "France", "Italy", "United States"];
+  const PLAYABLE = ["Germany", "United Kingdom", "France", "Italy", "United States", "Japanese Empire"];
   function setSetup(mode, data = {}) {
     setupMode = mode;
     svg.classList.toggle("is-setup", !!mode);
@@ -421,7 +429,7 @@ window.UpShip = window.UpShip || {};
     U.globe.setHighlight(mode === "country" ? PLAYABLE : [], mode && mode !== "country" ? data.country : null);
     // Choosing a home city: the globe turns to the chosen country (America is on the far side from Europe).
     if (mode && mode !== "country" && data.country) {
-      const homes = U.CITIES.filter(c => c.home && c.country === data.country);
+      const homes = U.CITIES.filter(c => c.home && (c.country === data.country || (U.nationOfCountry[c.country] && U.nationOfCountry[c.country] === U.nationOfCountry[data.country])));
       if (homes.length) { const lon = homes.reduce((a, c) => a + (c.realLon ?? c.lon), 0) / homes.length, lat = homes.reduce((a, c) => a + (c.realLat ?? c.lat), 0) / homes.length; U.globe.glide(lon, lat, 3.2, 900); }
     }
     for (const id in cityNodes) {

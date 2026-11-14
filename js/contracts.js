@@ -49,52 +49,49 @@ window.UpShip = window.UpShip || {};
     const offer = mailOffer(state, home.id, target.id, { perWeek: 3, years: 2, generous: 1.6, tutorial: true });
     offer.expiresHour = nowHour(state) + 60 * 24;
     state.offers.push(offer);
-    const posts = state.company.nation === "usa" ? "post office department" : "ministry of posts";
-    S().telegram(state, nowHour(state), `${posts} offers mail contract ${home.name} to ${target.name} stop ${gbp(offer.monthly)} monthly for two years stop see contracts stop`, false, { type: "contracts" });
+    const posts = state.company.nation === "usa" ? "post office department" : state.company.nation === "japan" ? "ministry of communications" : "ministry of posts";
+    S().telegram(state, nowHour(state), `${posts} offers mail award ${home.name} to ${target.name} stop ${gbp(offer.monthly)} monthly for two years stop see contracts stop`, false, { type: "contracts" });
   }
 
   function networkCities(state) { return new Set(state.routes.flatMap(r => r.stops).concat([state.company.home])); }
 
+  // How many flights a week the company's ships already make each way between two cities on its routes.
+  function weeklyService(state, a, b) {
+    let n = 0;
+    for (const r of state.routes) {
+      if (!r.stops.includes(a) || !r.stops.includes(b)) continue;
+      const ships = state.ships.filter(sh => sh.routeId === r.id && sh.deliveryTick <= state.tick && !sh.lost); if (!ships.length) continue;
+      let hours = 0; for (const [x, y] of S().routeLegs(r)) hours += S().distanceKm(x, y) / U.research.stats(state, ships[0]).speedKmh + E().turnaroundHours;
+      if (!(r.circuit && r.stops.length > 2)) hours *= 2;          // out and back
+      n += ships.length * 168 / Math.max(6, hours);
+    }
+    return n;
+  }
+  // A mail award is offered only for two cities one of the company's routes already joins: the mail rides the ships
+  // already flying, and the minimum asked is well within what they fly now.
   function randomMailOffer(state) {
-    const nation = state.company.nation, net = networkCities(state);
-    // Authorities: home, plus any country the network already reaches.
-    const reached = new Set([...net].map(nationOf).filter(Boolean));
-    const foreign = [...net].map(id => U.cityById[id]).filter(c => nationOf(c.id) !== nation);
-    const pairs = [];
-    for (const a of U.CITIES) {
-      const aHome = nationOf(a.id) === nation;
-      const aForeignReached = !aHome && foreign.some(c => c.country === a.country);
-      if (!aHome && !aForeignReached) continue;
-      if (a.station || !S().hasRights(state, a.id)) continue;
-      for (const b of U.CITIES) {
-        if (b.id === a.id || b.station || !S().hasRights(state, b.id)) continue;          // only cities the company may land at
-        const km = S().distanceKm(a, b);
-        if (km < 150 || km > 1100) continue;
-        if (!aHome && !net.has(b.id)) continue;
-        if (state.contracts.some(k => (k.a === a.id && k.b === b.id) || (k.a === b.id && k.b === a.id))) continue;
-        const w = (U.TIERS[a.tier].demand * U.TIERS[b.tier].demand) * (net.has(a.id) || net.has(b.id) ? 2 : 1);
-        const authority = aHome ? U.NATIONS[nation].name : a.country;
-        if ((state.postBlocks || {})[authority] > nowHour(state)) continue;   // a postal service we walked out on
-        pairs.push({ a: a.id, b: b.id, w, authority });
-      }
+    const nation = state.company.nation, pairs = [], seen = new Set();
+    for (const r of state.routes) for (let i = 0; i < r.stops.length; i++) for (let j = i + 1; j < r.stops.length; j++) {
+      const a = r.stops[i], b = r.stops[j], key = a < b ? a + ">" + b : b + ">" + a; if (seen.has(key)) continue; seen.add(key);
+      if (U.cityById[a].station || U.cityById[b].station) continue;
+      if (state.contracts.some(k => (k.a === a && k.b === b) || (k.a === b && k.b === a))) continue;
+      const svc = weeklyService(state, a, b); if (svc < 1.4) continue;
+      const home = nationOf(a) === nation || nationOf(b) === nation, authority = home ? U.NATIONS[nation].name : U.cityById[a].country;
+      pairs.push({ a, b, w: U.TIERS[U.cityById[a].tier].demand * U.TIERS[U.cityById[b].tier].demand, authority, perWeek: Math.max(1, Math.min(7, Math.floor(svc * 0.7))) });
     }
     if (!pairs.length) return null;
-    let r = Math.random() * pairs.reduce((s, p) => s + p.w, 0);
-    const chosen = pairs.find(p => (r -= p.w) <= 0) || pairs[0];
-    return mailOffer(state, chosen.a, chosen.b, { authority: chosen.authority });
+    let r0 = Math.random() * pairs.reduce((t, p0) => t + p0.w, 0);
+    const chosen = pairs.find(p0 => (r0 -= p0.w) <= 0) || pairs[0];
+    return mailOffer(state, chosen.a, chosen.b, { authority: chosen.authority, perWeek: chosen.perWeek });
   }
 
-  // Dropping a mail contract costs a month's pay, and that postal service offers nothing for about six months.
+  // Giving up a mail award costs nothing: the retainer simply stops.
   function dropContract(state, id) {
     const k = state.contracts.find(x => x.id === id);
     if (!k) return 0;
     state.contracts = state.contracts.filter(x => x !== k);
-    S().addGeneral(state, k.monthly);
-    state.year.penalties = (state.year.penalties || 0) + k.monthly;
-    state.postBlocks = state.postBlocks || {};
-    state.postBlocks[k.authority] = nowHour(state) + 180 * 24;
     for (const sh of state.ships) sh.mailAboard = (sh.mailAboard || []).filter(m => m.to !== k.a && m.to !== k.b);
-    return k.monthly;
+    return 0;
   }
 
   // Grants ---------------------------------------------------------------------------
@@ -214,12 +211,23 @@ window.UpShip = window.UpShip || {};
     return { won, prize: o.prize, rec: rec.hours };
   }
   // Government offers with conditions, about twice a year: opening a far destination, diplomatic mail, a grant for two ships.
-  const FAR = { germany: ["moscow", "constantinople", "cairo", "newyork"], britain: ["cairo", "baghdad", "karachi", "bombay", "nairobi", "capetown", "newyork"],
-    france: ["algiers", "tunis", "casablanca", "dakar", "beirut"], italy: ["tripoli", "benghazi", "tunis", "constantinople"], usa: ["havana", "mexicocity", "montreal", "london"] };
+  const FAR = { germany: ["moscow", "constantinople", "cairo", "newyork", "recife", "buenosaires"], britain: ["cairo", "baghdad", "karachi", "bombay", "nairobi", "capetown", "newyork", "calcutta", "singapore", "hongkong", "sydney", "auckland"],
+    france: ["algiers", "tunis", "casablanca", "dakar", "beirut", "saigon"], italy: ["tripoli", "benghazi", "tunis", "constantinople"], japan: ["seoul", "taihoku", "shanghai", "manila", "mukden"], usa: ["havana", "mexicocity", "montreal", "london", "panama", "rio", "manila"] };
   // The great schemes, offered once each: a large sum for a regular service to the far end of an imperial route within five years.
-  const SCHEMES = { britain: { year: 1924, month: 9, city: "karachi", pay: 120000, who: "the Air Ministry", text: "air ministry announces the imperial airship scheme stop a regular service to karachi by way of egypt within five years" },
+  const SCHEMES = { germany: { year: 1930, month: 4, city: "rio", pay: 100000, who: "the Reich Ministry of Transport", text: "reich ministry of transport seeks a regular airship service to rio de janeiro by way of recife within five years" },
+    britain: { year: 1924, month: 9, city: "karachi", pay: 120000, who: "the Air Ministry", text: "air ministry announces the imperial airship scheme stop a regular service to karachi by way of egypt within five years" },
     france: { year: 1925, month: 3, city: "dakar", pay: 80000, who: "the Ministry of Colonies", text: "ministry of colonies seeks an airship line to dakar within five years" },
     italy: { year: 1926, month: 3, city: "tripoli", pay: 40000, who: "the Ministry of Colonies", text: "ministry of colonies seeks an airship line to tripoli within five years" } };
+  // The Imperial Airship Scheme's second stage: once a British company flies to Karachi, the service on to Australia.
+  function maybeScheme2(state) {
+    if (state.company.nation !== "britain" || state.scheme2Offered || !state.schemeOffered) return;
+    if (S().dateOf(state.tick).getUTCFullYear() < 1926 || !state.routes.some(r => r.stops.includes("karachi") && state.ships.some(sh => sh.routeId === r.id))) return;
+    state.scheme2Offered = true;
+    if (state.routes.some(r => r.stops.includes("darwin"))) return;
+    const now = nowHour(state);
+    state.offers.push({ id: "o" + state.nextId++, kind: "goal", city: "darwin", pay: 200000, years: 8, scheme: true, authority: "the Air Ministry", expiresHour: now + 90 * 24, warned: false });
+    S().telegram(state, now, `air ministry extends the imperial airship scheme stop a regular service to australia landing at darwin within eight years stop ${gbp(200000)} on success stop see contracts stop`, true, { type: "contracts" });
+  }
   function maybeScheme(state) {
     const sc = SCHEMES[state.company.nation]; if (!sc || state.schemeOffered) return;
     const d = S().dateOf(state.tick), y = d.getUTCFullYear(), m = d.getUTCMonth();
@@ -240,9 +248,9 @@ window.UpShip = window.UpShip || {};
       const city = options[Math.floor(Math.random() * options.length)], pay = Math.round((20000 + S().distanceKm(home, city) * 12) / 1000) * 1000;
       state.offers.push({ id: "o" + state.nextId++, kind: "goal", city, pay, authority: gov, expiresHour: now + 30 * 24, warned: false });
       S().telegram(state, now, `government offer stop open a regular service to ${name(city)} within two years stop ${gbp(pay)} on success stop see contracts stop`, false, { type: "contracts" });
-    } else if (kind === 1) {
-      const capital = CAPITALS.filter(id => U.cityById[id] && U.cityById[id].country !== U.cityById[home].country)[Math.floor(Math.random() * 6)] || "paris";
-      const offer = mailOffer(state, home, capital, { perWeek: 3, years: 2, generous: 1.8 });
+    } else if (kind === 1 && CAPITALS.some(id => U.cityById[id] && U.cityById[id].country !== U.cityById[home].country && weeklyService(state, home, id) >= 1.4)) {
+      const caps = CAPITALS.filter(id => U.cityById[id] && U.cityById[id].country !== U.cityById[home].country && weeklyService(state, home, id) >= 1.4), capital = caps[Math.floor(Math.random() * caps.length)];
+      const offer = mailOffer(state, home, capital, { perWeek: Math.max(1, Math.min(3, Math.floor(weeklyService(state, home, capital) * 0.7))), years: 2, generous: 1.8 });
       offer.diplomatic = true; offer.authority = "your foreign ministry";
       state.offers.push(offer);
       S().telegram(state, now, `foreign ministry offers diplomatic mail ${name(home)} to ${name(capital)} stop well paid stop see contracts stop`, false, { type: "contracts" });
@@ -267,10 +275,10 @@ window.UpShip = window.UpShip || {};
     state.rep.standing = Math.max(0, Math.min(100, (+state.rep.standing || 50) + d));
   }
   function describe(o) {
-    if (o.kind === "goal") return `government offer stop open a regular service to ${name(o.city)} within ${o.years === 5 ? "five" : "two"} years stop ${gbp(o.pay)} on success stop`;
+    if (o.kind === "goal") return `government offer stop open a regular service to ${name(o.city)} within ${({ 5: "five", 8: "eight" })[o.years] || "two"} years stop ${gbp(o.pay)} on success stop`;
     if (o.kind === "record") { const r = (U.state.records || {})[o.a + ">" + o.b]; return `aero club prize stop fastest ${name(o.a)} to ${name(o.b)} stop ${o.km.toLocaleString("en-GB")} km stop record ${r ? r.hours + " hours by " + r.by : "unclaimed"} stop ${gbp(o.prize)} to beat it stop`; }
     if (o.kind === "charter") return `charter for ${o.who} stop ${o.what} stop ${o.days} days for ${gbp(o.pay)} stop needs a ship with ${o.range.toLocaleString("en-GB")} km of range stop`;
-    if (o.kind === "mail") return `mail contract ${name(o.a)} to ${name(o.b)} stop ${o.perWeek === 7 ? "daily" : o.perWeek + " times weekly"} each way stop ${gbp(o.monthly)} monthly for ${o.years} year${o.years > 1 ? "s" : ""} stop`;
+    if (o.kind === "mail") return `mail award ${name(o.a)} to ${name(o.b)} stop a retainer of ${gbp(o.monthly)} monthly for ${o.years} year${o.years > 1 ? "s" : ""} stop at least ${o.perWeek === 7 ? "a flight daily" : o.perWeek + (o.perWeek === 1 ? " flight" : " flights") + " weekly"} each way stop no penalties stop`;
     if (o.kind === "route") return `government grant for new service ${name(o.a)} to ${name(o.b)} stop ${gbp(o.upfront)} on opening and ${gbp(o.monthly)} monthly for ${o.years} years stop`;
     return `government construction grant stop ${Math.round(o.share * 100)} percent of your next national-built ship stop`;
   }
@@ -330,11 +338,11 @@ window.UpShip = window.UpShip || {};
   function loadMail(state, ship, from, ahead, hold) {
     ship.mailAboard = (ship.mailAboard || []).filter(m => m.to !== from && ahead.includes(m.to));
     for (const m of mailToLoad(state, from, ahead)) {
-      if ((ship.mailAboard.length + 1) * E().mailTons > hold) break;
+      // A few mailbags ride on any ship, hold or no hold.
       m.k.week[m.dir]++;
       ship.mailAboard.push({ to: m.to });
     }
-    return ship.mailAboard.length * E().mailTons;
+    return Math.min(hold, ship.mailAboard.length * E().mailTons);
   }
   // Route grants count any flight leaving one of the two cities with the other ahead on the route.
   function recordGrantFlight(state, from, ahead) {
@@ -383,23 +391,15 @@ window.UpShip = window.UpShip || {};
     }
   }
 
+  // Each week's flights are tallied toward the month; nothing is fined.
   function weekly(state) {
     const now = nowHour(state);
-    for (const k of state.contracts.slice()) {
-      if (k.startHour > now - 7 * 24 + 1) { k.week = { ab: 0, ba: 0 }; continue; }  // no charge for a partial first week
-      const missed = Math.max(0, k.perWeek - k.week.ab) + Math.max(0, k.perWeek - k.week.ba);
-      k.required += k.perWeek * 2; k.made += k.perWeek * 2 - missed; k.weeks++;
-      U.passengers.recordMail(state, k.perWeek * 2, missed);
-      if (missed) {
-        const fine = Math.round(k.monthly / (k.perWeek * 2 * 4.3) * E().missedFlightPenalty * missed);
-        S().addGeneral(state, fine); k.penalties += fine;
-        S().telegram(state, now, `mail ${name(k.a)} to ${name(k.b)} stop ${missed} required flight${missed > 1 ? "s" : ""} missed this week stop penalty ${gbp(fine)} stop`, false, { type: "contracts" });
-      }
+    for (const k of state.contracts) {
+      if (k.startHour > now - 7 * 24 + 1) { k.week = { ab: 0, ba: 0 }; continue; }  // a partial first week does not count
+      const missed = Math.max(0, k.perWeek - k.week.ab) + Math.max(0, k.perWeek - k.week.ba), made = k.perWeek * 2 - missed;
+      k.required += k.perWeek * 2; k.made += made; k.weeks++;
+      k.monthReq = (k.monthReq || 0) + k.perWeek * 2; k.monthMade = (k.monthMade || 0) + made;
       k.week = { ab: 0, ba: 0 };
-      if (k.weeks >= E().contractGraceWeeks && k.made / k.required < E().minReliability) {
-        state.contracts = state.contracts.filter(x => x !== k);
-        S().telegram(state, now, `mail contract ${name(k.a)} to ${name(k.b)} cancelled stop reliability ${Math.round(k.made / k.required * 100)} percent stop`, true, { type: "contracts" });
-      }
     }
   }
 
@@ -407,14 +407,28 @@ window.UpShip = window.UpShip || {};
     maybeCharter(state);
     maybeRecord(state);
     maybeGovernment(state);
-    maybeScheme(state);
+    maybeScheme(state); maybeScheme2(state);
+    S().sovietMonthly(state);
     checkGoals(state);
     const now = nowHour(state);
     for (const k of state.contracts.slice()) {
-      S().addIncome(state, k.monthly, "mail"); k.paid += k.monthly;
+      // The retainer is paid for a month in which at least four fifths of the minimum flights were made. A short month
+      // is simply unpaid; three in a row end the award. An award not yet flown at all has three months' grace.
+      const kept = !k.monthReq || k.monthMade / k.monthReq >= 0.8, unflown = k.made === 0 && now < k.startHour + 92 * 24;
+      if (kept && k.monthReq) { S().addIncome(state, k.monthly, "mail"); k.paid += k.monthly; k.short = 0; }
+      else if (!kept && !unflown) {
+        k.short = (k.short || 0) + 1; k.unpaid = (k.unpaid || 0) + 1;
+        if (k.short >= 3) {
+          state.contracts = state.contracts.filter(x => x !== k);
+          S().telegram(state, now, `mail award ${name(k.a)} to ${name(k.b)} ended stop the minimum service was not kept for three months stop`, true, { type: "contracts" });
+          continue;
+        }
+        S().telegram(state, now, `mail award ${name(k.a)} to ${name(k.b)} stop ${k.monthMade || 0} of ${k.monthReq} flights made this month stop retainer of ${gbp(k.monthly)} not paid stop`, false, { type: "contracts" });
+      }
+      k.monthReq = 0; k.monthMade = 0;
       if (now >= k.endHour) {
         state.contracts = state.contracts.filter(x => x !== k);
-        S().telegram(state, now, `mail contract ${name(k.a)} to ${name(k.b)} completed stop reliability ${k.required ? Math.round(k.made / k.required * 100) : 100} percent stop`, false, { type: "contracts" });
+        S().telegram(state, now, `mail award ${name(k.a)} to ${name(k.b)} completed stop reliability ${k.required ? Math.round(k.made / k.required * 100) : 100} percent stop`, false, { type: "contracts" });
       }
     }
     for (const g of state.grants.slice()) {
@@ -496,6 +510,6 @@ window.UpShip = window.UpShip || {};
     state.year.grants = (state.year.grants || 0) + amount;
   }
 
-  U.contracts = { eligible, settleRecord, recordShip, attemptFlown, attempt, init, dropContract, accept, decline, describe, loadMail, recordGrantFlight, daily, weekly, monthly,
+  U.contracts = { randomMailOffer, weeklyService, eligible, settleRecord, recordShip, attemptFlown, attempt, init, dropContract, accept, decline, describe, loadMail, recordGrantFlight, daily, weekly, monthly,
     loanLimit, borrow, repay, setInstallment, buildGrantFor, useBuildGrant, mailMonthly };
 })(window.UpShip);

@@ -106,6 +106,24 @@ UpShip.SHIP_CLASSES = {
     note: "Better built than most war-surplus ships, but still cramped.",
     names: ["Atlantique", "Pacifique", "Sahara", "Alpes", "Pyrénées", "Vosges"]
   },
+  tsubame: {
+    id: "tsubame", kind: "passenger", name: "Tsubame class", role: "Passenger semi-rigid", basis: "Modeled on the Italian N-class semi-rigid Japan bought in 1927",
+    passengers: 20, cargoTons: 1, speedKmh: 100, rangeKm: 1500, crew: 9,
+    price: 65000, dailyCost: 115, fuelPerKm: 0.085, buildDays: 60,
+    names: ["Sakura", "Kiku", "Ume", "Fuji", "Momiji", "Tsubaki", "Ayame", "Yuri"]
+  },
+  hato: {
+    id: "hato", kind: "cargo", name: "Hato class", role: "Mail and cargo semi-rigid", basis: "A semi-rigid fitted for mail",
+    passengers: 0, cargoTons: 6, speedKmh: 95, rangeKm: 1800, crew: 8,
+    price: 55000, dailyCost: 90, fuelPerKm: 0.07, buildDays: 45,
+    names: ["Hayabusa", "Kamome", "Chidori", "Hibari", "Uguisu", "Kari"]
+  },
+  kaigun: {
+    id: "kaigun", kind: "surplus", name: "Navy surplus semi-rigid", role: "Navy semi-rigid, sold out of service", basis: "Modeled on the Imperial Navy's semi-rigids at Kasumigaura",
+    passengers: 30, cargoTons: 3, speedKmh: 90, rangeKm: 3000, crew: 14,
+    price: 45000, dailyCost: 190, fuelPerKm: 0.12, buildDays: 14,
+    names: ["Kasumi", "Tsukuba", "Tone", "Kashima", "Nikkō", "Asama"]
+  },
   gabbiano: {
     id: "gabbiano", kind: "passenger", name: "Gabbiano class", role: "Passenger semi-rigid", basis: "Modeled on Italian postwar semi-rigids",
     passengers: 20, cargoTons: 1, speedKmh: 100, rangeKm: 1500, crew: 9,

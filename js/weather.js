@@ -25,6 +25,49 @@ window.UpShip = window.UpShip || {};
   const unitsPerKm = (lon, lat) => { const d = stepFlat(lon, lat, 0, 50); return Math.hypot(d.x, d.y) / 50; };
   // North America's weather.
   const GEO = [
+    // Oceania.
+    { kind: "storm", name: "Tropical cyclone", lon: [116, 150], lat: [-19, -11], bearing: [190, 250], kmh: [12, 22], km: [[380, 540], [300, 420]], life: [80, 140],
+      rate: m => [0.1, 0.11, 0.09, 0.04, 0, 0, 0, 0, 0, 0, 0.01, 0.05][m] },
+    { kind: "storm", name: "South Pacific cyclone", lon: [160, 188], lat: [-22, -12], bearing: [130, 190], kmh: [12, 22], km: [[380, 540], [300, 420]], life: [80, 140],
+      rate: m => [0.08, 0.09, 0.08, 0.03, 0, 0, 0, 0, 0, 0, 0.01, 0.04][m] },
+    { kind: "storm", name: "Tasman gale", lon: [152, 170], lat: [-44, -32], bearing: [70, 110], kmh: [35, 55], km: [[420, 620], [240, 340]], life: [40, 80],
+      rate: m => [0.05, 0.05, 0.07, 0.09, 0.12, 0.14, 0.14, 0.13, 0.11, 0.09, 0.07, 0.05][m] },
+    { kind: "storm", name: "Southern Ocean gale", lon: [112, 148], lat: [-46, -37], bearing: [70, 100], kmh: [40, 60], km: [[480, 680], [240, 340]], life: [40, 80],
+      rate: m => [0.05, 0.05, 0.07, 0.09, 0.12, 0.13, 0.13, 0.13, 0.11, 0.09, 0.07, 0.05][m] },
+    { kind: "wind", mild: true, name: "Rain and headwinds", lon: [138, 178], lat: [-46, -27], bearing: [60, 110], kmh: [25, 40], km: [[450, 700], [300, 450]], life: [24, 60],
+      rate: m => [0.14, 0.14, 0.18, 0.22, 0.28, 0.3, 0.3, 0.28, 0.24, 0.2, 0.16, 0.14][m] },
+    // Asia and the western Pacific.
+    { kind: "storm", name: "Monsoon storm", lon: [72, 96], lat: [10, 26], bearing: [20, 70], kmh: [20, 35], km: [[380, 560], [260, 380]], life: [36, 80],
+      rate: m => [0, 0, 0, 0, 0.04, 0.3, 0.4, 0.38, 0.26, 0.06, 0, 0][m] },
+    { kind: "wind", mild: true, name: "Monsoon rains", lon: [70, 110], lat: [6, 28], bearing: [20, 70], kmh: [15, 30], km: [[500, 760], [320, 480]], life: [30, 70],
+      rate: m => [0.02, 0.02, 0.03, 0.06, 0.16, 0.4, 0.46, 0.44, 0.32, 0.14, 0.06, 0.03][m] },
+    { kind: "storm", name: "Bay of Bengal cyclone", lon: [84, 92], lat: [10, 18], bearing: [320, 20], kmh: [15, 25], km: [[380, 520], [300, 400]], life: [70, 120],
+      rate: m => [0, 0, 0, 0.02, 0.05, 0.02, 0, 0, 0.01, 0.06, 0.07, 0.02][m] },
+    { kind: "storm", name: "Typhoon", lon: [124, 140], lat: [12, 22], bearing: [290, 350], kmh: [18, 28], km: [[420, 600], [340, 460]], life: [120, 200],
+      rate: m => [0, 0, 0, 0, 0.01, 0.04, 0.12, 0.18, 0.18, 0.1, 0.03, 0][m] },
+    { kind: "storm", name: "Tropical thunderstorm", lon: [96, 126], lat: [-8, 10], bearing: [240, 300], kmh: [15, 30], km: [[150, 250], [120, 200]], life: [6, 14],
+      rate: m => [0.26, 0.24, 0.24, 0.26, 0.24, 0.2, 0.18, 0.18, 0.2, 0.26, 0.3, 0.3][m] },
+    { kind: "storm", name: "Gobi dust storm", lon: [104, 118], lat: [36, 44], bearing: [110, 150], kmh: [35, 55], km: [[320, 480], [200, 300]], life: [12, 30],
+      rate: m => [0.01, 0.03, 0.1, 0.14, 0.1, 0.02, 0, 0, 0, 0.01, 0.01, 0.01][m] },
+    { kind: "storm", name: "Siberian blizzard", lon: [62, 130], lat: [48, 58], bearing: [70, 120], kmh: [30, 50], km: [[420, 620], [260, 380]], life: [30, 70],
+      rate: m => [0.2, 0.18, 0.12, 0.04, 0, 0, 0, 0, 0.01, 0.06, 0.14, 0.2][m] },
+    { kind: "wind", mild: true, name: "Rain and headwinds", lon: [104, 140], lat: [24, 42], bearing: [40, 100], kmh: [25, 40], km: [[450, 700], [300, 450]], life: [24, 60],
+      rate: m => [0.2, 0.2, 0.22, 0.24, 0.26, 0.32, 0.3, 0.22, 0.22, 0.18, 0.18, 0.2][m] },
+    { kind: "storm", name: "Pacific gale", lon: [150, 200], lat: [30, 46], bearing: [55, 95], kmh: [35, 55], km: [[520, 720], [260, 360]], life: [60, 110],
+      rate: m => [0.14, 0.12, 0.09, 0.06, 0.03, 0.02, 0.02, 0.03, 0.06, 0.1, 0.13, 0.15][m] },
+    // South America and the South Atlantic crossing.
+    { kind: "storm", name: "Doldrums squall", lon: [-34, -18], lat: [-2, 9], bearing: [240, 300], kmh: [10, 25], km: [[220, 340], [150, 220]], life: [10, 24],
+      rate: m => [0.14, 0.14, 0.16, 0.18, 0.18, 0.16, 0.16, 0.16, 0.16, 0.16, 0.14, 0.14][m] },
+    { kind: "storm", name: "Pampero", lon: [-66, -56], lat: [-40, -32], bearing: [20, 60], kmh: [40, 60], km: [[420, 600], [120, 180]], life: [10, 24],
+      rate: m => [0.05, 0.05, 0.06, 0.08, 0.1, 0.12, 0.12, 0.12, 0.1, 0.1, 0.07, 0.05][m] },
+    { kind: "storm", name: "Amazon thunderstorm", lon: [-72, -48], lat: [-12, 3], bearing: [240, 300], kmh: [10, 25], km: [[160, 260], [130, 200]], life: [6, 14],
+      rate: m => [0.3, 0.3, 0.3, 0.28, 0.22, 0.16, 0.14, 0.14, 0.18, 0.24, 0.28, 0.3][m] },
+    { kind: "wind", mild: true, name: "Tropical rains", lon: [-70, -36], lat: [-24, 4], bearing: [240, 300], kmh: [10, 25], km: [[450, 700], [300, 450]], life: [24, 60],
+      rate: m => [0.3, 0.3, 0.3, 0.26, 0.2, 0.16, 0.14, 0.14, 0.18, 0.22, 0.26, 0.3][m] },
+    { kind: "storm", name: "Andean mountain weather", lon: [-74, -68], lat: [-38, -8], bearing: [80, 100], kmh: [3, 8], km: [[260, 360], [180, 260]], life: [40, 90],
+      rate: m => [0.06, 0.06, 0.06, 0.07, 0.08, 0.09, 0.09, 0.09, 0.08, 0.07, 0.06, 0.06][m] },
+    { kind: "fog", name: "Peruvian coast fog", lon: [-79, -76], lat: [-14, -10], bearing: [80, 100], kmh: [1, 4], km: [[120, 180], [80, 120]], life: [20, 50],
+      rate: m => [0.01, 0.01, 0.02, 0.04, 0.08, 0.12, 0.13, 0.13, 0.1, 0.06, 0.02, 0.01][m] },
     // The Middle East and Africa.
     { kind: "storm", name: "Haboob", lon: [28, 36], lat: [13, 24], bearing: [300, 360], kmh: [30, 50], km: [[200, 320], [150, 220]], life: [6, 14],
       rate: m => [0, 0, 0.01, 0.04, 0.1, 0.14, 0.16, 0.14, 0.08, 0.02, 0, 0][m] },
@@ -88,7 +131,7 @@ window.UpShip = window.UpShip || {};
     { kind: "fair", name: "Fair-weather cloud", at: () => { const c = U.CITIES[Math.floor(Math.random() * U.CITIES.length)]; return { x: c.x + rand(-120, 120), y: c.y + rand(-90, 90) }; },
       rate: () => 0.3, vx: [4, 9], vy: [-2, 2], rx: [35, 65], ry: [25, 40], life: [12, 36] }
   ];
-  const MAX = { all: 46, storm: 20, fog: 6, wind: 14, fair: 6 };          // room for each region's weather beside the others'
+  const MAX = { all: 84, storm: 39, fog: 7, wind: 23, fair: 6 };          // room for each region's weather beside the others'
 
   function init(state) {
     state.weather = { systems: [], nextId: 1 };

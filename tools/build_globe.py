@@ -71,7 +71,7 @@ E = [("Newfoundland", "NFL", "dominion"), ("Soviet Union", "RUS UKR BLR KAZ UZB 
  ("Dutch East Indies", "IDN", "dutch"), ("French West Africa", "SEN MLI MRT GIN CIV BFA NER BEN", "french"), ("French Equatorial Africa", "GAB COG CAF TCD", "french"),
  ("Belgian Congo", "COD", "belgian"), ("Anglo-Egyptian Sudan", "SDN SSD SDS", "british"), ("Eritrea", "ERI", "italian"), ("Italian Somaliland", "SOM", "italian"), ("British Somaliland", "SOL", "british"), ("French Somaliland", "DJI", "french"), ("Japanese Empire", "JPN KOR PRK TWN", "japanese"),
  ("Rhodesia", "ZMB ZWE", "british"), ("Nyasaland", "MWI", "british"), ("Ruanda-Urundi", "RWA BDI", "belgian"),
- ("Hejaz and Nejd", "SAU", "other"), ("Persia", "IRN", "other"), ("Muscat and Oman", "OMN", "other"), ("Trucial States", "ARE", "british"), ("Bechuanaland", "BWA", "british"),
+ ("Papua and New Guinea", "PNG", "british"), ("New Hebrides", "VUT", "british"), ("Western Samoa", "WSM", "british"), ("Siam", "THA", "other"), ("Ceylon", "LKA", "british"), ("Portuguese Timor", "TLS", "portuguese"), ("British Guiana", "GUY", "british"), ("Dutch Guiana", "SUR", "dutch"), ("British Honduras", "BLZ", "british"), ("Hejaz and Nejd", "SAU", "other"), ("Persia", "IRN", "other"), ("Muscat and Oman", "OMN", "other"), ("Trucial States", "ARE", "british"), ("Bechuanaland", "BWA", "british"),
  ("Basutoland", "LSO", "british"), ("Swaziland", "SWZ", "british"), ("Spanish Guinea", "GNQ", "spanish"), ("Portuguese Guinea", "GNB", "portuguese"), ("Cameroons", "CMR", "french"),
  ("Togoland", "TGO", "french"), ("Madagascar", "MDG", "french"), ("Gambia", "GMB", "british"), ("Sierra Leone", "SLE", "british"), ("Libya", "LBY", "italian"), ("Morocco", "MAR", "french"),
  ("Algeria", "DZA", "french"), ("Tunisia", "TUN", "french"), ("Egypt", "EGY", "other"), ("Ethiopia", "ETH", "other"), ("Liberia", "LBR", "other"), ("Yemen", "YEM", "other"), ("British East Africa", "KEN UGA TZA", "british"), ("Union of South Africa", "ZAF NAM", "british"), ("British Malaya", "MYS SGP BRN", "british"),
@@ -97,6 +97,7 @@ for i, (name, g, power) in enumerate(ents):
         g = unary_union([g.buffer(0.03)] + [e['g'].buffer(0.03) for e in parts]).buffer(-0.03)
         for e in parts: merged.add(id(e))
     if g.is_empty or g.area < 0.02: continue
+    if name == "France": name, power = "French Guiana", "french"          # what is left of France beyond Europe's map
     tint = EU_TINT.get(name, POWER_TINT.get(power, i % 6))
     world.append({"n": name, "tint": tint, "a": round(g.area, 1), "l": rnd(list(g.representative_point().coords[0])), "c": geo(g, 0.4 if not parts else 0.15), "f": geo(g, 0.04 if not parts else 0.01)})
 print("joined across the old frame:", ", ".join(sorted({e['n'] for e in europe if id(e) in merged})))

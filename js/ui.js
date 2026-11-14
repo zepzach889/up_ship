@@ -239,13 +239,15 @@ window.UpShip = window.UpShip || {};
     // Each free ship: how far by the hops she would fly, and whether she can get there at all.
     const rows = ready.map(x => { const km = U.sim.distanceKm(x.location, id), rs = U.research.stats(state, x), via = U.sim.hopPlan(state, x, x.location, id).dist[id];
       return { x, km: via ?? km, hops: via != null && rs.rangeKm < km, days: Math.max(1, Math.round((via ?? km) / rs.speedKmh / 24 + 0.5)), ok: via != null, direct: rs.rangeKm >= km, range: rs.rangeKm }; }).sort((a, b) => a.km - b.km);
-    return `<h2>${esc(c.name)}</h2><p class="sub">${c.empire ? `${esc(c.country)}, under ${U.sim.POWERS[c.empire].rule}` : !c.via && !c.station ? `${esc(c.country)}: a foreign country for your company` : c.station ? `${esc(c.country)}: a refuelling station. Few passengers of its own, but its mast and fuel let ships cross the ocean in shorter legs` : c.region === "na" ? `${esc(c.country)}, ${c.via}` : `Gateway to the wider world, ${c.via}`}. Your ships can land here once a survey flight has won landing rights.</p>${liftText(state, id) ? `<p class="note">${liftText(state, id)}</p>` : ""}
-      ${open ? `<p class="status">Open. Landing rights won by ${esc(g.by)}'s survey flight; routes may end here.</p>`
+    return `<h2>${esc(c.name)}</h2><p class="sub">${c.empire ? `${esc(c.country)}, under ${U.sim.POWERS[U.sim.authority(c.id) || c.empire].rule}` : !c.via && !c.station ? `${esc(c.country)}: a foreign country for your company` : c.station ? `${esc(c.country)}: a refuelling station. Few passengers of its own, but its mast and fuel let ships cross the ocean in shorter legs` : c.region === "na" ? `${esc(c.country)}, ${c.via}` : `Gateway to the wider world, ${c.via}`}. Your ships can land here once a survey flight has won landing rights.</p>${liftText(state, id) ? `<p class="note">${liftText(state, id)}</p>` : ""}
+      ${U.sim.permitState(state, id).status === "lapsed" ? `<p class="status">Your Soviet permit for ${esc(c.name)} lapsed on ${shortDate(U.sim.dateAtHour(U.sim.permitState(state, id).at))}. Your ships may not land here until it is renewed.</p>
+          <div class="btn-row"><button class="btn" data-permit="${U.sim.permitKey(id)}">Renew the permit, ${money(U.sim.SOVIET.renew)}</button></div>`
+        : open ? `<p class="status">Open. Landing rights won by ${esc(g.by)}'s survey flight; routes may end here.</p>`
         : g ? `<p class="status">${esc(g.by)} is flying the survey. Landing rights follow on ${shortDate(U.sim.dateOf((g.openAt) / 12))}.</p>`
         : surveying ? `<p class="status">${esc(surveying.name)} is on her way to survey ${esc(c.name)}, now near ${esc(city(surveying.location).name)}. Landing rights are granted when she arrives.</p>`
         : U.sim.needsPermit(state, id) ? (state.permits && state.permits[U.sim.permitKey(id)]
           ? `<p class="status">Your application to ${U.sim.permitName(U.sim.permitKey(id))} is being considered; a permit is expected about ${shortDate(U.sim.dateOf(state.permits[U.sim.permitKey(id)].grantAt / 12))}.</p>`
-          : `<p>A foreign line needs a permit from ${U.sim.permitName(U.sim.permitKey(id))} before its first survey here. The application costs £3,000 and takes five to eight weeks; after that, surveys win landing rights city by city.</p>
+          : `<p>A foreign line needs a permit from ${U.sim.permitName(U.sim.permitKey(id))} before its first survey here. The application costs ${money(U.sim.permitTerms(state, U.sim.permitKey(id)).fee)} and takes ${U.sim.permitTerms(state, U.sim.permitKey(id)).weeks}; ${U.sim.permitTerms(state, U.sim.permitKey(id)).perCity ? `each Soviet city needs its own permit, renewed every two years for ${money(U.sim.SOVIET.renew)}. Expect inspections, few passengers, and no leave to build a shed.` : "after that, surveys win landing rights city by city."}</p>
             <div class="btn-row"><button class="btn" data-permit="${U.sim.permitKey(id)}">Apply for a permit</button></div>`)
         : `<p>Before routes can end here, a survey flight must prove the way and win landing rights. The ship you send flies there, in hops through places she can land if it is beyond her range, and lies at ${esc(c.name)} once the rights are won. The survey costs about £4,000 in fees.</p>
           <ul class="plain-list">${rows.map(r => `<li>${esc(r.x.name)}: ${Math.round(r.km).toLocaleString("en-GB")} km from ${esc(city(r.x.location).name)}, ${r.ok ? `${r.hops ? "by hops, " : ""}about ${r.days} ${r.days === 1 ? "day" : "days"} away <button class="btn-quiet" data-survey="${id}:${r.x.id}">Send her</button>${r.direct ? ` <button class="btn-quiet" data-survey-helm="${id}:${r.x.id}">Take the helm</button>` : ""}` : `<span class="small">cannot reach it: no chain of landing places within her ${r.range.toLocaleString("en-GB")} km range</span>`}</li>`).join("") || `<li class="note">No ship is free.</li>`}</ul>`}`;
@@ -270,7 +272,7 @@ window.UpShip = window.UpShip || {};
       <dl>
         ${row("Size", tier.name)}
         ${row("Specialty", `${sp.name}. ${sp.note}.`)}
-        ${row("Passenger demand", demand)}${liftRow(state, id)}
+        ${row("Passenger demand", demand)}${liftRow(state, id)}${c.empire === "ussr" && U.sim.permitState(state, id).at ? row("Soviet permit", `Valid until ${shortDate(U.sim.dateAtHour(U.sim.permitState(state, id).at))} <button class="btn-quiet" data-permit="${U.sim.permitKey(id)}">Renew, ${money(U.sim.SOVIET.renew)}</button>`) : ""}
         ${row("First-class travelers", Math.round(U.passengers.FIRST_SHARE[c.specialty] * 100) + "%")}
         ${row("Your routes", routes.length ? routes.map(routeLink).join("<br>") : "None")}
         ${row("Moored here now", here.length ? here.map(shipLink).join(", ") : "None")}
@@ -281,7 +283,7 @@ window.UpShip = window.UpShip || {};
   function facilitiesBlock(state, id) {
     const F = U.facilities, pub = F.hasPublic(id), hasMast = F.canLand(state, id);
     const lim = F.terminalLimits(state, id), used = state.cityDay[id] || { pax: 0, tons: 0 };
-    const rows = ["mast", "terminal", "shed", "school", "gasplant", "hestore"].concat(U.aether.discovered(state) ? ["refinery"] : []).map(type => {
+    const rows = ["mast", "terminal", "shed", "school", "lab", "gasplant", "hestore"].concat(U.aether.discovered(state) ? ["refinery"] : []).map(type => {
       const T = F.TYPES[type], lvl = F.ownLevel(state, id, type), cost = F.nextCost(state, id, type), single = T.costs.length === 1;
       if (single) {
         const needsMast = !hasMast;
@@ -569,7 +571,10 @@ window.UpShip = window.UpShip || {};
     } else adder = `<button class="btn" data-act="pick">Add a ship</button>`;
     return `
       <h2>${esc(U.sim.routeName(route.stops, route.circuit))}</h2>
-      <p class="sub">${route.circuit ? "Circuit" : "Out and back"}. Ships leave as soon as they are ready.</p>
+      <p class="sub">${route.circuit ? "Circuit" : "Out and back"}. ${route.even ? "Ships keep an even timetable." : "Ships leave as soon as they are ready."}</p>
+      ${(() => { const live = ships.filter(x => x.deliveryTick <= state.tick && !x.lost); if (!live.length) return ""; const round = U.sim.routeRound(state, live[0], route), per = live.length * 168 / Math.max(6, round);
+        return `<label class="check"><input type="checkbox" data-even="${route.id}" ${route.even ? "checked" : ""}> Keep an even timetable</label>
+          <p class="note">${live.length} ship${live.length > 1 ? "s" : ""} on a round trip of about ${Math.round(round / 24 * 10) / 10} days: about ${per >= 10 ? Math.round(per) : Math.round(per * 10) / 10} departures a week each way${route.even && live.length > 1 ? `, one about every ${Math.round(round / live.length)} hours` : ""}.${live.length > 1 && !route.even ? " With an even timetable the ships space themselves out, so they do not fly nose to tail." : ""}</p>`; })()}
       ${demandTable(state, legs)}
       ${faresBlock(state, route)}
       ${competitionBlock(state, route)}
@@ -645,6 +650,9 @@ window.UpShip = window.UpShip || {};
         <dl>${row("Passengers", f.planned ? `${f.berths} (${f.firstBerths} first class)` : f.berths ? `about ${f.berths}` : "None")}${row("Cargo", `${Math.round(f.cargoCap * 10) / 10} tons`)}
           ${row("Speed", `${Math.round(cls ? cls.speedKmh : f.speed)} km/h`)}${row("Range", km(cls ? cls.rangeKm : Math.round(f.range / 100) * 100))}
           ${row("Running cost", money((cls ? cls.dailyCost : f.daily) * U.ECONOMY.costFactor) + " a day")}${row("Delivery", `${Math.round(days / 30 * 2) / 2} months`)}</dl>
+        <label class="field-label" for="theme-${e.id}">Names for her ships</label>
+        <select id="theme-${e.id}" data-theme="${e.id}">${Object.entries(U.NAME_THEMES).map(([k, t]) => `<option value="${k}" ${(e.theme || U.NAME_DEFAULT[state.company.nation]) === k ? "selected" : ""}>${t.label}</option>`).join("")}</select>
+        <p class="small">${cls ? `Next: ${esc(U.sim.suggestName(state, cls.id))}` : `After the first ship: ${esc(U.themeNames(state, e.theme).slice(0, 3).join(", "))}, and so on`}</p>
         <div class="card-foot"><span class="price">${money(price)}</span><button class="btn" data-order-design="${e.id}" ${blocked ? "disabled" : ""}>Order</button></div>
         ${need.length ? `<p class="note">Needs research: ${need.map(esc).join("; ")}.</p>` : f.status === "sink" ? `<p class="note">It cannot fly as drawn.</p>`
           : noStair ? `<p class="note">It needs a boarding stair on its lower deck.</p>`
@@ -1046,11 +1054,11 @@ window.UpShip = window.UpShip || {};
     const a = city(o.a || o.b || "berlin"), b = o.b ? city(o.b) : null;
     if (o.kind === "charter") return `<h4>Charter: ${esc(o.who)}</h4><p>${esc(o.what[0].toUpperCase() + o.what.slice(1))}. ${o.days} days for ${money(o.pay)}, paid on acceptance. The ship that can cover ${o.range.toLocaleString("en-GB")} km and earns least on her route goes, and rejoins it afterwards.</p>`;
     if (o.kind === "record") { const r = (U.state.records || {})[o.a + ">" + o.b]; return `<h4>Record attempt: ${a.name} to ${b.name}</h4><p>${km(o.km)}. The record stands at ${r ? r.hours + " hours, set by " + esc(r.by) : "nothing yet"}. Beat it for ${money(o.prize)} and standing. Your fastest ship with the range flies it.</p>`; }
-    if (o.kind === "goal") return `<h4>${o.scheme ? (o.city === "karachi" ? "The Imperial Airship Scheme" : "Government scheme") : "Government offer"}: a service to ${city(o.city).name}</h4><p>Open a regular service to ${city(o.city).name}, with a ship on the route, within ${o.years === 5 ? "five" : "two"} years of accepting. ${money(o.pay)} and standing on success; nothing is lost if it lapses.</p>`;
+    if (o.kind === "goal") return `<h4>${o.scheme ? (o.city === "karachi" ? "The Imperial Airship Scheme" : o.city === "darwin" ? "The Imperial Airship Scheme: on to Australia" : o.city === "rio" ? "The South America service" : "Government scheme") : "Government offer"}: a service to ${city(o.city).name}</h4><p>Open a regular service to ${city(o.city).name}, with a ship on the route, within ${({ 5: "five", 8: "eight" })[o.years] || "two"} years of accepting. ${money(o.pay)} and standing on success; nothing is lost if it lapses.</p>`;
     if (o.kind === "mail" && o.diplomatic) return `<h4>Diplomatic mail: ${a.name} to ${b.name}</h4>
-      <p>${o.perWeek} flights a week each way for ${o.years} years, ${money(o.monthly)} a month from ${esc(o.authority)}. Carrying another government's pouches costs a little standing.</p>`;
-    if (o.kind === "mail") return `<h4>Mail contract: ${a.name} to ${b.name}</h4>
-      <p>${o.perWeek === 7 ? "One flight a day" : o.perWeek + " flights a week"} each way, ${km(U.sim.distanceKm(o.a, o.b))} apart. ${money(o.monthly)} a month for ${o.years} year${o.years > 1 ? "s" : ""}. Offered by ${o.authority === U.NATIONS[U.state.company.nation].name ? "your government's postal ministry" : "the postal authority of " + esc(o.authority)}.</p>`;
+      <p>A retainer of ${money(o.monthly)} a month for ${o.years} years from ${esc(o.authority)}, for at least ${o.perWeek} ${o.perWeek === 1 ? "flight" : "flights"} a week each way on a route you already fly. No penalties. Carrying another government's pouches costs a little standing.</p>`;
+    if (o.kind === "mail") { const svc = U.contracts.weeklyService(U.state, o.a, o.b); return `<h4>Mail award: ${a.name} to ${b.name}</h4>
+      <p>A retainer of ${money(o.monthly)} a month for ${o.years} year${o.years > 1 ? "s" : ""}, for carrying the mail on ships you already fly between them. The minimum is ${o.perWeek === 7 ? "a flight a day" : o.perWeek + (o.perWeek === 1 ? " flight" : " flights") + " a week"} each way${svc >= 1 ? `; your ships make about ${Math.round(svc)} now` : ""}. No penalties: a month that falls short is simply not paid. Offered by ${o.authority === U.NATIONS[U.state.company.nation].name ? "your government's postal ministry" : "the postal authority of " + esc(o.authority)}.</p>`; }
     if (o.kind === "route") return `<h4>Route grant: ${a.name} to ${b.name}</h4>
       <p>Open a service between them within ${U.ECONOMY.grantOpenMonths} months and fly it at least ${U.ECONOMY.grantMinPerMonth} times each way every month for ${o.years} years. ${money(o.upfront)} when the service opens, then ${money(o.monthly)} a month. Stopping early means repaying part of the opening grant.</p>`;
     if (o.count > 1) return `<h4>Construction grant: two ships</h4><p>The government pays ${Math.round(o.share * 100)}% of each of your next two national-built ships (not war-surplus) ordered within ${U.ECONOMY.buildGrantMonths} months.</p>`;
@@ -1076,18 +1084,21 @@ window.UpShip = window.UpShip || {};
     const mail = state.contracts.map(k => {
       const rel = k.required ? Math.round(k.made / k.required * 100) + "%" : "New";
       const has = state.routes.some(r => r.stops.includes(k.a) && r.stops.includes(k.b));
-      return `<section class="card"><h4>Mail: ${city(k.a).name} to ${city(k.b).name}</h4>
+      const svc = U.contracts.weeklyService(state, k.a, k.b);
+      return `<section class="card"><h4>Mail award: ${city(k.a).name} to ${city(k.b).name}</h4>
         <dl>
-          ${row("Required", `${k.perWeek === 7 ? "Daily" : k.perWeek + " a week"} each way`)}
-          ${row("This week", `${city(k.a).name} to ${city(k.b).name} ${k.week.ab} of ${k.perWeek}; back ${k.week.ba} of ${k.perWeek}`)}
-          ${row("Pay", money(k.monthly) + " a month")}
-          ${row("Reliability", rel)}
-          ${row("Penalties so far", money(k.penalties))}
+          ${row("Retainer", money(k.monthly) + " a month")}
+          ${row("Minimum", `${k.perWeek === 7 ? "Daily" : k.perWeek + " a week"} each way`)}
+          ${row("This week", `${k.week.ab} out, ${k.week.ba} back`)}
+          ${row("Your service", svc >= 0.5 ? `about ${Math.round(svc)} a week each way` : "none yet")}
+          ${row("Flights made", rel)}
+          ${k.unpaid ? row("Months unpaid", String(k.unpaid)) : ""}
           ${row("Ends", shortDate(U.sim.dateAtHour(k.endHour)))}
         </dl>
+        ${k.short ? `<p class="note">Short of the minimum for ${k.short} month${k.short > 1 ? "s" : ""} running; three end the award.</p>` : ""}
         ${has ? "" : `<p class="note">No route of yours carries between these cities yet. Any route with both cities as stops counts, including through stops in between.</p>
           <button class="btn" data-draw="${k.a}:${k.b}">Draw this route</button>`}
-        ${k.tutorial && state.tutorial ? "" : `<button class="btn-danger" data-drop="${k.id}">Drop contract (${money(k.monthly)} penalty)</button>`}</section>`;
+        ${k.tutorial && state.tutorial ? "" : `<button class="btn-quiet" data-drop="${k.id}">Give up this award</button>`}</section>`;
     }).join("");
     const grants = state.grants.map(g => `<section class="card"><h4>Grant: ${city(g.a).name} to ${city(g.b).name}</h4>
       <dl>
@@ -1096,13 +1107,27 @@ window.UpShip = window.UpShip || {};
         ${row("Monthly", money(g.monthly))}
       </dl>
       ${g.opened || state.routes.some(r => r.stops.includes(g.a) && r.stops.includes(g.b)) ? "" : `<button class="btn" data-draw="${g.a}:${g.b}">Draw this route</button>`}</section>`).join("");
+    // Everything else accepted and still in hand: government services to open, the construction grant, ships away on
+    // charters, record attempts, and surveys, and permits applied for.
+    const nm = id => esc(city(id).name);
+    const hand = [];
+    for (const g of state.goals || []) { const flying = state.routes.some(r => r.stops.includes(g.city));
+      hand.push(`<section class="card"><h4>Government service: ${nm(g.city)}</h4><dl>${row("On success", money(g.pay))}${row("Open by", shortDate(U.sim.dateAtHour(g.until)))}</dl>
+        <p class="note">${flying ? "A route of yours reaches it; the payment follows once a ship is flying the route." : "Paid once a route of yours reaches it with a ship on the route."}</p></section>`); }
+    if (state.buildGrant) hand.push(`<section class="card"><h4>Construction grant</h4><dl>${row("Covers", `${Math.round(state.buildGrant.share * 100)}% of ${state.buildGrant.count > 1 ? "your next " + state.buildGrant.count + " ships" : "your next ship"} built at home`)}${row("Use by", shortDate(U.sim.dateAtHour(state.buildGrant.until)))}</dl></section>`);
+    for (const sh of state.ships) { const o = sh.orders; if (!o) continue;
+      if (o.kind === "charter") hand.push(`<section class="card"><h4>Charter: ${esc(o.who)}</h4><dl>${row("Ship", shipLink(sh))}${row("Where", nm(o.to))}${row("Status", o.until != null ? `There until ${shortDate(U.sim.dateAtHour(o.until))}` : `On her way, now near ${nm(sh.location)}`)}</dl><p class="note">Paid on acceptance. She rejoins her route when it ends.</p></section>`);
+      else if (o.kind === "record") hand.push(`<section class="card"><h4>Record attempt: ${nm(o.a)} to ${nm(o.b)}</h4><dl>${row("Ship", shipLink(sh))}${row("Prize", money(o.prize))}${row("Status", o.stage === "toStart" ? `Flying to ${nm(o.a)} to start` : "On the run")}</dl></section>`);
+      else if (o.kind === "survey") hand.push(`<section class="card"><h4>Survey flight: ${nm(o.to)}</h4><dl>${row("Ship", shipLink(sh))}${row("Status", `On her way, now near ${nm(sh.location)}`)}</dl><p class="note">Landing rights are granted when she arrives.</p></section>`);
+    }
+    for (const [key, pm] of Object.entries(state.permits || {})) if (pm.grantAt > now) hand.push(`<section class="card"><h4>Permit applied for</h4><dl>${row("From", esc(U.sim.permitName(key)))}${row("Expected", shortDate(U.sim.dateAtHour(pm.grantAt)))}</dl></section>`);
     return `
       <h2>Contracts</h2>
-      <p class="sub">Mail contracts and government grants</p>
+      <p class="sub">Offers, mail awards, grants, and everything else you have taken on</p>
       <h3>Offers</h3>${offers || `<p class="note">No offers open. New ones arrive by telegram every month or two.</p>`}
-      <h3>Mail contracts</h3>${mail || `<p class="note">None yet.</p>`}
-      <h3>Grants</h3>${grants || `<p class="note">None yet.</p>`}
-      ${state.buildGrant ? `<p class="status">Construction grant: ${Math.round(state.buildGrant.share * 100)}% off your next national-built ship until ${shortDate(U.sim.dateAtHour(state.buildGrant.until))}.</p>` : ""}`;
+      <h3>In hand</h3>${hand.join("") || `<p class="note">Nothing under way. Charters, record attempts, surveys, government services, and permits you have taken on appear here until they are done.</p>`}
+      <h3>Mail awards</h3>${mail || `<p class="note">None yet. The Post Office offers a retainer for mail on routes you already fly.</p>`}
+      <h3>Grants</h3>${grants || `<p class="note">None yet.</p>`}`;
   }
 
   function telegramsPanel(state) {
@@ -1158,7 +1183,7 @@ window.UpShip = window.UpShip || {};
       </dl>
       <h3>Income sources, ${y.year}</h3>
       <dl>
-        ${row("Mail contracts", money(y.mail || 0))}
+        ${row("Mail", money(y.mail || 0))}
         ${row("Government grants", money(y.grants || 0))}
         ${row("Loan interest paid", money(y.interest || 0))}
         ${row("Company overheads", `${money(y.overheads || 0)}${state.overheadsLast ? ` (now ${money(state.overheadsLast)} a month)` : ""}`)}
@@ -1291,7 +1316,9 @@ window.UpShip = window.UpShip || {};
       notify(why || `${ship.name} is ordered to ${city(sendTo[sid]).name}.`); h.changed(); render(); return;
     }
     if (b.dataset.cancelOrders) { U.sim.cancelOrders(s, b.dataset.cancelOrders); notify("Her orders are cancelled."); h.changed(); render(); return; }
-    if (b.dataset.permit) { const why = U.sim.applyPermit(s, b.dataset.permit); notify(why || "Application sent. A reply is expected in five to eight weeks."); h.changed(); render(); return; }
+    if (b.dataset.permit && b.dataset.permit.startsWith("city:") && s.permits && s.permits[b.dataset.permit] && s.permits[b.dataset.permit].grantAt <= U.sim.H(s.tick)) {
+      const why = U.sim.applyPermit(s, b.dataset.permit); notify(why || "Permit renewed for two more years."); h.changed(); render(); return; }
+    if (b.dataset.permit) { const why = U.sim.applyPermit(s, b.dataset.permit); notify(why || `Application sent. A reply is expected in ${U.sim.permitTerms(s, b.dataset.permit).weeks}.`); h.changed(); render(); return; }
     if (b.dataset.survey) {
       const [gid, sid] = b.dataset.survey.split(":"), why = U.sim.surveyFlight(s, gid, sid);
       notify(why || `${s.ships.find(x => x.id === sid).name} sets out to survey the route to ${city(gid).name}.`);
@@ -1299,8 +1326,8 @@ window.UpShip = window.UpShip || {};
     }
     if (b.dataset.drop) {
       const k = s.contracts.find(x => x.id === b.dataset.drop);
-      if (k && confirm(`Drop the ${city(k.a).name}–${city(k.b).name} mail contract? The penalty is ${money(k.monthly)}, and ${k.authority === U.NATIONS[s.company.nation].name ? "your postal ministry" : "the " + k.authority + " postal authority"} will make no new offers for about six months.`)) {
-        U.contracts.dropContract(s, k.id); notify("Contract dropped."); h.changed(); render();
+      if (k && confirm(`Give up the ${city(k.a).name}–${city(k.b).name} mail award? There is no penalty; the retainer stops.`)) {
+        U.contracts.dropContract(s, k.id); notify("Award given up."); h.changed(); render();
       }
       return;
     }
@@ -1414,6 +1441,8 @@ window.UpShip = window.UpShip || {};
   }
   // Refit checkboxes in a ship's panel.
   function onPanelChange(e) {
+    if (e.target.dataset && e.target.dataset.even) { const r = U.state.routes.find(x => x.id === e.target.dataset.even); if (r) { r.even = e.target.checked; if (!r.even) r.lastDep = {}; h.changed(); render(); } return; }
+    if (e.target.dataset && e.target.dataset.theme) { const d0 = (U.state.designs || []).find(x => String(x.id) === e.target.dataset.theme); if (d0) { d0.theme = e.target.value; h.changed(); render(); } return; }
     if (e.target.dataset && e.target.dataset.offerShip) { offerShip[e.target.dataset.offerShip] = e.target.value; return; }
     if (e.target.dataset && e.target.dataset.sendTo) { sendTo[e.target.dataset.sendTo] = e.target.value; return; }
     const all = e.target.closest("[data-refit-all]");

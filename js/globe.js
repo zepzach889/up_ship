@@ -90,6 +90,25 @@ window.UpShip = window.UpShip || {};
     // The great lakes are water, as the inland seas are.
     ctx.lineWidth = 0.6; ctx.strokeStyle = "rgba(138,125,99,0.85)";
     for (const l of LAKES) { ctx.beginPath(); path(l); ctx.fillStyle = "#a9c1be"; ctx.fill(); ctx.stroke(); }
+    // The mountain walls: a soft brown band along each crest with a darker ridge line, broken at the passes.
+    if (U.barriers) {
+      ctx.save(); ctx.lineCap = "round";
+      for (const w of U.barriers.WALLS) for (const line of w.lines) {
+        const ls = { type: "LineString", coordinates: line.map(p => [p[1], p[0]]) };
+        ctx.beginPath(); path(ls); ctx.strokeStyle = "rgba(120,92,58,0.22)"; ctx.lineWidth = Math.max(3, Math.min(16, k * 2.6)); ctx.stroke();
+        ctx.beginPath(); path(ls); ctx.setLineDash([1.5, 3.5]); ctx.strokeStyle = "rgba(92,68,40,0.75)"; ctx.lineWidth = Math.max(1.2, Math.min(3.2, k * 0.6)); ctx.stroke(); ctx.setLineDash([]);
+      }
+      ctx.restore();
+      if (k > 2.6 && fine) {
+        ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.font = `italic ${Math.min(11, 7 + k * 0.3)}px "Josefin Sans", "Futura", sans-serif`;
+        for (const w of U.barriers.WALLS) for (const v of w.ways) {
+          if (!v.pass || !facing(v.at[1], v.at[0])) continue;
+          const [x, y] = proj([v.at[1], v.at[0]]);
+          ctx.beginPath(); ctx.arc(x, y, 2.6, 0, 2 * Math.PI); ctx.fillStyle = "#f4ecd8"; ctx.fill(); ctx.strokeStyle = "rgba(92,68,40,0.9)"; ctx.lineWidth = 1; ctx.stroke();
+          ctx.fillStyle = "rgba(72,52,30,0.9)"; ctx.fillText(v.name.replace(/^the /, "").replace(/^./, c0 => c0.toUpperCase()), x + 6, y);
+        }
+      }
+    }
     // Shading toward the rim, so it reads as a sphere.
     const shade = ctx.createRadialGradient(cx - R * 0.3, cy - R * 0.3, R * 0.2, cx, cy, R * 1.02);
     shade.addColorStop(0, "rgba(255,255,255,0.06)"); shade.addColorStop(0.72, "rgba(0,0,0,0)"); shade.addColorStop(1, "rgba(10,20,40,0.26)");

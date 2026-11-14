@@ -120,6 +120,7 @@ window.UpShip = window.UpShip || {};
 
   // A small standalone drawing for panels and the key. Needs the map's defs on the page.
   function icon(type, level, own, size = 44) {
+    if (type === "lab") type = "school";                      // the laboratory borrows the school's drawing for now
     const wide = type === "refinery" && level == 3;
     return `<svg class="fac-art ${own ? "fac-own" : "fac-pub"}" viewBox="${wide ? "-19 -25 45 37" : "-13 -25 26 37"}" width="${Math.round(size * (wide ? 45 : 26) / 37)}" height="${size}" aria-hidden="true"><use href="#fac-${type}-${level}"/></svg>`;
   }

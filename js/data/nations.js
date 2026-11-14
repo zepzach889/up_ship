@@ -66,7 +66,7 @@ UpShip.NATIONS = {
   usa: {
     id: "usa", name: "United States", mapName: "United States",
     strength: "Helium and a generous Post Office",
-    description: "Safe helium ships from Goodyear and the Navy, a Post Office that pays well for air mail, and a continent of its own to fly. Larger, costlier ships, and Prohibition at home.",
+    description: "Safe helium ships, costlier and carrying less, and a Post Office that pays well for air mail.",
     catalog: ["goodyear", "goodyearcargo", "navyrigid"],
     subsidy: { scale: 0.9, frequency: 0.8, buildShare: 0.1, leaning: "capitals" },
     companyNames: {
@@ -77,12 +77,27 @@ UpShip.NATIONS = {
       first: ["Charles", "Edward", "Harold", "Walter", "Paul", "Frank", "Amelia", "Ruth", "Margaret", "Eleanor"],
       last: ["Litchfield", "Moffett", "Rosendahl", "Lansdowne", "Fulton", "Whitney", "Morgan", "Hartley", "Bennett", "Carroll"]
     }
+  },
+  japan: {
+    id: "japan", name: "Japan", mapName: "Japanese Empire",
+    strength: "An island empire with a weather service",
+    description: "Cheap, quickly built semi-rigids, a weather service from the start, and Korea and Formosa open as home.",
+    catalog: ["tsubame", "hato", "kaigun"],
+    subsidy: { scale: 0.9, frequency: 0.9, buildShare: 0.2, leaning: "capitals" },
+    companyNames: {
+      patterns: ["{adj} Kōkūsen Kaisha", "{adj} Airship Company", "{adj} Kōkū Yusō", "{adj} Air Transport Company"],
+      adj: ["Nippon", "Teikoku", "Tōyō", "Dai Nippon", "Kantō", "Kansai", "Taiheiyō", "Asahi"]
+    },
+    directors: {
+      first: ["Kenji", "Hiroshi", "Takeo", "Saburō", "Masao", "Ichirō", "Yoshio", "Shigeru", "Haruko", "Kiyoko"],
+      last: ["Yamamoto", "Tanaka", "Saitō", "Kobayashi", "Nakamura", "Fujita", "Matsumoto", "Inoue", "Kimura", "Hayashi"]
+    }
   }
 };
 // Cities that count as Mediterranean or imperial destinations for route grants.
 UpShip.MEDITERRANEAN = ["barcelona", "marseille", "toulon", "genoa", "rome", "naples", "athens", "constantinople", "tunis", "algiers", "malta", "alexandria", "cairo", "gibraltar"];
 UpShip.IMPERIAL = ["gibraltar", "malta", "alexandria", "cairo", "marseille", "rome", "naples", "athens", "lisbon"];
-UpShip.NATION_ORDER = ["germany", "britain", "france", "italy", "usa"];
+UpShip.NATION_ORDER = ["germany", "britain", "france", "italy", "usa", "japan"];
 
 // City-name forms used in company names.
 UpShip.CITY_ADJ = { friedrichshafen: "Friedrichshafener", berlin: "Berliner", hamburg: "Hamburger", frankfurt: "Frankfurter" };

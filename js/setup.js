@@ -83,8 +83,8 @@ window.UpShip = window.UpShip || {};
     return `${stepLine(1)}
       <h2>Choose your country</h2>
       <p class="sub">Click a highlighted country on the map, or choose below. Your country decides which builders you order ships from.</p>
-      <ul class="ledger">${U.NATION_ORDER.map(id => { const n = U.NATIONS[id];
-        return `<li><button class="ledger-item" data-nation="${id}"><span>${n.name}</span><small>${n.strength}. ${n.description}</small></button></li>`; }).join("")}</ul>`;
+      <ul class="ledger nations">${U.NATION_ORDER.map(id => { const n = U.NATIONS[id];
+        return `<li><button class="ledger-item" data-nation="${id}"><span>${n.name}</span><small>${n.strength}<span class="more">. ${n.description}</span></small></button></li>`; }).join("")}</ul>`;
   }
 
   function cityView() {

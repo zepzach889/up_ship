@@ -3,6 +3,15 @@
 window.UpShip = window.UpShip || {};
 (function (U) {
   const P = {
+    // Oceania
+    albury: [-36.08, 146.92], newcastle_nsw: [-32.93, 151.78], portaugusta: [-32.49, 137.77], kalgoorlie: [-30.75, 121.47], palmerston: [-40.35, 175.61],
+    // Asia
+    agra: [27.18, 78.01], allahabad: [25.44, 81.85], nagpur: [21.15, 79.09], vizag: [17.69, 83.22], jhansi: [25.45, 78.57], multan: [30.2, 71.47], hyderabad_sd: [25.39, 68.37],
+    nagoya: [35.18, 136.91], pukow: [32.12, 118.72], tsinan: [36.65, 117.0], chengchow: [34.75, 113.63], shanhaikwan: [40.0, 119.75], changchun: [43.88, 125.32], antung: [40.12, 124.39],
+    samara: [53.2, 50.15], orenburg: [51.77, 55.1], chelyabinsk: [55.16, 61.4], krasnoyarsk: [56.01, 92.87], chita: [52.03, 113.5], manchouli: [49.6, 117.43], kualalumpur: [3.14, 101.69], semarang: [-6.97, 110.42],
+    // South America
+    mendoza: [-32.89, -68.84], rosario: [-32.95, -60.65], cordoba_ar: [-31.42, -64.18], tucuman: [-26.82, -65.22], curitiba: [-25.43, -49.27], santos: [-23.96, -46.33],
+    puertoberrio: [6.49, -74.4], arica: [-18.48, -70.32], colon: [9.36, -79.9],
     // The Middle East and Africa
     aswan: [24.09, 32.9], wadihalfa: [21.8, 31.35], atbara: [17.7, 33.98], elarish: [31.13, 33.8], gaza: [31.5, 34.47], lydda: [31.95, 34.89], deraa: [32.62, 36.1], haifa: [32.82, 35.0],
     constantine: [36.37, 6.61], fez: [34.03, -5.0], oujda: [34.68, -1.91], oran: [35.7, -0.63], kimberley: [-28.74, 24.76], deaar: [-30.65, 24.01], voi: [-3.4, 38.56],
@@ -34,6 +43,34 @@ window.UpShip = window.UpShip || {};
     { type: "rail", pts: [a, ...railA] }, { type: "sea", pts: sea }, { type: "rail", pts: [...railB, b] }].filter(s => s.pts.length > 1) });
   const s = (a, b, via) => ({ a, b, sea: true, segs: [{ type: "sea", pts: [a, ...(via || []), b] }] });
   const ROUTES = [
+    // Oceania: railways round Australia's south-east and across the Nullarbor, New Zealand's main trunk, and the steamers.
+    r("sydney", "melbourne", ["albury"], 1), r("sydney", "brisbane", ["newcastle_nsw"]), r("melbourne", "adelaide", []), r("adelaide", "perth", ["portaugusta", "kalgoorlie"]), r("auckland", "wellington", ["palmerston"]),
+    boat("wellington", "christchurch", [], ["wellington", [-42.4, 174.2], [-43.6, 172.9]], []),
+    s("sydney", "auckland", [[-34.4, 172.4]]), s("sydney", "wellington", [[-40.4, 173.6]]), s("melbourne", "hobart", [[-38.6, 144.9], [-41.0, 148.6], [-43.2, 147.9]]),
+    s("sydney", "noumea", [[-30.9, 155.3], [-27.9, 159.2], [-25.0, 162.9]]), s("auckland", "suva", [[-32.2, 175.8], [-27.5, 176.8], [-22.8, 177.7]]), s("brisbane", "portmoresby", [[-24.6, 153.8], [-19.0, 151.8], [-13.5, 149.4]]), s("colombo", "perth", [[-10.0, 95.0]]),
+    s("surabaya", "darwin", [[-8.9, 116.0], [-10.6, 123.4]]), s("perth", "adelaide", [[-35.4, 116.0], [-35.6, 136.0]]),
+    // Asia: India's and Japan's dense railways, the Trans-Siberian, China's few trunk lines, and the mail steamers.
+    r("bombay", "delhi", ["jhansi", "agra"], 1), r("delhi", "calcutta", ["allahabad"], 1), r("bombay", "calcutta", ["nagpur"], 1), r("calcutta", "madras", ["vizag"], 1), r("bombay", "madras", []),
+    r("delhi", "lahore", [], 1), r("lahore", "karachi", ["multan", "hyderabad_sd"], 1), r("tokyo", "osaka", ["nagoya"], 1),
+    r("peking", "tientsin", [], 1), r("tientsin", "nanking", ["tsinan", "pukow"]), r("nanking", "shanghai", [], 1), r("peking", "hankow", ["chengchow"]), r("tientsin", "mukden", ["shanhaikwan"]),
+    r("mukden", "harbin", ["changchun"]), r("seoul", "mukden", ["antung"]), r("harbin", "vladivostok", []), r("moscow", "omsk", ["samara", "chelyabinsk"], 1), r("omsk", "novosibirsk", [], 1),
+    r("novosibirsk", "irkutsk", ["krasnoyarsk"], 1), r("irkutsk", "harbin", ["chita", "manchouli"], 1), r("moscow", "tashkent", ["samara", "orenburg", [45.6, 62.1]]),
+    r("bangkok", "penang", [[9.1, 99.3]]), r("penang", "singapore", ["kualalumpur"]), r("batavia", "surabaya", ["semarang"]),
+    boat("canton", "hongkong", [], ["canton", [22.6, 113.7], "hongkong"], []),
+    s("bombay", "colombo", [[14.0, 73.0], [8.0, 76.2]]), s("colombo", "madras", [[5.7, 80.6], [9.5, 81.8]]), s("calcutta", "rangoon", [[21.4, 88.2], [17.5, 93.5], [15.6, 95.6]]),
+    s("colombo", "penang", [[5.6, 81.0], [6.0, 95.0]]), s("rangoon", "penang", [[15.0, 96.6], [9.0, 97.6]]), s("singapore", "batavia", [[-1.0, 105.6], [-5.0, 106.6]]),
+    s("singapore", "bangkok", [[2.0, 104.6], [8.0, 102.6], [12.6, 100.8]]), s("singapore", "saigon", [[2.6, 104.8], [8.6, 107.2]]), s("saigon", "hongkong", [[10.2, 107.6], [14.0, 110.6], [20.0, 113.6]]),
+    s("hongkong", "manila", [[18.0, 117.6]]), s("hongkong", "shanghai", [[22.0, 115.6], [25.0, 120.0], [30.6, 122.6]]), s("hongkong", "hanoi", [[21.2, 112.0], [20.0, 110.4], [20.6, 107.2]]),
+    s("shanghai", "osaka", [[31.4, 123.0], [32.6, 128.6], [33.9, 131.0], [34.2, 133.5]]), s("shanghai", "tientsin", [[32.0, 123.0], [37.6, 123.2], [38.6, 119.0]]), s("osaka", "taihoku", [[33.4, 134.9], [30.0, 131.5], [26.0, 123.5]]),
+    s("vladivostok", "tokyo", [[42.0, 134.0], [41.5, 140.6], [36.0, 141.4]]), s("manila", "taihoku", [[19.0, 120.0], [24.0, 122.3]]),
+    // South America: few railways; the coastal steamers carry most travellers. (The Transandine railway ends at Mendoza for our purposes: its rack section over the pass is no rival.)
+    r("rio", "saopaulo", [], 1), r("saopaulo", "portoalegre", ["curitiba"]), r("buenosaires", "asuncion", ["rosario"]), r("santiago", "valparaiso", [], 1), r("recife", "natal", []),
+    r("barranquilla", "bogota", ["puertoberrio"]),
+    boat("buenosaires", "montevideo", [], ["buenosaires", "montevideo"], []),
+    s("recife", "salvador", [[-10.5, -35.6]]), s("salvador", "rio", [[-17.0, -38.2], [-22.5, -40.6]]), s("rio", "montevideo", [[-25.5, -45.5], [-31.0, -49.6], [-34.6, -53.6]]),
+    s("belem", "recife", [[-0.5, -46.5], [-2.2, -40.0], [-4.6, -35.6]]), s("belem", "manaus", [[-1.6, -52.0], [-2.4, -56.0]]), s("portofspain", "belem", [[8.0, -57.0], [4.0, -50.0]]),
+    s("panama", "lima", [[6.0, -80.0], [-1.0, -81.6], [-6.0, -81.8]]), s("lima", "valparaiso", [[-18.0, -72.6], [-27.0, -71.9]]), s("barranquilla", "caracas", [[12.6, -72.0], [12.0, -68.6]]),
+    s("caracas", "portofspain", [[11.2, -64.0]]), s("panama", "barranquilla", ["colon", [10.6, -77.6]]),
     // The Middle East and Africa: the few railways of the 1920s, and the steamer lanes that carried most travellers.
     r("alexandria", "cairo", [], 1), r("cairo", "ismailia", []), r("ismailia", "jerusalem", ["elarish", "gaza", "lydda"]), r("beirut", "damascus", []), r("damascus", "jerusalem", ["deraa", "haifa", "lydda"]),
     r("baghdad", "basra", []), r("cairo", "khartoum", ["aswan", "wadihalfa", "atbara"]), r("mombasa", "nairobi", ["voi"]), r("capetown", "johannesburg", ["deaar", "kimberley"], 1),

@@ -13,6 +13,16 @@ window.UpShip = window.UpShip || {};
   });
   // Air services, loosely following history: [a, b, year, month, operator].
   const AIR = [
+    // Oceania
+    ["perth", "adelaide", 1929, 1, "West Australian Airways"], ["sydney", "brisbane", 1930, 2, "Australian National Airways"], ["sydney", "melbourne", 1930, 2, "Australian National Airways"],
+    ["melbourne", "hobart", 1932, 1, "Tasmanian Aerial Services"], ["brisbane", "darwin", 1934, 1, "Qantas Empire Airways"],
+    // Asia: the airlines of 1929 to 1933.
+    ["moscow", "tashkent", 1927, 1, "Dobrolet"], ["tokyo", "osaka", 1929, 3, "Japan Air Transport"], ["osaka", "seoul", 1929, 1, "Japan Air Transport"], ["shanghai", "hankow", 1929, 2, "the China National Aviation Corporation"],
+    ["karachi", "delhi", 1929, 1, "the Indian State Air Service"], ["batavia", "singapore", 1930, 1, "KNILM"], ["saigon", "bangkok", 1931, 1, "Air Orient"], ["shanghai", "peking", 1933, 2, "the China National Aviation Corporation"],
+    ["delhi", "calcutta", 1933, 1, "Indian Trans-Continental Airways"], ["calcutta", "rangoon", 1933, 1, "Imperial Airways"], ["rangoon", "singapore", 1933, 1, "Imperial Airways"],
+    // South America: SCADTA from 1919, Aéropostale down the coast, the Condor Syndikat, then Pan American's lines.
+    ["barranquilla", "bogota", 1921, 2, "SCADTA"], ["rio", "portoalegre", 1927, 2, "the Condor Syndikat"], ["natal", "rio", 1928, 1, "Aéropostale"], ["rio", "buenosaires", 1928, 1, "Aéropostale"],
+    ["buenosaires", "santiago", 1929, 1, "Aéropostale"], ["panama", "lima", 1929, 1, "Panagra"], ["lima", "santiago", 1929, 1, "Panagra"], ["belem", "recife", 1930, 1, "Pan American Airways"],
     // The Middle East and Africa: the RAF's desert mail, Aéropostale, Imperial Airways, and the Italian line to Tripoli.
     ["cairo", "baghdad", 1921, 1, "the Royal Air Force desert air mail"], ["casablanca", "dakar", 1925, 2, "Aéropostale"], ["baghdad", "basra", 1927, 1, "Imperial Airways"],
     ["rome", "tripoli", 1928, 2, "an Italian air company"], ["basra", "karachi", 1929, 1, "Imperial Airways"], ["cairo", "khartoum", 1931, 1, "Imperial Airways"],
@@ -27,6 +37,16 @@ window.UpShip = window.UpShip || {};
     ["milan", "rome", 1929, 9, "an Italian air company"], ["london", "cologne", 1930, 4, "Imperial Airways"], ["marseille", "algiers", 1932, 5, "Air France"],
     ["zurich", "milan", 1932, 6, "Swissair"], ["copenhagen", "stockholm", 1933, 5, "an air company"]];
   const EVENTS = [
+    { year: 1927, month: 5, text: "the australian parliament moves to canberra stop melbourne remains the commercial capital stop" },
+    { year: 1934, month: 12, text: "qantas and imperial airways open the air mail england to australia stop air competition the whole length of the imperial route stop" },
+    { year: 1928, month: 10, text: "the national government proclaims nanking the capital of china stop permits now issue from nanking stop" },
+    { year: 1929, month: 8, text: "graf zeppelin lands at kasumigaura near tokyo on her flight round the world stop japan takes to the airship stop" },
+    { year: 1931, month: 9, text: "japanese army occupies manchuria stop mukden and harbin pass under japanese rule stop landing rights there now lie with tokyo stop" },
+    { year: 1933, month: 12, text: "imperial airways reaches singapore stop air competition the length of the eastern route stop" },
+    { year: 1921, month: 9, text: "scadta opens regular air service barranquilla to bogota stop the first airline of the americas stop" },
+    { year: 1928, month: 3, text: "aeropostale opens the air mail natal to rio and buenos aires stop air competition down the brazilian coast stop" },
+    { year: 1929, month: 7, text: "aeropostale flies the andes buenos aires to santiago stop air competition across the mountains stop" },
+    { year: 1931, month: 1, text: "mooring mast completed at recife stop a public mast at the landfall of the south atlantic stop" },
     { year: 1926, month: 1, text: "air ministry completes its mooring mast at ismailia on the suez canal stop a public mast on the imperial route stop" },
     { year: 1927, month: 1, text: "air ministry completes its mooring mast at karachi stop a public mast at the gate of india stop" },
     { year: 1921, month: 6, text: "royal air force opens desert air mail cairo to baghdad stop air competition on the route to india stop" },
