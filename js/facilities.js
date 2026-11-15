@@ -114,6 +114,7 @@ window.UpShip = window.UpShip || {};
     const total = Object.values(state.facilityCost).reduce((a, b) => a + b, 0);
     if (total) S().addGeneral(state, total * UPKEEP / 365);
     state.cityDay = {};
+    if (U.grand) U.grand.daily(state);
   }
 
   // Boarding limits at a city for today, after what has already boarded.

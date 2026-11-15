@@ -1200,7 +1200,7 @@ window.UpShip = window.UpShip || {};
       <h3>Income sources, ${y.year}</h3>
       <dl>
         ${row("Mail", money(y.mail || 0))}
-        ${row("Government grants", money(y.grants || 0))}${y.concessions ? row("Terminal concessions", money(y.concessions)) : ""}
+        ${row("Government grants", money(y.grants || 0))}${y.concessions ? row("Terminal concessions", money(y.concessions)) : ""}${y.visitors ? row("Visiting airships' fees", money(y.visitors)) : ""}
         ${row("Loan interest paid", money(y.interest || 0))}
         ${row("Company overheads", `${money(y.overheads || 0)}${state.overheadsLast ? ` (now ${money(state.overheadsLast)} a month)` : ""}`)}
       </dl>
