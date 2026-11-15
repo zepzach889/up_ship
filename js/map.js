@@ -25,7 +25,7 @@ window.UpShip = window.UpShip || {};
     return [lon / rad, lat / rad];
   }
   // A point in the simulation's coordinates, on screen now; null on the far side of the globe.
-  function flatToScreen(x, y) { const ll = flatInv(x, y); if (!U.globe.facing(ll[0], ll[1])) return null; const q = U.globe.screen(ll[0], ll[1]); return { x: q[0], y: q[1] }; }
+  function flatToScreen(x, y) { const X = x / P.scale + P.x0, Y = P.y1 - y / P.scale; if (Math.hypot(X, Y) > 1.9995) return null; const ll = flatInv(x, y); if (!U.globe.facing(ll[0], ll[1])) return null; const q = U.globe.screen(ll[0], ll[1]); return { x: q[0], y: q[1] }; }
   // Where a place is on screen right now, on the globe.
   function project(lon, lat) { return U.globe.screen(lon, lat); }
   const dLon = c => c.realLon ?? c.lon, dLat = c => c.realLat ?? c.lat;          // gateways sit at their true places on the globe
@@ -181,6 +181,8 @@ window.UpShip = window.UpShip || {};
     const label = el("text", { class: "city-label" }, g);
     label.textContent = city.name;
     g.addEventListener("click", e => { e.stopPropagation(); onSelect({ type: "city", id: city.id }); });
+    g.addEventListener("pointerenter", () => { if (hoverHook) hoverHook(city.id); });
+    g.addEventListener("pointerleave", () => { if (hoverHook) hoverHook(null); });
     g.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect({ type: "city", id: city.id }); } });
     cityNodes[city.id] = { g, hit, dot, ring, label, city };
   }
@@ -255,6 +257,22 @@ window.UpShip = window.UpShip || {};
 
   // The route being drawn, before it is confirmed.
   let draftNode = null;
+  // Sending a ship: the cities she can reach lit, the rest dimmed, and the way she would go.
+  let hoverHook = null, sendNode = null;
+  function setSendPick(data) {
+    svg.classList.toggle("is-sending", !!data);
+    if (!sendNode) sendNode = el("path", { class: "route-send" }, layers.routes);
+    sendNode.setAttribute("d", data && data.path && data.path.length > 1 ? routePathD(data.path, false) : "");
+    for (const id in cityNodes) {
+      const g = cityNodes[id].g;
+      g.classList.toggle("send-ok", !!data && data.ok.has(id));
+      g.classList.toggle("send-no", !!data && !data.ok.has(id) && id !== data.from);
+      g.classList.toggle("send-from", !!data && id === data.from);
+      g.classList.toggle("send-target", !!data && id === data.target);
+      g.classList.toggle("send-via", !!data && !!data.path && data.path.includes(id) && id !== data.from && id !== data.target);
+    }
+  }
+  const onHover = fn => { hoverHook = fn; };
   function drawDraft(stops, circuit) {
     lastDraft = stops && stops.length ? { stops, circuit } : null;
     draftDemand(stops);
@@ -553,10 +571,14 @@ window.UpShip = window.UpShip || {};
       const hour = U.sim.H(state.tick) + dt, age = hour - s.born, left = s.dies - hour;
       const fade = Math.max(0, Math.min(1, age / 6, left / 6));
       // On the globe: placed at its spot, scaled and turned to match the globe there; hidden on the far side.
-      const wx = s.x + s.vx * dt, wy = s.y + s.vy * dt, q = flatToScreen(wx, wy), q2 = flatToScreen(wx + 10, wy);
-      if (!q || !q2) { n.g.style.display = "none"; continue; }
+      // Its size on screen from the area it covers, not from one direction: near the rim of the simulation's map the
+      // flat projection stretches sideways without limit, and a scale measured along one line there blows up.
+      const wx = s.x + s.vx * dt, wy = s.y + s.vy * dt, q = flatToScreen(wx, wy), q2 = flatToScreen(wx + 2, wy), q3 = flatToScreen(wx, wy + 2);
+      if (!q || !q2 || !q3) { n.g.style.display = "none"; continue; }
+      const area = Math.abs((q2.x - q.x) * (q3.y - q.y) - (q2.y - q.y) * (q3.x - q.x)) / 4, unitW = Math.sqrt(area);
+      if (!(unitW > 0) || !isFinite(unitW)) { n.g.style.display = "none"; continue; }
       n.g.style.display = "";
-      const unitW = Math.hypot(q2.x - q.x, q2.y - q.y) / 10, turn = Math.atan2(q2.y - q.y, q2.x - q.x) * 180 / Math.PI;
+      const turn = Math.atan2(q2.y - q.y, q2.x - q.x) * 180 / Math.PI;
       n.g.setAttribute("transform", `translate(${q.x.toFixed(1)} ${q.y.toFixed(1)}) rotate(${(s.rot + turn).toFixed(1)}) scale(${unitW.toFixed(4)})`);
       n.g.setAttribute("opacity", fade.toFixed(2));
       const churn = CHURN[s.kind] || CHURN.fair;
@@ -855,5 +877,5 @@ window.UpShip = window.UpShip || {};
   }
   function draftDemand(stops) { draftStops = stops && stops.length ? stops : null; syncExtras(U.state); }
 
-  U.map = { flatToScreen, flatInv, focus, flat, zoomLevel: () => U.globe.view.k, glideTo, mapWidth: () => M.width, buildPolys, drawTraffic, syncTransport, drawWeather, init, syncRoutes, drawShips, drawDraft, zoomBy, highlight, shipPosition, project, setSetup, setHome, setLayer, syncExtras, draftDemand };
+  U.map = { setSendPick, onHover, flatToScreen, flatInv, focus, flat, zoomLevel: () => U.globe.view.k, glideTo, mapWidth: () => M.width, buildPolys, drawTraffic, syncTransport, drawWeather, init, syncRoutes, drawShips, drawDraft, zoomBy, highlight, shipPosition, project, setSetup, setHome, setLayer, syncExtras, draftDemand };
 })(window.UpShip);

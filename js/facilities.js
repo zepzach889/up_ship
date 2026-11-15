@@ -8,7 +8,7 @@ window.UpShip = window.UpShip || {};
   // Level 1 to 3 is small, medium, large. Costs are for reaching that level from the one below.
   const TYPES = {
     mast: { name: "Mast", costs: [3500, 6000, 12000], docks: [1, 3, 6],
-      about: ["Docks one ship at a time", "Docks three ships at once", "Docks six ships at once"] },
+      about: ["Ground handling: a ground crew walks one ship down at a time; slow, and no landing in high wind or storms", "High mast with a lift: three ships at once; passengers ride the lift, slower the more there are", "Stub masts with stern tracks: six ships at once, quick, in any weather"] },
     terminal: { name: "Terminal", costs: [5000, 12000, 27000], pax: [120, 300, Infinity], tons: [40, 100, Infinity],
       about: ["120 passengers and 40 tons a day", "300 passengers and 100 tons a day", "No limit, and 10% more demand"] },
     shed: { name: "Shed", costs: [15000, 24000, 48000],
@@ -96,6 +96,7 @@ window.UpShip = window.UpShip || {};
   const labLevels = state => Object.values(state.facilities || {}).reduce((n, f) => n + (f.lab || 0), 0);
   function syncLabs(state) { if (state.research) state.research.labMult = 1 + 0.2 * Math.min(6, labLevels(state)); }
   function build(state, id, type) {
+    if (blocked(state, id, type)) return false;
     if (U.sim && U.sim.hasRights && !U.sim.hasRights(state, id)) return false;          // landing rights first
     const cost = nextCost(state, id, type);
     if (cost == null || state.money < cost) return false;
@@ -131,6 +132,43 @@ window.UpShip = window.UpShip || {};
 
   // Docking: a ship arriving when every berth is taken circles until one frees up.
   // Returns the extra hours spent circling and any mast fee.
+  // Ways of mooring: ground handling from the start; high masts from 1924 (Britain from 1921), or sooner with research;
+  // stub masts with stern tracks from 1930, or sooner with research.
+  const MOORING = {
+    ground: { name: "Ground handling", crew: 250 },
+    high: { name: "High mast", crew: 60, year: 1924, britain: 1921, research: "operations3" },
+    stub: { name: "Stub mast and stern track", crew: 50, year: 1930, research: "operations7" }
+  };
+  function mooringOK(state, m) {
+    const M = MOORING[m]; if (!M || !M.year) return true;
+    const y = S().dateOf(state.tick).getUTCFullYear();
+    return y >= M.year || (M.britain && state.company.nation === "britain" && y >= M.britain) || !!(U.research && U.research.has(state, M.research));
+  }
+  const MOORING_LEVEL = ["ground", "ground", "high", "stub"];
+  function blocked(state, id, type) {
+    if (type !== "mast") return "";
+    const lvl = ownLevel(state, id, "mast");
+    if (lvl === 1 && !mooringOK(state, "high")) return "High masts come in 1924 (Britain 1921), or sooner with the research High mooring masts.";
+    if (lvl === 2 && !mooringOK(state, "stub")) return "Stub masts with stern tracks come in 1930, or sooner with the research Mobile mooring masts.";
+    return "";
+  }
+  // High wind or a storm over a city at an hour.
+  function roughAt(state, id, hour, kinds) {
+    const W = state.weather, c = U.cityById[id]; if (!W || !W.systems || !c || !U.weather || !U.weather.covers) return false;
+    const now = S().H(state.tick);
+    return W.systems.some(s => (kinds || ["storm", "wind"]).includes(s.kind) && !s.mild && s.dies > hour && (s.at = now, U.weather.covers(s, c.x, c.y, hour)));
+  }
+  // The time a way of mooring adds to a stop, and its hazards: a ground crew cannot bring a ship down in high wind,
+  // and a ship riding out a storm at a high mast may be damaged.
+  function mooringExtra(state, id, m, arrive, ship) {
+    const cls = ship && U.SHIP_CLASSES[ship.classId], pax = cls ? cls.passengers || 0 : 0;
+    if (m === "ground") { let w = 0; while (w < 24 && roughAt(state, id, arrive + w)) w += 2; return 0.75 + w; }
+    if (m === "high") {
+      if (ship && roughAt(state, id, arrive, ["storm"]) && Math.random() < 0.1) { ship.condition = Math.max(0.05, ship.condition - 0.03); S().telegram(state, arrive, `${ship.name} damaged riding out a storm at the ${cityName(id)} mast stop`, false, { type: "ship", id: ship.id }); }
+      return 0.15 + pax / 300;
+    }
+    return 0;
+  }
   function dock(state, id, arrive, stay, ship) {
     const em = effective(state, id, "mast"), G = grandAt(state, id);
     if (G && em.own && G.masts) return U.grand.dock(state, id, arrive, stay, ship);           // the grand terminal's own berths
@@ -153,7 +191,8 @@ window.UpShip = window.UpShip || {};
         S().telegram(state, t, `ships circling at ${cityName(id)} waiting for the mast stop a bigger mast would help stop`, false, { type: "city", id });
       }
     }
-    return { delay, fee: ownLevel(state, id, "mast") ? 0 : FEES.mast };
+    const extra = mooringExtra(state, id, MOORING_LEVEL[em.level || 1], arrive + delay, ship);
+    return { delay: delay + extra, fee: ownLevel(state, id, "mast") ? 0 : FEES.mast };
   }
   const congested = (state, id, hour) => {
     const c = state.congestion[id];
@@ -216,7 +255,7 @@ window.UpShip = window.UpShip || {};
     return worst;
   }
 
-  U.facilities = { TYPES, GAS_TYPES, GAS, HELIUM_PORTS, publicGas, canTopUp, heliumPrice, gasGap, SIZE_NAMES, FEES, BASIC_ROOM, hasPublic, shipSize, init, ownLevel, effective, canLand, terminalLimits,
+  U.facilities = { MOORING, mooringOK, mooringExtra, roughAt, blocked, TYPES, GAS_TYPES, GAS, HELIUM_PORTS, publicGas, canTopUp, heliumPrice, gasGap, SIZE_NAMES, FEES, BASIC_ROOM, hasPublic, shipSize, init, ownLevel, effective, canLand, terminalLimits,
     demandBoost, nextCost, build, mastsNeeded, daily, roomToday, recordBoarding, dock, congested, shedFits, nearestShed, deliveryCity };
   Object.assign(U.facilities, { labLevels, syncLabs, hasPublic, FEES, UPKEEP });
 })(window.UpShip);

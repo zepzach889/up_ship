@@ -63,6 +63,13 @@ window.UpShip = window.UpShip || {};
       if (e.target.id === "fund-pct") { U.research.setFunding(U.state, +e.target.value); const rd = $("#fund-read"); if (rd) rd.textContent = fundingText(U.state); h.changed(); }
     });
     $("#draft-undo").addEventListener("click", () => { draft.pop(); updateDraft(); });
+    $("#send-cancel").addEventListener("click", () => endSend());
+    $("#send-go").addEventListener("click", () => {
+      if (!sending || !sending.target) return;
+      const st = U.state, sid = sending.shipId, ship = st.ships.find(x => x.id === sid), to = sending.target, why = U.sim.sendShip(st, sid, to);
+      endSend(); notify(why || `${ship.name} is ordered to ${city(to).name}.`); h.changed(); select({ type: "ship", id: sid });
+    });
+    U.map.onHover(id => { if (!sending) return; sending.hover = id; updateSend(); });
     $("#draft-cancel").addEventListener("click", () => endDraft());
     $("#draft-circuit").addEventListener("change", () => updateDraft());
     $("#draft-create").addEventListener("click", () => {
@@ -94,7 +101,7 @@ window.UpShip = window.UpShip || {};
       else if (e.key === "n" || e.key === "N") { e.preventDefault(); h.nextTurn(); }
       else if (e.key === "Enter" && !onControl) h.nextTurn();
       else if (["0", "1", "2", "3"].includes(e.key)) { e.preventDefault(); h.setAuto(+e.key); }
-      else if (e.key === "Escape") { if (draft) endDraft(); else select(null); }
+      else if (e.key === "Escape") { if (sending) endSend(); else if (draft) endDraft(); else select(null); }
     }, true);
   }
 
@@ -109,7 +116,7 @@ window.UpShip = window.UpShip || {};
     const turnsOk = U.tutorial.allowsTurns() && !state.bankrupt;
     document.querySelectorAll("[data-auto]").forEach(b => { b.setAttribute("aria-pressed", String(+b.dataset.auto === auto)); b.disabled = !turnsOk; });
     const next = $("#next-turn");
-    next.disabled = (U.turnActive && !frozen) || auto > 0 || !!draft || !turnsOk;
+    next.disabled = (U.turnActive && !frozen) || auto > 0 || !!draft || !!sending || !turnsOk;
     next.textContent = frozen ? "Resume turn" : "Next turn";
     $(".hint").hidden = state.tick > 0 || !!draft || !!state.tutorial;
     const live = $("#live-status");
@@ -134,6 +141,7 @@ window.UpShip = window.UpShip || {};
   const DETAIL = new Set(["ship", "route", "city"]);
   let navStack = [];
   function select(sel, back) {
+    if (sending) { if (sel && sel.type === "city") sendPick(sel.id); return; }
     if (!back) {
       const same = sel && selection && sel.type === selection.type && sel.id === selection.id;
       if (sel && selection && !same && DETAIL.has(sel.type) && (LISTS.has(selection.type) || DETAIL.has(selection.type))) navStack.push(selection);
@@ -297,10 +305,11 @@ window.UpShip = window.UpShip || {};
       const fee = { mast: `£${F.FEES.mast} a landing`, terminal: "1s a passenger, 2s a ton", shed: `overhauls cost ${Math.round(F.FEES.shed * 100)}% more` }[type];
       const yours = lvl ? `${F.SIZE_NAMES[lvl]}: ${T.about[lvl - 1]}` : pub && fee ? `Public: ${fee}` : pub ? "Using the public one" : "None";
       const now = lvl ? U.facArt.icon(type, lvl, true, 40) : pub ? U.facArt.icon(type, 2, false, 40) : "";
+      const wait = F.blocked(state, id, type);
       const button = cost == null ? "" : `<div class="fac-buy">${U.facArt.icon(type, lvl + 1, true, 46)}<div>
-        <button class="btn-quiet" data-build="${id}:${type}" ${state.money + U.contracts.loanLimit(state) - state.loan < cost || needsMast ? "disabled" : ""}>
+        <button class="btn-quiet" data-build="${id}:${type}" ${state.money + U.contracts.loanLimit(state) - state.loan < cost || needsMast || wait ? "disabled" : ""}>
         ${lvl ? "Enlarge" : "Build"} to ${F.SIZE_NAMES[lvl + 1].toLowerCase()}, ${money(cost)}</button>
-        <small class="fac-next">${T.about[lvl]}${needsMast ? ". Needs a mast here first." : ""}</small></div></div>`;
+        <small class="fac-next">${T.about[lvl]}${needsMast ? ". Needs a mast here first." : ""}${wait ? ` <b>${wait}</b>` : ""}</small></div></div>`;
       return `<li><div class="fac-head">${now}<b>${T.name}</b><span>${yours}</span></div>${button}</li>`;
     }).join("");
     const gs = G && U.grand.summary(state, id), cant = !G && U.grand.canFound(state, id);
@@ -441,15 +450,8 @@ window.UpShip = window.UpShip || {};
         : o.stage === "toStart" ? `Flying to ${nm(o.a)} to start a record attempt to ${nm(o.b)}.` : `On her record run from ${nm(o.a)} to ${nm(o.b)}.`;
       if (o) routeBlock += `<p class="status">${what}${route && o.kind !== "send" ? " She rejoins her route afterwards." : ""}</p>${o.until == null ? `<button class="btn-quiet" data-cancel-orders="${ship.id}">Cancel her orders</button>` : ""}`;
       else if (!ship.overhaulUntil) {
-        const plan = U.sim.hopPlan(state, ship, ship.location);
-        const places = Object.keys(plan.dist).filter(k => k !== ship.location && U.facilities.canLand(state, k)).sort((a, b) => plan.dist[a] - plan.dist[b]);
-        if (places.length) {
-          if (!places.includes(sendTo[ship.id])) sendTo[ship.id] = places[0];
-          routeBlock += `<div class="send-to"><label class="field-label" for="send-to">Send her to a city</label>
-            <div class="btn-row"><select id="send-to" data-send-to="${ship.id}">${places.map(k => `<option value="${k}" ${sendTo[ship.id] === k ? "selected" : ""}>${nm(k)}, ${Math.round(plan.dist[k]).toLocaleString("en-GB")} km${plan.first[k] !== k ? " by hops" : ""}</option>`).join("")}</select>
-            <button class="btn-quiet" data-send-ship="${ship.id}">Send her</button></div>
-            <p class="note">She flies there in hops within her range and waits${route ? ", leaving her route" : ""}. Useful for placing a ship before a survey or a new route.</p></div>`;
-        }
+        routeBlock += `<div class="send-to"><button class="btn-quiet" data-act="send-pick">Send her to a city…</button>
+          <p class="note">Pick the city on the map. She flies there in hops within her range and waits${route ? ", leaving her route" : ""}. Useful for placing a ship before a survey or a new route.</p></div>`;
       }
     }
     const pos = building ? null : U.map.shipPosition(ship, U.progress || 0);
@@ -1424,6 +1426,7 @@ window.UpShip = window.UpShip || {};
       case "cancel-rename": editing = null; render(); break;
       case "pick": picking = selection.id; render(); break;
       case "cancel-pick": picking = null; render(); break;
+      case "send-pick": if (selection && selection.type === "ship") startSend(selection.id); break;
       case "new-route": startDraft(); break;
       case "edit-route": { const r = s.routes.find(x => x.id === selection.id); startDraft(r.stops, r.id, r.circuit); break; }
       case "overhaul-now": { const ship = s.ships.find(x => x.id === selection.id); ship.overhaulNow = true; h.changed(); render(); break; }
@@ -1474,7 +1477,6 @@ window.UpShip = window.UpShip || {};
     if (e.target.dataset && e.target.dataset.even) { const r = U.state.routes.find(x => x.id === e.target.dataset.even); if (r) { r.even = e.target.checked; if (!r.even) r.lastDep = {}; h.changed(); render(); } return; }
     if (e.target.dataset && e.target.dataset.theme) { const d0 = (U.state.designs || []).find(x => String(x.id) === e.target.dataset.theme); if (d0) { d0.theme = e.target.value; h.changed(); render(); } return; }
     if (e.target.dataset && e.target.dataset.offerShip) { offerShip[e.target.dataset.offerShip] = e.target.value; return; }
-    if (e.target.dataset && e.target.dataset.sendTo) { sendTo[e.target.dataset.sendTo] = e.target.value; return; }
     const all = e.target.closest("[data-refit-all]");
     if (all) {
       const tech = all.dataset.refitAll;
@@ -1501,6 +1503,53 @@ window.UpShip = window.UpShip || {};
     if (box.checked) plan.add(box.dataset.refit); else plan.delete(box.dataset.refit);
     ship.refitPlan = [...plan];
     h.changed(); render();
+  }
+
+  // Sending a ship to a city, picked on the map -------------------------------------------------
+  let sending = null;        // { shipId, plan, ok, target, hover }
+  function startSend(shipId) {
+    const st = U.state, ship = st.ships.find(x => x.id === shipId); if (!ship) return;
+    const plan = U.sim.hopPlan(st, ship, ship.location);
+    const ok = new Set(Object.keys(plan.dist).filter(k => k !== ship.location && U.facilities.canLand(st, k)));
+    sending = { shipId, plan, ok, target: null, hover: null };
+    $("#send-title").textContent = `Send ${ship.name}`;
+    $("#sendbar").hidden = false; $("#draft").hidden = true;
+    updateSend();
+  }
+  function endSend() {
+    sending = null; $("#sendbar").hidden = true; U.map.setSendPick(null);
+  }
+  function sendPick(id) {
+    if (!sending) return;
+    sending.target = sending.ok.has(id) ? (sending.target === id ? null : id) : null;
+    if (!sending.ok.has(id)) sending.hover = id;
+    updateSend();
+  }
+  // Why she cannot go somewhere, in a few words.
+  function whyNot(st, ship, id) {
+    if (id === ship.location) return `She is at ${city(id).name} now.`;
+    if (U.sim.hasRights && !U.sim.hasRights(st, id)) return `${city(id).name}: no landing rights there.`;
+    if (!U.facilities.canLand(st, id)) return `${city(id).name}: nowhere for her to moor. A route through it would build a mast there.`;
+    return `${city(id).name} is out of her reach: no chain of landing places within her ${km(Math.round(sending.plan.range))} range.`;
+  }
+  function updateSend() {
+    if (!sending) return;
+    const st = U.state, ship = st.ships.find(x => x.id === sending.shipId); if (!ship) { endSend(); return; }
+    const show = sending.hover && sending.hover !== sending.target && !sending.ok.has(sending.hover) ? sending.hover : sending.target || sending.hover;
+    let text, path = null;
+    if (!show) text = `Click the city to send her to. The cities she can reach from ${city(ship.location).name} are lit; hover over any city to see the way.`;
+    else if (!sending.ok.has(show)) text = whyNot(st, ship, show);
+    else {
+      path = U.sim.hopPath(sending.plan, show);
+      const kmTotal = sending.plan.dist[show], speed = U.research.stats(st, ship).speedKmh || 100, hops = path.length - 1;
+      const hours = Math.round(kmTotal / speed + Math.max(0, hops - 1) * 2);
+      const via = path.slice(1, -1).map(id => city(id).name);
+      text = `${city(show).name}: ${hops === 1 ? "one flight" : `${hops} hops, by way of ${via.join(", ")}`}, ${km(Math.round(kmTotal))}, about ${hours} hours.`;
+      if (show !== sending.target) text += " Click to choose it.";
+    }
+    U.map.setSendPick({ from: ship.location, ok: sending.ok, target: sending.target, path });
+    $("#send-text").textContent = text;
+    const go = $("#send-go"); go.disabled = !sending.target; go.textContent = sending.target ? `Send her to ${city(sending.target).name}` : "Send her";
   }
 
   // Drawing a route ---------------------------------------------------------------------

@@ -318,18 +318,20 @@ window.UpShip = window.UpShip || {};
   // Returns, for every place she can reach from where she is, the distance by the shortest chain and the first hop on it.
   function hopPlan(state, ship, from, freeEnd) {
     const range = U.research.stats(state, ship).rangeKm, nodes = U.CITIES.map(c => c.id).filter(id => id === from || id === freeEnd || U.facilities.canLand(state, id));
-    const dist = {}, first = {}, done = new Set(); dist[from] = 0;
+    const dist = {}, first = {}, prev = {}, done = new Set(); dist[from] = 0;
     for (;;) {
       let u = null; for (const id of nodes) if (!done.has(id) && dist[id] != null && (u == null || dist[id] < dist[u])) u = id;
       if (u == null) break; done.add(u);
       if (u === freeEnd) continue;                              // a place she may reach but not fly on from (a survey's end)
       for (const v of nodes) {
         if (done.has(v)) continue; const d = distanceKm(u, v); if (d > range) continue;
-        if (dist[v] == null || dist[u] + d < dist[v]) { dist[v] = dist[u] + d; first[v] = u === from ? v : first[u]; }
+        if (dist[v] == null || dist[u] + d < dist[v]) { dist[v] = dist[u] + d; first[v] = u === from ? v : first[u]; prev[v] = u; }
       }
     }
-    return { dist, first, range };
+    return { dist, first, prev, range };
   }
+  // The whole way, stop by stop, from a hop plan's start to a place it reaches.
+  function hopPath(plan, to) { if (plan.dist[to] == null) return null; const out = [to]; let k = to, guard = 0; while (plan.prev[k] != null && guard++ < 200) { k = plan.prev[k]; out.unshift(k); } return out; }
   const hopToward = (state, ship, to, freeEnd) => { const p = hopPlan(state, ship, ship.location, freeEnd ? to : null); return p.dist[to] != null ? p.first[to] : null; };
   const cannotReach = (ship, name, range) => `${ship.name} cannot reach ${name}: no chain of landing places within her ${Math.round(range).toLocaleString("en-GB")} km range`;
   function nextStop(state, ship, route) {
@@ -976,7 +978,7 @@ window.UpShip = window.UpShip || {};
     try { for (const k of ["upship.save.v1", "upship.save.v2", "upship.save.v3", "upship.save.v4", "upship.save.v5", "upship.save.v6", "upship.save.v7", "upship.save.v8", "upship.save.v9", "upship.save.v10", SAVE_KEY]) localStorage.removeItem(k); } catch (e) {}
   }
 
-  U.sim = { permitState, sovietMonthly, SOVIET, routeRound, permitTerms, legWay, hopPlan, hopToward, sendShip, cancelOrders, liftAt, liftWorst, legLift, POWERS, authority, ownEmpire, permitKey, permitName, hasRights, oceanLeg, regionOf, homeRegion, needsPermit, applyPermit, REGION_GOV, surveyFlight, gatewayOpen, stopSaving, finishOverhaul, telegram, addGeneral, addIncome, nearestCity, distanceKm, fare, freightRate, dailyPassengers, dailyFreight, start, advance, beginTurn, dateOf, dateAtHour, H,
+  U.sim = { permitState, sovietMonthly, SOVIET, routeRound, permitTerms, legWay, hopPlan, hopPath, hopToward, sendShip, cancelOrders, liftAt, liftWorst, legLift, POWERS, authority, ownEmpire, permitKey, permitName, hasRights, oceanLeg, regionOf, homeRegion, needsPermit, applyPermit, REGION_GOV, surveyFlight, gatewayOpen, stopSaving, finishOverhaul, telegram, addGeneral, addIncome, nearestCity, distanceKm, fare, freightRate, dailyPassengers, dailyFreight, start, advance, beginTurn, dateOf, dateAtHour, H,
     routeSummary, save, load, clearSave, editRoute, routeOf, routeName, routeLegs, createRoute, deleteRoute, canAssign, assign,
     order, priceToOrder, HELIUM_FILL, policyGas, heliumFill, rename, suggestName, longestLeg, catalog, orderTerms, saleValue, canSell, sell, positionAt, ageYears, roman };
 })(window.UpShip);

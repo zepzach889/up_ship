@@ -36,6 +36,12 @@ window.UpShip = window.UpShip || {};
     gasmain: { name: "Gas and water main", cost: 5, fam: ["gas"], per: 0, about: "Gas and ballast water piped to a berth. Without it, carts top ships up slowly." },
     haul: { name: "Hauling track", cost: 10, fam: ["haul"], per: 0, about: "Ships are towed between the shed and the berths along it. A shed with none serves no berth." }
   };
+  // How a berth moors its ships: what each adds to the berth's price, and its look. (Crews, timings and dates: facilities.)
+  const METHOD = { ground: { name: "Ground handling", cost: 0, about: "A large ground crew walks the ship down: an extra three-quarters of an hour a stop, and no landing in high wind or storms. £250 a month in wages." },
+    high: { name: "High mast", cost: 8000, about: "A tall mast with a lift and a gangway into the nose: passengers ride the lift, slower the more there are; ships ride out storms, with a small risk of damage. £60 a month in wages." },
+    stub: { name: "Stub mast and stern track", cost: 14000, about: "A low mast, the stern riding a circular track: quick, and in any weather. £50 a month in wages." } };
+  const methodOf = b => b.method || "high";
+  const bestMethod = state => ["stub", "high", "ground"].find(m => F().mooringOK(state, m));
   const MANAGED = ["mast", "terminal", "shed", "gasplant", "hestore"];
 
   const all = state => (state.grand = state.grand || {});
@@ -184,7 +190,7 @@ window.UpShip = window.UpShip || {};
     const shedOn = g.sheds.filter((s, si) => g.berths.some((b, bi) => net[bi].haul));
     const hall = cells("hall"), covered = g.berths.length ? net.filter(n => n.covered).length / g.berths.length : 0;
     const show = Object.values(g.grounds).reduce((a, k) => a + ({ lawn: 0.01, trees: 0.015, pool: 0.05 }[k] || 0), 0) + hall * 0.01 + showD;
-    const e = { masts: g.berths.length, berths: g.berths.map((b, i) => ({ size: b.size, ...net[i], extra: handling(net[i]) })),
+    const e = { masts: g.berths.length, berths: g.berths.map((b, i) => ({ size: b.size, method: methodOf(b), ...net[i], extra: handling(net[i]) })),
       shed: Math.max(0, ...shedOn.map(s => s.size)), sheds: g.sheds.length, gasplant: g.gas.some(q => q.k === "gasplant") ? 1 : 0, hestore: g.gas.some(q => q.k === "hestore") ? 1 : 0,
       hall, pax: Math.max(40, hall * 18), tons: 15 + cells("freight") * 5 + hall,
       demand: 1 + Math.min(0.2, hall * 0.0025) + (station ? 0.08 : 0) + (tram ? 0.04 : 0) + covered * 0.03, station, tram,
@@ -227,7 +233,7 @@ window.UpShip = window.UpShip || {};
         for (let x = r; x <= W - r; x += 10) for (let y = LAND - 40 + r; y <= SITES[si].d - r; y += 10) cands.push([x, y]);
         cands.sort((a, b) => dist(a, hc) - dist(b, hc));
         const c = cands.find(c => !berthProblem(g, { x: c[0], y: c[1], size: want.size }));
-        if (!c) ok = false; else g.berths.push({ id: g.next++, x: c[0], y: c[1], size: want.size });
+        if (!c) ok = false; else g.berths.push({ id: g.next++, x: c[0], y: c[1], size: want.size, method: bestMethod(state) });
       }
       if (!ok) continue;
       if (want.shed) {
@@ -298,7 +304,7 @@ window.UpShip = window.UpShip || {};
   const nearestOn = (a, b, p) => { const dx = b[0] - a[0], dy = b[1] - a[1], L = dx * dx + dy * dy || 1, t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L)); return [a[0] + dx * t, a[1] + dy * t]; };
   function itemsOf(g) {
     const m = new Map();
-    for (const b of g.berths) m.set("b" + b.id + ":" + b.size, BERTH[b.size].cost);
+    for (const b of g.berths) { m.set("b" + b.id + ":" + b.size, BERTH[b.size].cost); if (METHOD[methodOf(b)].cost) m.set("m" + b.id + ":" + b.size + ":" + methodOf(b), METHOD[methodOf(b)].cost); }
     for (const s of g.sheds) m.set("s" + s.id + ":" + s.size, SHED[s.size].cost);
     for (const q of g.gas) m.set("q" + q.id, GASK[q.k].cost);
     for (const l of g.links) m.set("l" + l.id + ":" + Math.round(linkLen(l.pts)), Math.round(linkLen(l.pts) * LINK[l.k].cost));
@@ -332,7 +338,7 @@ window.UpShip = window.UpShip || {};
     return "";
   }
   const bump = g => { g.rev = (g.rev || 0) + 1; };
-  function placeBerth(g, b) { const why = berthProblem(g, b); if (why) return why; g.berths.push({ id: g.next++, x: b.x, y: b.y, size: b.size }); bump(g); return ""; }
+  function placeBerth(g, b) { const why = berthProblem(g, b); if (why) return why; g.berths.push({ id: g.next++, x: b.x, y: b.y, size: b.size, method: b.method || (U.state ? bestMethod(U.state) : "ground") }); bump(g); return ""; }
   function placeShed(g, s) { if (g.sheds.length >= 3) return "Three sheds is the most a site can work."; const why = shedProblem(g, s); if (why) return why; g.sheds.push({ id: g.next++, x: s.x, y: s.y, size: s.size, r: s.r || 0 }); bump(g); return ""; }
   function placeGas(g, q) { if (g.gas.some(x => x.k === q.k)) return "One is enough."; const why = gasProblem(g, q); if (why) return why; g.gas.push({ id: g.next++, x: q.x, y: q.y, k: q.k }); bump(g); return ""; }
   function moveThing(g, sel, x, y, r) {
@@ -411,8 +417,9 @@ window.UpShip = window.UpShip || {};
       if (!best || done < best.done) best = { b, t, done };
     }
     if (!best) return { delay: 0, fee: 0 };
-    list.push({ from: best.t, to: best.t + stay + best.b.extra + pen, b: best.b.i, bid: get(state, id).berths[best.b.i].id, ship: ship ? ship.id : null });
-    return { delay: best.t - arrive + best.b.extra + pen, fee: 0 };
+    const way = F().mooringExtra(state, id, best.b.method, best.t, ship);
+    list.push({ from: best.t, to: best.t + stay + best.b.extra + pen + way, b: best.b.i, bid: get(state, id).berths[best.b.i].id, ship: ship ? ship.id : null });
+    return { delay: best.t - arrive + best.b.extra + pen + way, fee: 0 };
   }
   function summaryOf(g, id, built) {
     const e = effectsOf(g, id), access = e.berths.filter(b => b.pax < Infinity).length;
@@ -529,7 +536,7 @@ window.UpShip = window.UpShip || {};
     const c = U.state && U.state.company || {}, H = { P, poly, line, facef, visible, depth, wallText, shadowOf, company: (c.emblem || {}).c1 };
     U.grandArt.birdseye(b, H, objs, shadows, hilite, c.nation, c.name, cityId && U.cityById[cityId] ? U.cityById[cityId].name : "");
   }
-  function shedSvg(s, objs, shadows, hilite) {
+  function shedSvg(s, objs, shadows, hilite, inside) {
     const T = SHED[s.size], R = shedRect(s), even = s.r % 2 === 0, hw = T.h * 0.78, hr = T.h - hw, svg = [];
     // Draw in the shed's own frame: u along its length (towards the doors), v across.
     const ux = [[1, 0], [0, 1], [-1, 0], [0, -1]][s.r], vx = [-ux[1], ux[0]], L = T.l, Wd = T.w;
@@ -545,7 +552,22 @@ window.UpShip = window.UpShip || {};
       const nx = ux[0] * end, ny = ux[1] * end; if (!visible(nx, ny)) continue;
       const arch = Array.from({ length: 25 }, (_, i) => { const t = i * Math.PI / 24; return at(end * L / 2, Wd / 2 * Math.cos(t), hw + hr * Math.sin(t)); });
       const c = shade("#b7b9b4", facef(nx, ny)); svg.push(poly([at(end * L / 2, -Wd / 2, 0), at(end * L / 2, Wd / 2, 0), at(end * L / 2, Wd / 2, hw), ...arch, at(end * L / 2, -Wd / 2, hw)], c, INK, 0.8));
-      if (end === 1) { for (let k = 0; k <= 8; k++) { const v = -Wd / 2 + 4 + k * (Wd - 8) / 8; svg.push(line(at(L / 2, v, 0), at(L / 2, v, hw - 2), "#5d5e59", 0.7)); }
+      if (end === 1 && inside) {
+        // Doors slid open along their tracks, and the ship in the shed, nose to the doorway.
+        const op = Wd / 2 - 3, top = hw + hr * 0.82, hole = [at(L / 2, -op, 0), at(L / 2, op, 0), at(L / 2, op, hw), ...Array.from({ length: 17 }, (_, i) => { const t = i * Math.PI / 16; return at(L / 2, op * Math.cos(t), hw + (top - hw) * Math.sin(t)); }), at(L / 2, -op, hw)];
+        const cid = "shd" + s.id + "_" + (++skinN);
+        svg.push(`<clipPath id="${cid}"><polygon points="${hole.map(p2 => { const q = P(...p2); return f1(q[0]) + "," + f1(q[1]); }).join(" ")}"/></clipPath>`, poly(hole, "#2b2a27", INK, 0.8));
+        const tmp = [], tsh = []; let d0 = null; try { d0 = designOf(U.state, inside); } catch (e) { d0 = null; }
+        if (d0) { try { solidShip(d0, at(L / 2 - 1.5, 0, d0.D / 2 + 2), Math.atan2(-ux[1], -ux[0]), tmp, tsh); } catch (e) { tmp.length = 0; } }
+        if (tmp.length) svg.push(`<g clip-path="url(#${cid})"><g opacity="0.9">${tmp.sort((a, b) => b[0] - a[0]).map(o => o[1]).join("")}</g><polygon points="${hole.map(p2 => { const q = P(...p2); return f1(q[0]) + "," + f1(q[1]); }).join(" ")}" fill="#2b2a27" opacity="0.18"/></g>`);
+        for (const sd of [-1, 1]) {                                     // the two door leaves, run out past the walls
+          const v0 = sd * (Wd / 2 - 1), v1 = sd * (Wd / 2 + Wd * 0.42), z1 = hw + hr * 0.55;
+          const leaf = [at(L / 2 + 1.2, v0, 0), at(L / 2 + 1.2, v1, 0), at(L / 2 + 1.2, v1, z1 * 0.7), at(L / 2 + 1.2, (v0 + v1) / 2, z1), at(L / 2 + 1.2, v0, z1)];
+          svg.push(poly(leaf, shade("#b7b9b4", facef(nx, ny) * 0.97), INK, 0.8));
+          for (let k = 1; k < 6; k++) { const v = v0 + (v1 - v0) * k / 6; svg.push(line(at(L / 2 + 1.25, v, 0), at(L / 2 + 1.25, v, k < 3 ? z1 * (0.7 + 0.3 * k / 3) : z1 * (1 - 0.3 * (k - 3) / 3)), "#5d5e59", 0.6)); }
+          svg.push(line(at(L / 2 + 2.5, v0, 0.05), at(L / 2 + 2.5, v1, 0.05), "#3f362c", 0.8));
+        }
+      } else if (end === 1) { for (let k = 0; k <= 8; k++) { const v = -Wd / 2 + 4 + k * (Wd - 8) / 8; svg.push(line(at(L / 2, v, 0), at(L / 2, v, hw - 2), "#5d5e59", 0.7)); }
         svg.push(poly([at(L / 2, -Wd / 2 + 4, 0), at(L / 2, Wd / 2 - 4, 0), at(L / 2, Wd / 2 - 4, 1.5), at(L / 2, -Wd / 2 + 4, 1.5)], RED)); }
     }
     // The barrel roof, in strips drawn from the far side to the near.
@@ -572,8 +594,22 @@ window.UpShip = window.UpShip || {};
     }
     objs.push([depth(q.x, q.y), svg.join("")]);
   }
+  const mastHeight = b => methodOf(b) === "high" ? 34 + b.size * 6 : methodOf(b) === "ground" ? 0 : BERTH[b.size].mast;
   function mastSvg(b, objs, shadows) {
-    const h = BERTH[b.size].mast, bw = h * 0.25, tw = h * 0.08, svg = [], cx = b.x, cy = b.y;
+    const m = methodOf(b), cx = b.x, cy = b.y;
+    if (m === "ground") {                                         // a mooring post, and the handling lines laid out ready
+      const p0 = P(cx, cy, 0), p1 = P(cx, cy, 3.5);
+      objs.push([depth(cx, cy), `<line x1="${f1(p0[0])}" y1="${f1(p0[1])}" x2="${f1(p1[0])}" y2="${f1(p1[1])}" stroke="#2f2a24" stroke-width="2.2"/><circle cx="${f1(p1[0])}" cy="${f1(p1[1])}" r="1.6" fill="#2f2a24"/>`]);
+      return;
+    }
+    const h = mastHeight(b), bw = m === "high" ? 5.5 + b.size : h * 0.25, tw = m === "high" ? 2.2 : h * 0.08, svg = [];
+    if (m === "high") {                                            // the lift shaft, the platform at the head, and the gangway out to the nose
+      const top = h - 3;
+      svg.push(poly([[cx - 1.4, cy - 1.4, 0], [cx + 1.4, cy - 1.4, 0], [cx + 1.4, cy - 1.4, top], [cx - 1.4, cy - 1.4, top]], "#8d8a82", "none", 0, 'opacity="0.55"'));
+      objs.push([depth(cx, cy) - 0.4, poly([[cx - 4.5, cy - 4.5, top], [cx + 4.5, cy - 4.5, top], [cx + 4.5, cy + 4.5, top], [cx - 4.5, cy + 4.5, top]], "#9a978e", INK, 0.6)
+        + poly([[cx - 4.5, cy - 4.5, top - 1.2], [cx + 4.5, cy - 4.5, top - 1.2], [cx + 4.5, cy - 4.5, top], [cx - 4.5, cy - 4.5, top]], "#7d7a72", INK, 0.5)
+        + line([cx + 4.5, cy, top + 0.4], [cx + 9, cy, top + 0.8], INK, 1.6)]);
+    }
     for (const [sx0, sy0, sx1, sy1] of [[-1, -1, 1, -1], [1, -1, 1, 1]]) {
       const q0b = [cx + sx0 * bw, cy + sy0 * bw, 0], q1b = [cx + sx1 * bw, cy + sy1 * bw, 0], q0t = [cx + sx0 * tw, cy + sy0 * tw, h], q1t = [cx + sx1 * tw, cy + sy1 * tw, h];
       svg.push(poly([q0b, q1b, q1t, q0t], "#5a5650", "none", 0, 'opacity="0.12"'));
@@ -623,12 +659,13 @@ window.UpShip = window.UpShip || {};
   };
   const GENERIC = [["a naval airship", "navy"], ["a government survey ship", "government"], ["a foreign line's ship", "line"]];
   const VISIT_LOOK = { navy: { hull: "#a9aba6", fins: "#8b8e8a", stripe: null }, government: { hull: "#c9cbc8", fins: "#56606a", stripe: "#56606a" }, line: { hull: "#cfd0cb", fins: "#2d2418", stripe: "#2d2418" }, expedition: { hull: "#d8d4c6", fins: "#2f4f3e", stripe: "#2f4f3e" } };
-  const nowHour = state => state.tick;
+  const nowHour = state => S().H(state.tick);
   // Each day: a visitor leaves when her time is up, and now and then another comes in to a free berth.
   function daily(state) {
     const year = S().dateOf(state.tick).getUTCFullYear();
     for (const [id, g] of Object.entries(all(state))) {
       if (!g || g.pieces) continue;
+      const wages = g.berths.reduce((a, b) => a + (F().MOORING[methodOf(b)] || {}).crew || 0, 0); if (wages) S().addGeneral(state, wages / 30);
       if (g.visit && (nowHour(state) > g.visit.until || !g.berths.some(b => b.id === g.visit.bid))) g.visit = null;
       if (g.visit || !g.berths.length) continue;
       const busy = new Set(((state.docking || {})[id] || []).filter(x => x.from <= nowHour(state) + 48 && x.to > nowHour(state)).map(x => x.bid));
@@ -647,7 +684,7 @@ window.UpShip = window.UpShip || {};
   function presentAt(state, id, g) {
     const now = nowHour(state), built = get(state, id), out = [], taken = new Set(), shed = [];
     const entries = ((state.docking || {})[id] || []).filter(x => x.ship != null && x.from <= now + 1 && x.to >= now - 1);
-    const here = state.ships.filter(s => !s.lost && s.deliveryTick <= now && !s.leg && s.location === id);
+    const here = state.ships.filter(s => !s.lost && s.deliveryTick <= state.tick && !s.leg && s.location === id);
     for (const s of here) {
       if (s.overhaulUntil && s.overhaulUntil > now) { shed.push(s); continue; }
       const e = entries.find(x => x.ship === s.id); let b = e && g.berths.find(bb => bb.id === e.bid && !taken.has(bb.id));
@@ -738,6 +775,7 @@ window.UpShip = window.UpShip || {};
     }
     return c;
   }
+  let skinN = 0;
   function solidShip(d, nose, heading, objs, shadows, uid) {
     const f = { ...U.physics.hullLengths(d) }, L = f.L, R = d.D / 2, lv = d.livery, rad = x => Math.max(0.05, U.physics.radius(d, Math.max(0, Math.min(L, x))));
     const dir = [Math.cos(heading), Math.sin(heading), 0], side = [-dir[1], dir[0], 0], up = [0, 0, 1];
@@ -752,12 +790,21 @@ window.UpShip = window.UpShip || {};
     const finPoly = (pts2, map) => pts2.map(([x, y]) => map(x, y));
     const shadeFin = (n, col) => shade(col, 0.66 + 0.4 * Math.max(0, n[0] * SUN[0] + n[1] * SUN[1] + n[2] * SUN[2]));
     const fins = [
-      { g: fs.side(-1), map: (x, y) => { const c = C(x); return [c[0], c[1], c[2] - y]; }, n: near, where: front },
-      { g: fs.side(1), map: (x, y) => { const c = C(x); return [c[0], c[1], c[2] - y]; }, n: near, where: back },
-      { g: fs.side(1), map: (x, y) => { const c = C(x); return [c[0] + far[0] * Math.abs(y), c[1] + far[1] * Math.abs(y), c[2]]; }, n: up, where: back },
-      { g: fs.side(1), map: (x, y) => { const c = C(x); return [c[0] + near[0] * Math.abs(y), c[1] + near[1] * Math.abs(y), c[2]]; }, n: up, where: front }];
+      { g: fs.side(-1), s: -1, map: (x, y) => { const c = C(x); return [c[0], c[1], c[2] - y]; }, n: near, where: front },
+      { g: fs.side(1), s: 1, map: (x, y) => { const c = C(x); return [c[0], c[1], c[2] - y]; }, n: near, where: back },
+      { g: fs.side(1), s: 1, map: (x, y) => { const c = C(x); return [c[0] + far[0] * Math.abs(y), c[1] + far[1] * Math.abs(y), c[2]]; }, n: up, where: back },
+      { g: fs.side(1), s: 1, map: (x, y) => { const c = C(x); return [c[0] + near[0] * Math.abs(y), c[1] + near[1] * Math.abs(y), c[2]]; }, n: up, where: front }];
     for (const F2 of fins) {
       F2.where.push(`<polygon points="${pstr(finPoly(F2.g.fin, F2.map))}" fill="${shadeFin(F2.n, lv.fins)}" stroke="${INK}" stroke-width="0.7" stroke-linejoin="round"/><polygon points="${pstr(finPoly(F2.g.rud, F2.map))}" fill="${shadeFin(F2.n, lv.rudders || lv.fins)}" stroke="${INK}" stroke-width="0.7" stroke-linejoin="round"/>`);
+      // Fin stripes, as the livery paints them: across the fin, or along it.
+      for (const dc of (lv.decorations || []).filter(x => x.type === "finstripe")) {
+        const g = F2.g, sg = F2.s, cid = "fs" + (++skinN), rects = [];
+        for (let i = 0; i < (dc.n || 1); i++) {
+          if (dc.flag) { const yy = g.root + sg * (g.span * (0.35 + i * 0.22)), y2 = yy + sg * g.span * dc.w; rects.push([[g.x0 - 5, yy], [g.x1 + 5, yy], [g.x1 + 5, y2], [g.x0 - 5, y2]]); }
+          else { const xx = g.x0 + (g.x1 - g.x0) * (0.3 + i * 0.18), x2 = xx + (g.x1 - g.x0) * dc.w; rects.push([[xx, 0], [x2, 0], [x2, sg * (R * 2 + g.span * 2)], [xx, sg * (R * 2 + g.span * 2)]]); }
+        }
+        F2.where.push(`<clipPath id="${cid}"><polygon points="${pstr(finPoly(g.fin, F2.map))}"/></clipPath><g clip-path="url(#${cid})">${rects.map(r => `<polygon points="${pstr(finPoly(r, F2.map))}" fill="${shadeFin(F2.n, dc.color)}"/>`).join("")}</g>`);
+      }
       const n2 = Math.max(4, Math.round((F2.g.x1 - F2.g.x0) / 5));
       for (let i = 1; i < n2; i++) { const x = F2.g.x0 + (F2.g.x1 - F2.g.x0) * i / n2, r0 = rad(x), tip = Math.abs(F2.g.tip) * Math.sign(F2.g.root || F2.g.tip); F2.where.push(`<polyline points="${pstr([F2.map(x, Math.sign(tip) * r0), F2.map(x, tip * 0.98)])}" fill="none" stroke="#000" stroke-width="0.4" opacity="0.2"/>`); }
     }
@@ -819,6 +866,8 @@ window.UpShip = window.UpShip || {};
         }
       }
     }
+    // The facets, softened a little so the hull reads as one smooth skin; everything painted on it stays crisp.
+    const skin = hull.splice(0, hull.length, "");
     // Cheat lines are too fine for the facets: laid along the flank as strips of their own.
     for (const dc of lv.decorations || []) if (dc.type === "cheat") for (const [y0, y1] of [[dc.y - dc.t / 2, dc.y + dc.t / 2]].concat(dc.flag ? [[dc.y + dc.t * 1.2, dc.y + dc.t * 1.7]] : [])) {
       const ta = Math.acos(Math.max(-1, Math.min(1, -y0))), tb = Math.acos(Math.max(-1, Math.min(1, -y1))), xs2 = xs.filter(x => x > 0.5 && x < L - 0.5);
@@ -839,7 +888,7 @@ window.UpShip = window.UpShip || {};
     }
     // The outline: the silhouette of the whole hull.
     const all3 = []; for (let i = 0; i <= N; i += 1) for (let j = 0; j < 48; j++) all3.push(pr(at(xs[i], 2 * Math.PI * j / 48)));
-    const hullPts = convexHull(all3); hull.push(`<polygon points="${hullPts.map(p => f1(p[0]) + "," + f1(p[1])).join(" ")}" fill="none" stroke="${INK}" stroke-width="1"/>`);
+    const hullPts = convexHull(all3), sid = "sk" + (++skinN); hull[0] = `<clipPath id="${sid}"><polygon points="${hullPts.map(p => f1(p[0]) + "," + f1(p[1])).join(" ")}"/></clipPath><g clip-path="url(#${sid})"><g filter="url(#gtsoft)">${skin.join("")}</g></g>`; hull.push(`<polygon points="${hullPts.map(p => f1(p[0]) + "," + f1(p[1])).join(" ")}" fill="none" stroke="${INK}" stroke-width="1"/>`);
     // Name and emblems, as the design places them, on the side facing the viewer.
     const nm = lv.name || {};
     if (nm.text) { const font = (U.livery.FONTS || {})[nm.font] || { css: "Josefin Sans, sans-serif", weight: 600, spacing: 0.1 }, size = R * 0.34 * (nm.size || 1), nx = L * nm.x, fy = Math.max(-0.95, Math.min(0.95, nm.y || 0)), r0 = rad(nx), o = C(nx);
@@ -880,23 +929,57 @@ window.UpShip = window.UpShip || {};
   }
   function along(pts, t) { const L = linkLen(pts); let d = t * L; for (let k = 1; k < pts.length; k++) { const s2 = dist(pts[k - 1], pts[k]); if (d <= s2) { const f = s2 ? d / s2 : 0; return [pts[k - 1][0] + (pts[k][0] - pts[k - 1][0]) * f, pts[k - 1][1] + (pts[k][1] - pts[k - 1][1]) * f, Math.atan2(pts[k][1] - pts[k - 1][1], pts[k][0] - pts[k - 1][0])]; } d -= s2; } const n = pts.length; return [pts[n - 1][0], pts[n - 1][1], 0]; }
   function lifeOnField(state, id, g, objs, shadows) {
-    const { moored } = presentAt(state, id, g), day = state.tick / 24;
+    const { moored } = presentAt(state, id, g), day = nowHour(state) / 24, V = U.vehicles, VH = { poly, line, facef, visible, depth };
+    const year = S().dateOf(state.tick).getUTCFullYear(), cc = (state.company && state.company.emblem && /^#[0-9a-f]{6}$/i.test(state.company.emblem.c1 || "")) ? state.company.emblem.c1 : RED;
     for (const m of moored) {
-      const b = m.berth, h = BERTH[b.size].mast + 1.5, wobble = Math.sin((day + b.id * 1.7) * 2.1) * 0.25;   // she swings a little with the wind
+      const b = m.berth, way = methodOf(b), wobble = Math.sin((day + b.id * 1.7) * 2.1) * 0.25;   // she swings a little with the wind
+      let h = way === "ground" ? 0 : mastHeight(b) + 1.5;
+      if (way === "ground") { const d0 = m.ship ? designOf(state, m.ship) : null; h = (d0 ? d0.D / 2 : [0, 10, 14, 18][b.size]) + 3.5; }
       let d = null; try { d = m.ship ? designOf(state, m.ship) : visitorDesign(state, b.size, m.visit); } catch (e) { d = null; }
       let drawn = false;
       if (d) { try { solidShip(d, [b.x + 2, b.y, h], wobble, objs, shadows); drawn = true; } catch (e) { try { sideShip(d, [b.x + 2, b.y, h], wobble, objs, shadows); drawn = true; } catch (e2) { /* fall back to the plain drawing */ } } }
       if (!drawn) { const look = m.ship ? shipLook(state, m.ship) : { ...VISIT_LOOK[m.visit.kind], L: [0, 110, 160, 210][b.size], R: [0, 10, 14, 18][b.size], rudders: VISIT_LOOK[m.visit.kind].fins, car: "#b9bcbd", name: m.visit.named ? m.visit.name : "", nameColour: "#2d2418" };
       ship3d({ ...look, R: Math.max(look.R, 6) }, [b.x + 3, b.y, h + look.R * 0.15], wobble, objs, shadows, (m.ship ? "s" + m.ship.id : "v") + "_" + b.id); }
-      for (let k = 0; k < 6; k++) { const a2 = k * 1.1 + b.id, p0 = P(b.x + Math.cos(a2) * 9, b.y + Math.sin(a2) * 9, 0), p1 = P(b.x + Math.cos(a2) * 9, b.y + Math.sin(a2) * 9, 1.8);
-        objs.push([depth(b.x + Math.cos(a2) * 9, b.y + Math.sin(a2) * 9), `<line x1="${f1(p0[0])}" y1="${f1(p0[1])}" x2="${f1(p1[0])}" y2="${f1(p1[1])}" stroke="#2d2418" stroke-width="1.4" stroke-linecap="round"/>`]); }
+      if (way === "stub") { const L2 = Math.min(BERTH[b.size].r * 0.86, (m.ship && designOf(state, m.ship) ? U.physics.hullLengths(designOf(state, m.ship)).L : BERTH[b.size].r * 0.86)), tx = b.x + 2 + Math.cos(wobble) * L2, ty = b.y + Math.sin(wobble) * L2; V.sternCarriage(VH, tx, ty, wobble + Math.PI / 2, objs, shadows); }
+      const crew = way === "ground" ? 40 : 6;
+      for (let k = 0; k < crew; k++) { const a2 = k * 1.1 + b.id, rr2 = way === "ground" ? 8 + (k % 20) * 9 : 9, side2 = way === "ground" ? (k < 20 ? 1 : -1) * 22 : 0;
+        const gx = way === "ground" ? b.x + rr2 * Math.cos(wobble) - Math.sin(wobble) * side2 : b.x + Math.cos(a2) * 9, gy = way === "ground" ? b.y + rr2 * Math.sin(wobble) + Math.cos(wobble) * side2 : b.y + Math.sin(a2) * 9;
+        const p0 = P(gx, gy, 0), p1 = P(gx, gy, 1.8);
+        objs.push([depth(gx, gy), `<line x1="${f1(p0[0])}" y1="${f1(p0[1])}" x2="${f1(p1[0])}" y2="${f1(p1[1])}" stroke="#2d2418" stroke-width="1.4" stroke-linecap="round"/>`]); }
     }
+    // Gas carts wait by the berths that have no gas main.
+    const e = effectsOf(g, id);
+    g.berths.forEach((b, i) => { if (e.berths[i] && !e.berths[i].gas) V.gasCart(VH, b.x - 16, b.y + 13, 0.5 + b.id, year, objs, shadows); });
+  }
+  // Everything that moves while the view is open: buses and vans on their roads, the tram, the train. Drawn on a
+  // layer of their own, so that they can be redrawn many times a second without redrawing the whole site.
+  let watch = 0, watchTimer = null, watchLast = 0;
+  function moversSvg(state, id, g) {
+    const objs = [], shadows = [], day = (nowHour(state) + watch) / 24, V = U.vehicles, VH = { poly, line, facef, visible, depth };
+    const year = S().dateOf(state.tick).getUTCFullYear(), cc = (state.company && state.company.emblem && /^#[0-9a-f]{6}$/i.test(state.company.emblem.c1 || "")) ? state.company.emblem.c1 : RED;
     for (const l of g.links) {
       if (l.k !== "busroad" && l.k !== "service") continue;
-      const t = ((day * (l.k === "busroad" ? 3.1 : 2.3) + l.id * 0.37) % 2 + 2) % 2, q = along(l.pts, t > 1 ? 2 - t : t);
-      if (l.k === "busroad") vehicle(q[0], q[1], q[2], 10, 2.6, 3.3, "#9b2a24", "#e8dcc4", objs, shadows); else vehicle(q[0], q[1], q[2], 6, 2.3, 2.6, "#4c5a3c", "#3d4a30", objs, shadows);
+      const t = ((day * (l.k === "busroad" ? 3.1 : 2.3) + l.id * 0.37) % 2 + 2) % 2, back = t > 1, q = along(l.pts, back ? 2 - t : t), hd = q[2] + (back ? Math.PI : 0);
+      if (l.k === "busroad") V.bus(VH, q[0], q[1], hd, cc, year, objs, shadows); else V.van(VH, q[0], q[1], hd, shade(cc, 0.75), year, objs, shadows);
     }
+    // A tram along the road outside, under its wire, and a train on the railway.
+    const Wd = site(g).w, Dd = site(g).d, sur = surroundings(id, g);
+    const tt = ((day * 5.3) % 2 + 2) % 2, tx = -80 + (tt > 1 ? 2 - tt : tt) * (Wd + 160);
+    V.tram(VH, tx, tt > 1 ? -12.6 : -16.4, tt > 1 ? Math.PI : 0, year, objs, shadows);
+    objs.push([depth(Wd / 2, -14.5), line([-400, -14.5, 6.3], [Wd + 400, -14.5, 6.3], "#3a2f22", 0.5, 'opacity="0.7"')]);
+    const rt = ((day * 1.9) % 1 + 1) % 1, ry = -260 + rt * (Dd + 520);
+    if (sur.rx != null) V.train(VH, sur.rx, ry, Math.PI / 2, year, 3, objs, shadows);
+    objs.sort((a, b) => b[0] - a[0]);
+    return `<g opacity="0.24">${shadows.join("")}</g>${objs.map(o => o[1]).join("")}`;
   }
+  function watchTick(t) {
+    watchTimer = null;
+    if (!root || root.hidden || designing || !U.state) return;
+    const el = root.querySelector(".gt-life");
+    if (el && t - watchLast > 70) { watch += Math.min(0.5, (t - watchLast) / 1000) * 0.13; watchLast = t; el.innerHTML = moversSvg(U.state, cityId, draft || get(U.state, cityId)); }
+    watchTimer = requestAnimationFrame(watchTick);
+  }
+  const watchStart = () => { if (!watchTimer) { watchLast = performance.now(); watchTimer = requestAnimationFrame(watchTick); } };
   function drawSite(g, id, opts) {
     const W = site(g).w, D = site(g).d, sur = surroundings(id, g), sel = opts.sel || {}, set = setting(id), e = effectsOf(g, id);
     const ground = [sur.ground], objs = sur.objs.slice(), shadows = [sur.shadows], plan = [];
@@ -912,6 +995,8 @@ window.UpShip = window.UpShip || {};
     for (const b of g.berths) {
       const R = BERTH[b.size].r, hl = sel.ref === b;
       plan.push(`<circle cx="${b.x}" cy="${b.y}" r="${R}" fill="#d3d6a6" stroke="${hl ? "#c9a65b" : "#8d8a62"}" stroke-width="${hl ? 2.4 : 0.8}" ${hl ? "" : 'stroke-dasharray="6 4"'} class="ink"/><circle cx="${b.x}" cy="${b.y}" r="14" fill="#d9cfb3" stroke="${INK}" stroke-width="0.6" class="ink"/>`);
+      if (methodOf(b) === "stub") { const rt = R * 0.86; plan.push(`<circle cx="${b.x}" cy="${b.y}" r="${f1(rt)}" fill="none" stroke="#8a7c66" stroke-width="5" stroke-dasharray="0.8 1.6"/><circle cx="${b.x}" cy="${b.y}" r="${f1(rt - 1.8)}" fill="none" stroke="#3f362c" stroke-width="0.6" class="ink"/><circle cx="${b.x}" cy="${b.y}" r="${f1(rt + 1.8)}" fill="none" stroke="#3f362c" stroke-width="0.6" class="ink"/>`); }
+      if (methodOf(b) === "ground") plan.push(`<circle cx="${b.x}" cy="${b.y}" r="${f1(R * 0.5)}" fill="none" stroke="#f4efe1" stroke-width="2.5" opacity="0.8"/>`);
       mastSvg(b, objs, shadows);
     }
     for (const s of g.sheds) { const A = apronRect(s); plan.push(`<rect x="${A.x0}" y="${A.y0}" width="${A.x1 - A.x0}" height="${A.y1 - A.y0}" fill="#e3dcb7" stroke="#8d8a62" stroke-width="0.6" stroke-dasharray="5 4" class="ink"/>`); }
@@ -941,12 +1026,13 @@ window.UpShip = window.UpShip || {};
     }
     plan.push(`<rect x="0" y="0" width="${W}" height="${D}" fill="none" stroke="#5d4e38" stroke-width="1.2" stroke-dasharray="10 5" class="ink"/>`);
     for (const l of g.links) if (l.k === "walkway") walkwaySvg(l, objs, shadows, sel.ref === l);
-    for (const s of g.sheds) shedSvg(s, objs, shadows, sel.ref === s);
+    const overhaul = U.state ? presentAt(U.state, id, g).shed : [], bigShed = g.sheds.slice().sort((a, b) => b.size - a.size)[0];
+    for (const s of g.sheds) shedSvg(s, objs, shadows, sel.ref === s, s === bigShed ? overhaul[0] : null);
     for (const q of g.gas) gasSvg(q, objs, shadows, sel.ref === q);
     for (const b of g.blds) buildingSvg(b, objs, shadows, sel.ref === b);
     if (U.state) lifeOnField(U.state, id, g, objs, shadows, plan);
     objs.sort((a, b) => b[0] - a[0]);
-    return `<g>${ground.join("")}</g><g transform="${PLANM}" class="gt-plan">${plan.join("")}</g><g opacity="0.24">${shadows.join("")}</g><g>${objs.map(o => o[1]).join("")}</g>`;
+    return `<defs><filter id="gtsoft" x="-2%" y="-5%" width="104%" height="110%"><feGaussianBlur stdDeviation="0.45"/></filter></defs><g>${ground.join("")}</g><g transform="${PLANM}" class="gt-plan">${plan.join("")}</g><g opacity="0.24">${shadows.join("")}</g><g>${objs.map(o => o[1]).join("")}</g><g class="gt-life" pointer-events="none">${U.state && !opts.still ? moversSvg(U.state, id, g) : ""}</g>`;
   }
 
 
@@ -964,7 +1050,7 @@ window.UpShip = window.UpShip || {};
     ["Grounds", Object.entries(GROUND).map(([k, T]) => ["gnd:" + k, T.name, T.about, T.cost, "a cell"])],
     ["Connections", Object.entries(LINK).map(([k, T]) => ["link:" + k, T.name, T.about, T.cost, "a metre"])]
   ];
-  BERTH[1].about = "For small ships. A ship swings round her mast with the wind, so the circle stays clear.";
+  BERTH[1].about = "For small ships. A ship swings round her mast with the wind, so the circle stays clear. It is built with the best way of mooring you have; select it to change.";
   BERTH[2].about = "For medium ships, or small."; BERTH[3].about = "For any ship.";
   for (const n of [1, 2, 3]) SHED[n].about = `Overhauls ${["", "small", "medium", "all"][n]} ships. Doors face the clear apron; R turns it.`;
   TOOLS[1][1].forEach(t => { if (!t[2]) { const [kind, n] = t[0].split(":"); t[2] = (kind === "berth" ? BERTH : SHED)[n].about; } });
@@ -1004,7 +1090,16 @@ window.UpShip = window.UpShip || {};
     if (!s) return null; const list = { berth: g.berths, shed: g.sheds, gas: g.gas, link: g.links, bld: g.blds }[s.type];
     const ref = list && list.find(x => x.id === s.ref.id); return ref ? { ...s, ref } : null;
   }
+  // The paper the bird's-eye view is printed on: a faint grain, and a haze over the distance.
+  let paperUrl = null;
+  function paperBg() {
+    if (!paperUrl) { try { const c = document.createElement("canvas"); c.width = c.height = 192; const x = c.getContext("2d"), im = x.createImageData(192, 192);
+      for (let i = 0; i < im.data.length; i += 4) { const v = 214 + Math.random() * 41; im.data[i] = v; im.data[i + 1] = v * 0.97; im.data[i + 2] = v * 0.9; im.data[i + 3] = 255; }
+      x.putImageData(im, 0, 0); paperUrl = c.toDataURL(); } catch (e) { paperUrl = ""; } }
+    return paperUrl ? `url(${paperUrl})` : "none";
+  }
   function render() {
+    watchStart();
     const st = U.state, g = draft, c = U.cityById[cityId], built = get(st, cityId), pc = planCost(built, g), sm = summaryOf(g, cityId, (st.facilityCost[cityId] || 0) + pc.add - pc.remove), next = SITES[g.site + 1];
     const keep = {}; for (const k of [".g-palette", ".g-summary"]) { const el = root.querySelector(k); if (el) keep[k] = el.scrollTop; }
     const palette = `<div class="gt-shape">Draw buildings and grounds as <button data-gshape="rect" class="${shape === "rect" ? "on" : ""}">Rectangles</button><button data-gshape="brush" class="${shape === "brush" ? "on" : ""}">With a brush</button></div>` +
@@ -1012,7 +1107,7 @@ window.UpShip = window.UpShip || {};
     const plans = pc.changed ? `<div class="gt-plans"><span>Plans not yet built: <b>${pc.net >= 0 ? gbp(pc.net) + " to build" : gbp(-pc.net) + " back"}</b></span><button data-g="build" class="primary">Build the plans</button><button data-g="discard">Discard</button></div>` : `<div class="gt-plans quiet">No plans waiting. Anything you draw is a plan until you build it.</div>`;
     root.innerHTML = `<header class="g-bar"><div><h1>${esc(c.name)} Grand Terminal</h1><span class="g-sub">Bird's-eye view</span></div>${plans}<span class="g-money">Funds ${gbp(st.money)}${st.loan ? `<br><small>Owed to the bank ${gbp(st.loan)}</small>` : ""}</span><button data-g="undo" ${undo.length ? "" : "disabled"}>Undo</button><button data-g="fit">Whole site</button><button data-g="close">Close</button></header>
       <div class="g-body"><aside class="g-palette">${palette}</aside>
-      <main class="g-field"><svg class="gt-view" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"><rect x="-6000" y="-6000" width="12000" height="12000" fill="#ccc79c"/><g class="gt-site"></g><g class="gt-ghost"></g></svg><p class="g-msg"></p></main>
+      <main class="g-field"><div class="gt-viewwrap"><svg class="gt-view" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"><rect x="-6000" y="-6000" width="12000" height="12000" fill="#ccc79c"/><g class="gt-site"></g><g class="gt-ghost"></g></svg><div class="gt-haze"></div><div class="gt-paper" style="background-image:${paperBg()}"></div></div><p class="g-msg"></p></main>
       <aside class="g-summary">${selPanel(g)}<h3>What this port will provide</h3><dl>${sm.rows.map(r => `<dt>${r[0]}</dt><dd>${r[1]}</dd>`).join("")}</dl>
         ${berthTable(g)}${presentPanel(st, g)}
         <h3>Money</h3><dl><dt>Spent on this port</dt><dd>${gbp(st.facilityCost[cityId] || 0)}</dd><dt>Upkeep, once built</dt><dd>${gbp(sm.upkeep)} a year</dd><dt>Concessions earned</dt><dd>${gbp(built.earned || 0)}</dd></dl>
@@ -1065,7 +1160,9 @@ window.UpShip = window.UpShip || {};
     if (!sel) return `<p class="g-hint">${toolHint()}</p>`;
     let title = "", about = "", acts = "";
     const rm = `<button data-g="remove">Remove</button>`;
-    if (sel.type === "berth") { title = BERTH[sel.ref.size].name; about = `${BERTH[sel.ref.size].about}<br><br>${accessText(effectsOf(g, cityId).berths[g.berths.indexOf(sel.ref)])}`; acts = `<button data-g="move">Move</button>${rm}`; }
+    if (sel.type === "berth") { const cur = methodOf(sel.ref); title = BERTH[sel.ref.size].name; about = `${BERTH[sel.ref.size].about}<br><br>${accessText(effectsOf(g, cityId).berths[g.berths.indexOf(sel.ref)])}`;
+      about += `<br><br><b class="ok">${METHOD[cur].name}.</b> ${METHOD[cur].about}<span class="gt-methods">${Object.entries(METHOD).filter(([k]) => k !== cur).map(([k, M]) => { const ok = F().mooringOK(U.state, k); return `<button data-gmethod="${k}" ${ok ? "" : "disabled"} title="${esc(M.about)}">${ok ? `Change to ${M.name.toLowerCase()}${M.cost ? `, ${gbp(M.cost)}` : ""}` : `${M.name}: ${k === "high" ? "1924, or research" : "1930, or research"}`}</button>`; }).join("")}</span>`;
+      acts = `<button data-g="move">Move</button>${rm}`; }
     if (sel.type === "shed") { title = SHED[sel.ref.size].name; about = SHED[sel.ref.size].about; acts = `<button data-g="move">Move</button><button data-g="turn">Turn</button>${rm}`; }
     if (sel.type === "gas") { title = GASK[sel.ref.k].name; about = GASK[sel.ref.k].about; acts = `<button data-g="move">Move</button>${rm}`; }
     if (sel.type === "link") { const L = linkLen(sel.ref.pts); title = LINK[sel.ref.k].name; about = `${LINK[sel.ref.k].about}<br><br>${Math.round(L)} metres.`; acts = rm; }
@@ -1089,7 +1186,7 @@ window.UpShip = window.UpShip || {};
   }
   function berthTable(g) {
     const e = effectsOf(g, cityId); if (!e.berths.length) return "";
-    return `<h3>Berths</h3><table class="gt-berths"><tr><th></th><th>Size</th><th>Passengers</th><th>Cargo</th><th>Gas</th><th>Extra time</th></tr>${e.berths.map((b, i) => `<tr><td>${i + 1}</td><td>${["", "Small", "Medium", "Large"][b.size]}</td><td>${b.pax < Infinity ? (b.covered ? "Covered" : "Yes") : "<b>None</b>"}</td><td>${b.cargo < Infinity ? "Yes" : "<b>None</b>"}</td><td>${b.gas ? "Piped" : "<b>Carts</b>"}</td><td>${b.extra.toFixed(1)} h</td></tr>`).join("")}</table>`;
+    return `<h3>Berths</h3><table class="gt-berths"><tr><th></th><th>Size</th><th>Passengers</th><th>Cargo</th><th>Gas</th><th>Extra time</th></tr>${e.berths.map((b, i) => `<tr><td>${i + 1}</td><td>${["", "Small", "Medium", "Large"][b.size]}<br><small>${{ ground: "Ground", high: "High mast", stub: "Stub mast" }[b.method]}</small></td><td>${b.pax < Infinity ? (b.covered ? "Covered" : "Yes") : "<b>None</b>"}</td><td>${b.cargo < Infinity ? "Yes" : "<b>None</b>"}</td><td>${b.gas ? "Piped" : "<b>Carts</b>"}</td><td>${(b.extra + (b.method === "ground" ? 0.75 : b.method === "high" ? 0.3 : 0)).toFixed(1)} h${b.method === "ground" ? "<br><small>more in wind</small>" : ""}</td></tr>`).join("")}</table>`;
   }
   function toolHint() {
     if (tool === "select") return "Click anything on the site to see it, move it, or remove it. Drag to look around; the mouse wheel zooms.";
@@ -1111,6 +1208,7 @@ window.UpShip = window.UpShip || {};
     const [i, j] = cellAt(p), b = cellOwner(g, i, j); if (b) return { type: "bld", ref: b };
     for (const q of g.gas) if (near(p, gasRect(q), 2)) return { type: "gas", ref: q };
     for (const s of g.sheds) if (near(p, shedRect(s), 2)) return { type: "shed", ref: s };
+    for (const bb of g.berths) if (dist(p, [bb.x, bb.y]) < 25) return { type: "berth", ref: bb };     // the mast itself
     let best = null;
     for (const l of g.links) for (let s = 1; s < l.pts.length; s++) { const d = dist(nearestOn(l.pts[s - 1], l.pts[s], p), p); if (d < 7 && (!best || d < best.d)) best = { d, l }; }
     if (best) return { type: "link", ref: best.l };
@@ -1232,6 +1330,7 @@ window.UpShip = window.UpShip || {};
     if (b) {
       if (b.dataset.gtool) { designing = null; tool = b.dataset.gtool; sel = null; ghost = null; drawing = null; msg = ""; render(); return; }
       if (b.dataset.gshape) { shape = b.dataset.gshape; render(); return; }
+      if (b.dataset.gmethod) { const s2 = sel, m2 = b.dataset.gmethod; change(() => { s2.ref.method = m2; draft.rev = (draft.rev || 0) + 1; return ""; }); render(); return; }
       if (b.dataset.gd) { const [f, v] = b.dataset.gd.split(":"); designField(f, +v); return; }
       const a = b.dataset.g;
       if (a === "close") { if (designing) designing = null; close(); return; }
@@ -1272,7 +1371,7 @@ window.UpShip = window.UpShip || {};
     }
   }
 
-  U.grand = { daily, presentAt, solidShip, sideShip, designOf, FOUND, SITES, BERTH, SHED, BLD, GROUND, LINK, MANAGED, get, effects, effectsOf, summary, canFound, found, sync, boarded, monthly, dock, open, close,
+  U.grand = { METHOD, daily, presentAt, solidShip, sideShip, designOf, FOUND, SITES, BERTH, SHED, BLD, GROUND, LINK, MANAGED, get, effects, effectsOf, summary, canFound, found, sync, boarded, monthly, dock, open, close,
     planCost, commit, placeBerth, placeShed, placeGas, paint, erase, addLink, removeThing, buyLand, layout, network, drawSite, P, unP,
     get draft() { return draft; } };
 })(window.UpShip);

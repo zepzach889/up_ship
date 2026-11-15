@@ -19,7 +19,7 @@ window.UpShip = window.UpShip || {};
     { id: "structures4", branch: "structures", tier: 4, name: "Streamlined hulls", fit: "new", effect: "10% faster and 10% more range, new ships only" },
     { id: "operations1", branch: "operations", tier: 1, name: "Weather service", fit: "company", effect: "All incidents 20% less likely" },
     { id: "operations2", branch: "operations", tier: 2, name: "Radio navigation", fit: "company", effect: "Forced-landing repairs take half as long" },
-    { id: "operations3", branch: "operations", tier: 3, name: "High mooring masts", fit: "company", effect: "Turnaround an hour shorter, every ship" },
+    { id: "operations3", branch: "operations", tier: 3, name: "High mooring masts", fit: "company", effect: "High masts with lifts before 1924" },
     { id: "operations4", branch: "operations", tier: 4, name: "Passenger comforts", fit: "ship", effect: "15% higher fares on equipped ships" },
     // Era II: opens once every Era I technology is done.
     { id: "engines5", branch: "engines", tier: 5, era: 2, name: "Supercharged diesels", fit: "ship", effect: "10% faster" },
@@ -32,7 +32,7 @@ window.UpShip = window.UpShip || {};
     { id: "structures8", branch: "structures", tier: 8, era: 2, name: "Great hull construction", fit: "company", effect: "Hulls larger than the Hindenburg" },
     { id: "operations5", branch: "operations", tier: 5, era: 2, name: "Radio beacons", fit: "company", effect: "Diversions round weather 30% shorter" },
     { id: "operations6", branch: "operations", tier: 6, era: 2, name: "Weather ships", fit: "company", effect: "Accident risk in bad weather a third lower" },
-    { id: "operations7", branch: "operations", tier: 7, era: 2, name: "Mechanical ground handling", fit: "company", effect: "Turnarounds an hour shorter; terminals handle a quarter more" },
+    { id: "operations7", branch: "operations", tier: 7, era: 2, name: "Mobile mooring masts", fit: "company", effect: "Stub masts with stern tracks before 1930; turnarounds an hour shorter; terminals handle a quarter more" },
     { id: "operations8", branch: "operations", tier: 8, era: 2, name: "In-flight services", fit: "ship", effect: "Comfort up by 8 on passenger ships" },
     { id: "gas5", branch: "gas", tier: 5, era: 2, name: "Latex-gelatin cells", fit: "company", effect: "Gas lasts 30% longer; helium top-ups a quarter cheaper" },
     { id: "gas6", branch: "gas", tier: 6, era: 2, name: "Helium recovery", fit: "company", effect: "Helium 40% cheaper everywhere" },
@@ -243,7 +243,7 @@ window.UpShip = window.UpShip || {};
       engineFailure: f.has("engines1") ? 0.75 : 1,
       incidents: (has(state, "operations1") ? 0.8 : 1) * cm.incidents,
       repairDays: has(state, "operations2") ? 0.5 : 1,
-      turnaround: Math.max(1, U.ECONOMY.turnaroundHours - (f.has("engines2") ? 1 : 0) - (has(state, "operations3") ? 1 : 0)
+      turnaround: Math.max(1, U.ECONOMY.turnaroundHours - (f.has("engines2") ? 1 : 0) 
         - (f.has("engines8") ? 1 : 0) - (has(state, "operations7") ? 1 : 0) + cm.turnaround),
       fare: f.has("operations4") ? 1.15 : 1
     };

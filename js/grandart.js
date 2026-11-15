@@ -128,6 +128,7 @@ window.UpShip = window.UpShip || {};
 
   // The bird's-eye drawing of a building ------------------------------------------------------------------------------
   function birdseye(b, H, objs, shadows, hilite, nation, companyName, cityName) {
+    if (U.facade && U.facade.birdseye) return U.facade.birdseye(b, H, objs, shadows, hilite, nation, companyName, cityName);
     const { P, poly, line, facef, visible, depth, wallText, shadowOf } = H;
     const d = design(b, nation), K = KIND[b.k] || KIND.hall, set = new Set(b.cells), eave = eaveOf(d, K), wall = WALLS[d.walls].c, rc = roofColour(d);
     const hm = heightMap(b, d.roof), tw = d.tower !== "none" && K.tower ? towerCells(b) : [], twSet = new Set(tw.map(c => key(...c)));
@@ -228,6 +229,7 @@ window.UpShip = window.UpShip || {};
 
   // The front elevation -------------------------------------------------------------------------------------------------
   function elevation(b, nation, companyName, companyColour, cityName) {
+    if (U.facade) return U.facade.elevation(b, nation, companyName, companyColour, cityName);
     const d = design(b, nation), K = KIND[b.k] || KIND.hall, eave = eaveOf(d, K), wall = WALLS[d.walls].c, rc = roofColour(d), hm = heightMap(b, d.roof);
     const cs = b.cells.map(unkey), i0 = Math.min(...cs.map(c => c[0])), i1 = Math.max(...cs.map(c => c[0])) + 1, minJ = Math.min(...cs.map(c => c[1]));
     const tw = d.tower !== "none" && K.tower ? towerCells(b) : [], top = tw.length ? towerTop(d, eave) : eave;
@@ -313,5 +315,5 @@ window.UpShip = window.UpShip || {};
     return { svg: out.join(""), w: X(i1 * 10 + 20), h: GY + 30 };
   }
 
-  U.grandArt = { WALLS, ROOFS, WINDOWS, ORNAMENT, TOWERS, ENTRANCES, STYLES, KIND, regionalStyle, styleChoices, defaultDesign, design, applyStyle, extraCost, birdseye, elevation, towerCells };
+  U.grandArt = { WALLS, ROOFS, WINDOWS, ORNAMENT, TOWERS, ENTRANCES, STYLES, KIND, regionalStyle, styleChoices, defaultDesign, design, applyStyle, extraCost, birdseye, elevation, towerCells, heightMap, signParts, signText, eaveOf };
 })(window.UpShip);

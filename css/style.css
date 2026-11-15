@@ -306,6 +306,17 @@ button { font: inherit; color: inherit; }
 .map.is-drawing .city { cursor: crosshair; }
 .city.in-draft .city-dot { fill: var(--company); stroke: var(--brass-hi); stroke-width: 2.5; }
 .city.in-draft .city-label { fill: var(--company); font-weight: 700; }
+.map.is-sending .city { cursor: crosshair; }
+.map.is-sending .ships { pointer-events: none; }
+.map.is-sending .city.send-no { opacity: 0.32; }
+.city.send-ok .city-dot { stroke: var(--brass-hi); stroke-width: 2; }
+.city.send-from .city-dot { fill: var(--company); stroke: var(--brass-hi); stroke-width: 2; }
+.city.send-via .city-dot { fill: var(--brass-hi); }
+.city.send-target .city-dot { fill: var(--company); stroke: var(--brass-hi); stroke-width: 3.5; }
+.city.send-target .city-label, .city.send-from .city-label { font-weight: 700; }
+.route-send { fill: none; stroke: #fff4cf; stroke-width: 4.5; stroke-dasharray: 2 8; stroke-linecap: round; vector-effect: non-scaling-stroke; filter: drop-shadow(0 0 1.5px #1c2a3f) drop-shadow(0 0 1px #1c2a3f); }
+.map.is-sending .routes > *:not(.route-send), .map.is-sending .ships { opacity: 0.22; transition: opacity 0.2s; }
+.map.is-sending .city.send-ok .city-label { font-weight: 700; }
 .route-draft { fill: none; stroke: var(--company); stroke-width: 3; stroke-dasharray: 8 5; stroke-linecap: round; vector-effect: non-scaling-stroke; }
 
 .notice {
@@ -1098,6 +1109,9 @@ label.check input { width: 16px; height: 16px; accent-color: var(--brass); }
 
 /* The grand terminal's bird's-eye view. */
 .grand-office .g-body { grid-template-columns: 280px 1fr 320px; }
+.gt-viewwrap { flex: 1; min-height: 0; position: relative; display: flex; }
+.gt-paper { position: absolute; inset: 1px; pointer-events: none; mix-blend-mode: multiply; opacity: 0.42; background-size: 192px 192px; }
+.gt-haze { position: absolute; inset: 1px; pointer-events: none; background: linear-gradient(to bottom, rgba(241,236,219,0.5), rgba(241,236,219,0.16) 30%, rgba(241,236,219,0) 55%); }
 .gt-view { flex: 1; min-height: 0; width: 100%; background: #efe7d3; border: 1px solid var(--brass-dim); cursor: crosshair; user-select: none; }
 .gt-view * { vector-effect: non-scaling-stroke; }
 .gt-roofname { font-family: var(--ui); font-size: 4px; letter-spacing: 0.12em; text-transform: uppercase; fill: #3a2f22; text-anchor: middle; paint-order: stroke; stroke: rgba(240,231,209,0.8); stroke-width: 2px; pointer-events: none; }
@@ -1142,3 +1156,5 @@ label.check input { width: 16px; height: 16px; accent-color: var(--brass); }
 .gt-present { list-style: none; padding: 0; margin: 0 0 6px; font-size: 13px; }
 .gt-present li { display: flex; justify-content: space-between; padding: 2px 0; border-top: 1px solid rgba(201,166,91,0.2); }
 .gt-present span { color: var(--ivory-dim); }
+.gt-methods { display: block; margin-top: 8px; }
+.gt-methods button { display: block; width: 100%; margin: 4px 0 0; text-align: left; }
