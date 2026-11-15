@@ -652,7 +652,7 @@ window.UpShip = window.UpShip || {};
     const load = next.ferry || !route ? { pax: 0, tons: 0, revenue: 0 } : board(state, ship, route, mail);
     if (!next.ferry && route) U.contracts.recordGrantFlight(state, from, ahead);
     const fuel = Math.round(km * c.fuelPerKm * E().costFactor);
-    const berth = U.facilities.dock(state, next.to, t + hours, c.turnaround);
+    const berth = U.facilities.dock(state, next.to, t + hours, c.turnaround, ship);
     hours += berth.delay;                               // circling while waiting for a berth
     addCost(state, ship, berth.fee + (load.fee || 0));
     const seats = U.passengers.berths(state, ship).total;

@@ -290,7 +290,7 @@ window.UpShip = window.UpShip || {};
         const needsMast = !hasMast;
         return `<li><div class="fac-head">${lvl ? U.facArt.icon(type, 1, true, 40) : type === "gasplant" && F.publicGas(id) ? U.facArt.icon(type, 1, false, 40) : ""}<b>${T.name}</b>
           <span>${lvl ? "Built" : type === "gasplant" && F.publicGas(id) ? "Public supply here" : "None"}</span></div>
-          ${lvl ? "" : `<div class="fac-buy">${U.facArt.icon(type, 1, true, 46)}<div><button class="btn-quiet" data-build="${id}:${type}" ${state.money < cost || needsMast ? "disabled" : ""}>Build, ${money(cost)}</button>
+          ${lvl ? "" : `<div class="fac-buy">${U.facArt.icon(type, 1, true, 46)}<div><button class="btn-quiet" data-build="${id}:${type}" ${state.money + U.contracts.loanLimit(state) - state.loan < cost || needsMast ? "disabled" : ""}>Build, ${money(cost)}</button>
           <small class="fac-next">${T.about[0]}${needsMast ? ". Needs a mast here first." : ""}</small></div></div>`}</li>`;
       }
       const needsMast = type !== "mast" && type !== "school" && type !== "refinery" && !hasMast;
@@ -298,7 +298,7 @@ window.UpShip = window.UpShip || {};
       const yours = lvl ? `${F.SIZE_NAMES[lvl]}: ${T.about[lvl - 1]}` : pub && fee ? `Public: ${fee}` : pub ? "Using the public one" : "None";
       const now = lvl ? U.facArt.icon(type, lvl, true, 40) : pub ? U.facArt.icon(type, 2, false, 40) : "";
       const button = cost == null ? "" : `<div class="fac-buy">${U.facArt.icon(type, lvl + 1, true, 46)}<div>
-        <button class="btn-quiet" data-build="${id}:${type}" ${state.money < cost || needsMast ? "disabled" : ""}>
+        <button class="btn-quiet" data-build="${id}:${type}" ${state.money + U.contracts.loanLimit(state) - state.loan < cost || needsMast ? "disabled" : ""}>
         ${lvl ? "Enlarge" : "Build"} to ${F.SIZE_NAMES[lvl + 1].toLowerCase()}, ${money(cost)}</button>
         <small class="fac-next">${T.about[lvl]}${needsMast ? ". Needs a mast here first." : ""}</small></div></div>`;
       return `<li><div class="fac-head">${now}<b>${T.name}</b><span>${yours}</span></div>${button}</li>`;
@@ -1350,12 +1350,19 @@ window.UpShip = window.UpShip || {};
     if (b.dataset.grandOpen) { U.grand.open(b.dataset.grandOpen); return; }
     if (b.dataset.grandFound) {
       const cid = b.dataset.grandFound;
-      if (!confirm(`Found a grand terminal at ${city(cid).name} for ${money(U.grand.FOUND)}? The mast, terminal, shed, and gas supply you have here are carried onto its site plan, and from then on they are built there.`)) return;
-      if (U.grand.found(s, cid)) { notify(`Grand terminal founded at ${city(cid).name}.`); render(); U.grand.open(cid); } else notify(U.grand.canFound(s, cid) || "There is no room to lay it out.");
+      if (!confirm(`Found a grand terminal at ${city(cid).name} for ${money(U.grand.FOUND)}? The mast, terminal, shed, and gas supply you have here are laid out afresh on its site, and from then on they are built there.`)) return;
+      const why = U.grand.found(s, cid, q => confirm(q));
+      if (!why) { notify(`Grand terminal founded at ${city(cid).name}.`); render(); U.grand.open(cid); } else if (why !== "cancelled") notify(why);
       return;
     }
     if (b.dataset.build) {
-      const [cid, type] = b.dataset.build.split(":");
+      const [cid, type] = b.dataset.build.split(":"), cost = U.facilities.nextCost(s, cid, type);
+      if (cost != null && s.money < cost) {                                    // short of funds: borrow the difference, as for a ship
+        const short = Math.ceil(cost - s.money), room = U.contracts.loanLimit(s) - s.loan;
+        if (room < short) { notify("Not enough funds, and the bank will not lend that much more."); return; }
+        if (!confirm(`Borrow ${money(short)} to build it? It adds ${money(short * U.ECONOMY.loanRate / 12)} a month in interest.`)) return;
+        U.contracts.borrow(s, short);
+      }
       if (U.facilities.build(s, cid, type)) { notify(U.facilities.TYPES[type].costs.length === 1 ? `${U.facilities.TYPES[type].name} built at ${city(cid).name}.` : `${U.facilities.TYPES[type].name} at ${city(cid).name} is now ${U.facilities.SIZE_NAMES[U.facilities.ownLevel(s, cid, type)].toLowerCase()}.`); h.changed(); render(); U.tutorial.check(selection); }
       return;
     }

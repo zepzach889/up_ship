@@ -130,9 +130,10 @@ window.UpShip = window.UpShip || {};
 
   // Docking: a ship arriving when every berth is taken circles until one frees up.
   // Returns the extra hours spent circling and any mast fee.
-  function dock(state, id, arrive, stay) {
+  function dock(state, id, arrive, stay, ship) {
     const em = effective(state, id, "mast"), G = grandAt(state, id);
-    const cap = G && em.own ? G.masts : TYPES.mast.docks[em.level - 1] || 1;
+    if (G && em.own && G.masts) return U.grand.dock(state, id, arrive, stay, ship);           // the grand terminal's own berths
+    const cap = TYPES.mast.docks[em.level - 1] || 1;
     const list = (state.docking[id] = (state.docking[id] || []).filter(x => x.to > arrive - 48));
     let t = arrive;
     for (let guard = 0; guard < 20; guard++) {

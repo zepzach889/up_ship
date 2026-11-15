@@ -1095,3 +1095,18 @@ label.check input { width: 16px; height: 16px; accent-color: var(--brass); }
 .g-ghost { pointer-events: none; opacity: 0.8; } .g-ghost .g-hit { stroke-width: 3; }
 .g-ghost .good .g-hit { stroke: #2e6b47; fill: rgba(46,107,71,0.18); } .g-ghost .bad .g-hit { stroke: #a3372c; fill: rgba(163,55,44,0.28); }
 .g-label.small { font-size: 8.5px; letter-spacing: 0.04em; }
+
+/* The grand terminal's bird's-eye view. */
+.grand-office .g-body { grid-template-columns: 280px 1fr 320px; }
+.gt-view { flex: 1; min-height: 0; width: 100%; background: #efe7d3; border: 1px solid var(--brass-dim); cursor: crosshair; user-select: none; }
+.gt-view * { vector-effect: non-scaling-stroke; }
+.gt-roofname { font-family: var(--ui); font-size: 4px; letter-spacing: 0.12em; text-transform: uppercase; fill: #3a2f22; text-anchor: middle; paint-order: stroke; stroke: rgba(240,231,209,0.8); stroke-width: 2px; pointer-events: none; }
+.g-item i { font-style: normal; color: var(--ivory-dim); font-size: 11px; }
+.g-msg .g-hint { color: var(--ivory-dim); }
+.g-msg { color: #f0d7a0; }
+.gt-berths { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.gt-berths th { text-align: left; font-weight: 600; color: var(--ivory-dim); padding: 2px 4px; }
+.gt-berths td { padding: 3px 4px; border-top: 1px solid rgba(201,166,91,0.25); }
+.gt-berths b, .g-chosen b { color: #f0b9a8; font-weight: 600; }
+.g-chosen button { margin-right: 6px; }
+.gt-ghost { pointer-events: none; }
